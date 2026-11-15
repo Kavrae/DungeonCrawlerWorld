@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Engine.Tags;
 
@@ -83,30 +84,49 @@ public readonly struct ContentObject
         return codec.Read(new ContentObject(element, types, references, schema));
     }
 
-    public string String(string key, string defaultValue = "") =>
-        TryGet(key, JsonValueKind.String, out var value) ? value.GetString()! : defaultValue;
+    public string String(string key, string defaultValue = "")
+    {
+        CheckTextDefault(key, defaultValue);
+        return TryGet(key, JsonValueKind.String, out var value) ? value.GetString()! : defaultValue;
+    }
 
-    public string? OptionalString(string key) =>
-        TryGet(key, JsonValueKind.String, out var value) ? value.GetString() : null;
+    public string? OptionalString(string key)
+    {
+        CheckNoDefault(key);
+        return TryGet(key, JsonValueKind.String, out var value) ? value.GetString() : null;
+    }
 
-    public long Integer(string key, long defaultValue = 0) =>
-        TryGet(key, JsonValueKind.Number, out var value) ? GetInteger(key, value) : defaultValue;
+    public long Integer(string key, long defaultValue = 0)
+    {
+        CheckIntegerDefault(key, defaultValue);
+        return TryGet(key, JsonValueKind.Number, out var value) ? GetInteger(key, value) : defaultValue;
+    }
 
-    public long? OptionalInteger(string key) =>
-        TryGet(key, JsonValueKind.Number, out var value) ? GetInteger(key, value) : null;
+    public long? OptionalInteger(string key)
+    {
+        CheckNoDefault(key);
+        return TryGet(key, JsonValueKind.Number, out var value) ? GetInteger(key, value) : null;
+    }
 
-    public uint UnsignedInteger(string key, uint defaultValue = 0) =>
-        TryGet(key, JsonValueKind.Number, out var value)
+    public uint UnsignedInteger(string key, uint defaultValue = 0)
+    {
+        CheckIntegerDefault(key, defaultValue);
+        return TryGet(key, JsonValueKind.Number, out var value)
             ? value.TryGetUInt32(out var result) ? result : throw Malformed(key, "an unsigned integer")
             : defaultValue;
+    }
 
-    public float Number(string key, float defaultValue = 0f) =>
-        TryGet(key, JsonValueKind.Number, out var value)
+    public float Number(string key, float defaultValue = 0f)
+    {
+        CheckNumberDefault(key, defaultValue);
+        return TryGet(key, JsonValueKind.Number, out var value)
             ? value.TryGetSingle(out var result) ? result : throw Malformed(key, "a number")
             : defaultValue;
+    }
 
     public bool Boolean(string key, bool defaultValue = false)
     {
+        CheckBooleanDefault(key, defaultValue);
         if (!_element.TryGetProperty(key, out var value))
         {
             return defaultValue;
@@ -123,6 +143,7 @@ public readonly struct ContentObject
     public TEnum Enum<TEnum>(string key, TEnum defaultValue = default)
         where TEnum : struct, System.Enum
     {
+        CheckEnumDefault(key, defaultValue);
         if (!TryGet(key, JsonValueKind.String, out var value))
         {
             return defaultValue;
@@ -136,6 +157,7 @@ public readonly struct ContentObject
 
     public Guid Guid(string key)
     {
+        CheckNoDefault(key);
         if (!TryGet(key, JsonValueKind.String, out var value))
         {
             throw new ContentFormatException($"{TypeName} needs \"{key}\".");
@@ -146,6 +168,7 @@ public readonly struct ContentObject
 
     public Guid? OptionalGuid(string key)
     {
+        CheckNoDefault(key);
         if (!TryGet(key, JsonValueKind.String, out var value))
         {
             return null;
@@ -155,12 +178,16 @@ public readonly struct ContentObject
     }
 
     /// <summary>The tag at key, which must be in the domain the schema names for it; None when absent.</summary>
-    public GameplayTag Tag(string key) =>
-        TryGet(key, JsonValueKind.String, out var value) ? ReadTag(key, value) : GameplayTag.None;
+    public GameplayTag Tag(string key)
+    {
+        CheckNoDefault(key);
+        return TryGet(key, JsonValueKind.String, out var value) ? ReadTag(key, value) : GameplayTag.None;
+    }
 
     /// <summary>The tags at key, each of which must be in the domain the schema names for it; empty when absent.</summary>
     public GameplayTagSet Tags(string key)
     {
+        CheckNoDefault(key);
         if (!TryGet(key, JsonValueKind.Array, out var value))
         {
             return GameplayTagSet.Empty;
@@ -202,20 +229,31 @@ public readonly struct ContentObject
     }
 
     public T? Object<T>(string key)
-        where T : class =>
-        _element.TryGetProperty(key, out var value) ? (T)ReadWith(_types.GetValueCodec(typeof(T)), value, _types, _references, false, null) : null;
+        where T : class
+    {
+        CheckNoDefault(key);
+        return _element.TryGetProperty(key, out var value) ? (T)ReadWith(_types.GetValueCodec(typeof(T)), value, _types, _references, false, null) : null;
+    }
 
+    /// <param name="defaultValue">What an omitted value means to the codec; the schema declares none for an object, since its meaning is the codec's own.</param>
     public T ValueObject<T>(string key, T defaultValue = default)
-        where T : struct =>
-        _element.TryGetProperty(key, out var value) ? (T)ReadWith(_types.GetValueCodec(typeof(T)), value, _types, _references, false, null) : defaultValue;
+        where T : struct
+    {
+        CheckNoDefault(key);
+        return _element.TryGetProperty(key, out var value) ? (T)ReadWith(_types.GetValueCodec(typeof(T)), value, _types, _references, false, null) : defaultValue;
+    }
 
     public TBase? Polymorphic<TBase>(string key)
-        where TBase : class =>
-        _element.TryGetProperty(key, out var value) ? (TBase)ReadPolymorphic(typeof(TBase), value, _types, _references) : null;
+        where TBase : class
+    {
+        CheckNoDefault(key);
+        return _element.TryGetProperty(key, out var value) ? (TBase)ReadPolymorphic(typeof(TBase), value, _types, _references) : null;
+    }
 
     public IReadOnlyList<T> List<T>(string key)
         where T : notnull
     {
+        CheckNoDefault(key);
         if (!TryGet(key, JsonValueKind.Array, out var value))
         {
             return [];
@@ -236,6 +274,7 @@ public readonly struct ContentObject
 
     public IReadOnlyList<Guid> GuidList(string key)
     {
+        CheckNoDefault(key);
         if (!TryGet(key, JsonValueKind.Array, out var value))
         {
             return [];
@@ -252,6 +291,7 @@ public readonly struct ContentObject
 
     public IReadOnlyList<string> StringList(string key)
     {
+        CheckNoDefault(key);
         if (!TryGet(key, JsonValueKind.Array, out var value))
         {
             return [];
@@ -264,6 +304,68 @@ public readonly struct ContentObject
         }
 
         return results;
+    }
+
+    [Conditional("DEBUG")]
+    private void CheckTextDefault(string key, string defaultValue)
+    {
+        var field = _schema.FieldOf(key);
+        if (field.Default is not string declared || declared != defaultValue)
+        {
+            throw _schema.DefaultMismatch(field, defaultValue);
+        }
+    }
+
+    [Conditional("DEBUG")]
+    private void CheckIntegerDefault(string key, long defaultValue)
+    {
+        var field = _schema.FieldOf(key);
+        if (field.Default is not long declared || declared != defaultValue)
+        {
+            throw _schema.DefaultMismatch(field, defaultValue);
+        }
+    }
+
+    [Conditional("DEBUG")]
+    private void CheckNumberDefault(string key, float defaultValue)
+    {
+        var field = _schema.FieldOf(key);
+        if (field.Default is not float declared || declared != defaultValue)
+        {
+            throw _schema.DefaultMismatch(field, defaultValue);
+        }
+    }
+
+    [Conditional("DEBUG")]
+    private void CheckBooleanDefault(string key, bool defaultValue)
+    {
+        var field = _schema.FieldOf(key);
+        if (field.Default is not bool declared || declared != defaultValue)
+        {
+            throw _schema.DefaultMismatch(field, defaultValue);
+        }
+    }
+
+    [Conditional("DEBUG")]
+    private void CheckEnumDefault<TEnum>(string key, TEnum defaultValue)
+        where TEnum : struct, System.Enum
+    {
+        var field = _schema.FieldOf(key);
+        if (field.Default is not TEnum declared || !EqualityComparer<TEnum>.Default.Equals(declared, defaultValue))
+        {
+            throw _schema.DefaultMismatch(field, defaultValue);
+        }
+    }
+
+    /// <summary>In Debug, checks key is declared, with no default value -- the reader's half of what the writer checks always.</summary>
+    [Conditional("DEBUG")]
+    private void CheckNoDefault(string key)
+    {
+        var field = _schema.FieldOf(key);
+        if (field.Default is not null)
+        {
+            throw _schema.DefaultMismatch(field, null);
+        }
     }
 
     private bool TryGet(string key, JsonValueKind expectedKind, out JsonElement value)

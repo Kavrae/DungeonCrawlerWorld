@@ -28,7 +28,7 @@ public sealed class DebugTab : IIdeTab
 
     public string Title => TabTitle;
 
-    public bool ShowsDependents => false;
+    public bool ShowsRelatedRecords => false;
 
     public void Open(WorkshopTabContext context, Rectangle area)
     {

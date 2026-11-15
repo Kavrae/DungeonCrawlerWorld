@@ -45,6 +45,7 @@ public static class WorldSessionBootstrapper
     /// <param name="settingsSources">Where setting overrides come from, in order.</param>
     /// <param name="mapSizeOverride">Square map width and height from "--map-size=", or null for FloorBuilder's default -- see MapSizeArgument.</param>
     /// <param name="saveName">The save under PlayerFolders.Saves the session reads its definitions from and creates them in, made if it doesn't exist; null for a session with no save.</param>
+    /// <param name="masterContentDirectory">The master manifest to read -- the Workshop passes the source tree's -- or null for the copy in the game's own output (GameContent.DefaultMasterDirectory).</param>
     public static WorldSessionContext Build(
         int floorNumber,
         string? modsDirectory,
@@ -56,12 +57,13 @@ public static class WorldSessionBootstrapper
         int randomSeed,
         IReadOnlyList<ISettingsSource> settingsSources,
         int? mapSizeOverride = null,
-        string? saveName = null)
+        string? saveName = null,
+        string? masterContentDirectory = null)
     {
         var save = saveName is null ? null : SaveFolder.OpenOrCreate(PlayerFolders.Saves, saveName);
         try
         {
-            return BuildSession(floorNumber, modsDirectory, initialEntityCapacity, initialComponentCapacity, minCrawlerNumber, crawlerNumberBits, playerActivityLogTarget, randomSeed, settingsSources, mapSizeOverride, save);
+            return BuildSession(floorNumber, modsDirectory, initialEntityCapacity, initialComponentCapacity, minCrawlerNumber, crawlerNumberBits, playerActivityLogTarget, randomSeed, settingsSources, mapSizeOverride, save, masterContentDirectory ?? GameContent.DefaultMasterDirectory);
         }
         catch
         {
@@ -82,7 +84,8 @@ public static class WorldSessionBootstrapper
         int randomSeed,
         IReadOnlyList<ISettingsSource> settingsSources,
         int? mapSizeOverride,
-        SaveFolder? save)
+        SaveFolder? save,
+        string masterContentDirectory)
     {
         using (EngineHooks.DiagnosticScope("Startup Cleanup"))
         {
@@ -94,7 +97,7 @@ public static class WorldSessionBootstrapper
 
         var crawlerNumberAllocator = new UniqueNumberAllocator(RandomStreams.SeedFor(randomSeed, Game.Spawning.EntityFactory.CrawlerNumberStream), minCrawlerNumber, crawlerNumberBits);
         var neighborhoodRecords = new NeighborhoodRecords(randomSeed, floorNumber);
-        var content = GameContent.MasterOnly(GameContent.DefaultMasterDirectory);
+        var content = GameContent.MasterOnly(masterContentDirectory);
 
         ValidatedMods validatedMods;
         using (EngineHooks.DiagnosticScope("Mod Validation"))

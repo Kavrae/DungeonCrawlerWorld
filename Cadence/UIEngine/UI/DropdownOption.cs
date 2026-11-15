@@ -18,6 +18,9 @@ public sealed record DropdownOption(string Label, string? HotkeyText, bool Enabl
     /// </summary>
     public static DropdownOption Header(string text) => new(text, null, Enabled: false, OnSelect: static () => { }, IsHeader: true);
 
+    /// <summary>A checkbox row, checked or not -- one of a list where several can be chosen (MultiChoiceField); null for an ordinary option. Choosing one turns it and keeps the list open.</summary>
+    public bool? IsChecked { get; init; }
+
     /// <summary>The options choosing this one replaces the menu with, in place of running OnSelect -- a submenu. Null for an ordinary option.</summary>
     public IReadOnlyList<DropdownOption>? Submenu { get; init; }
 

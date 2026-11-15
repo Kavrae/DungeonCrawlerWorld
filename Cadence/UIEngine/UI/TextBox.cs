@@ -27,9 +27,6 @@ namespace UIEngine.UI;
 /// </summary>
 public class TextBox(ElementServices services, CursorTextContent? cursorTextContent = null, ContextMenuController? contextMenuController = null) : TextWindow(services)
 {
-    private static readonly Color FocusIndicatorColor = WindowPalette.FocusAccentColor;
-    private static readonly BorderThickness FocusIndicatorThickness = BorderThickness.Uniform(new Vector2(2, 2));
-
     /// <summary>Multiline boxes start tall enough for exactly this many lines and never shrink below it, regardless of how little text is in the box. See AutoSizeToContent.</summary>
     private const int MinimumVisibleLines = 2;
 
@@ -119,8 +116,10 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
     /// <summary>Whether typing, Backspace, Delete, Cut and Paste change the text: enabled and not read-only.</summary>
     protected bool AcceptsEdits => Enabled && !IsReadOnly;
 
-    /// <summary>A disabled box keeps its text, draws its content background darkened (WindowPalette.DisabledBackground), and is never hit-tested, so it can't be focused, typed into or selected.</summary>
+    /// <summary>A disabled box keeps its text, draws its content background darkened (WindowPalette.DisabledBackground), and takes a press without being focused, typed into or selected.</summary>
     protected override bool IsHitTestable => base.IsHitTestable && Enabled;
+
+    public override bool IsTabStop => AcceptsEdits;
 
     protected override Color ContentBackgroundColor => Enabled ? base.ContentBackgroundColor : WindowPalette.DisabledBackground(base.ContentBackgroundColor);
 
@@ -1352,12 +1351,9 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
     {
         base.Draw(gameTime);
 
-        if (!IsFocused)
+        if (IsFocused)
         {
-            return;
+            DrawFocusIndicator(Rectangle);
         }
-
-        var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(Rectangle, FocusIndicatorThickness);
-        BorderRenderer.Draw(Render.Batch, BorderStyle.Flat, FocusIndicatorColor, top, bottom, left, right);
     }
 }

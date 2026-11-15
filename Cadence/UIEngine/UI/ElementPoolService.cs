@@ -21,6 +21,9 @@ public sealed class ElementPoolService
     /// </remarks>
     private readonly HashSet<Element> _pooledElements = [];
 
+    /// <summary>The pool each element was made for, so one made by a replaced factory is never put in its type's new pool.</summary>
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<Element, ObjectPool<Element>> _poolByElement = [];
+
     /// <summary>Registers the factory a type's pool creates new instances with.</summary>
     /// <remarks>The factory must create exactly TElement, not a subclass: an element goes back to the pool of its own type when it closes.</remarks>
     /// <exception cref="InvalidOperationException">TElement already has a factory.</exception>
@@ -34,7 +37,37 @@ public sealed class ElementPoolService
             throw new InvalidOperationException($"{typeof(TElement).Name} already has an element factory; a type has one pool and one factory.");
         }
 
-        _elementPoolsByType[typeof(TElement)] = new ObjectPool<Element>(() => CreateExactly(factory), static element => element.HideForPool());
+        _elementPoolsByType[typeof(TElement)] = CreatePool(factory);
+    }
+
+    /// <summary>Makes factory the one TElement's pool creates new instances with, dropping every pooled instance the old factory made; one still in use is dropped when it closes, never pooled again.</summary>
+    /// <remarks>For a host whose elements are built over something it replaces (the Workshop's session, rebuilt after a save): no element built over the old one is handed out again.</remarks>
+    /// <exception cref="InvalidOperationException">TElement has no factory yet.</exception>
+    public void ReplaceFactory<TElement>(Func<TElement> factory)
+        where TElement : Element
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+
+        if (!_elementPoolsByType.TryGetValue(typeof(TElement), out var oldPool))
+        {
+            throw new InvalidOperationException($"{typeof(TElement).Name} has no element factory to replace; register one first.");
+        }
+
+        _pooledElements.RemoveWhere(element => _poolByElement.TryGetValue(element, out var pool) && ReferenceEquals(pool, oldPool));
+        _elementPoolsByType[typeof(TElement)] = CreatePool(factory);
+    }
+
+    private ObjectPool<Element> CreatePool<TElement>(Func<TElement> factory)
+        where TElement : Element
+    {
+        ObjectPool<Element> pool = null!;
+        pool = new ObjectPool<Element>(() =>
+        {
+            var element = CreateExactly(factory);
+            _poolByElement.AddOrUpdate(element, pool);
+            return element;
+        }, static element => element.HideForPool());
+        return pool;
     }
 
     /// <summary>Whether TElement has a factory registered.</summary>
@@ -96,7 +129,7 @@ public sealed class ElementPoolService
         ClearEventSubscriptions(element);
         element.OnClosed();
 
-        if (_elementPoolsByType.TryGetValue(element.GetType(), out var pool))
+        if (_elementPoolsByType.TryGetValue(element.GetType(), out var pool) && (!_poolByElement.TryGetValue(element, out var madeFor) || ReferenceEquals(madeFor, pool)))
         {
             pool.Return(element);
         }

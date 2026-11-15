@@ -47,6 +47,15 @@ public sealed class WorkshopHost : Microsoft.Xna.Framework.Game
     /// <summary>Held so the delegate SDL calls back into is never collected while it is registered.</summary>
     private readonly SDL.SDL_EventFilter _liveResizeWatch;
 
+    /// <summary>Held for the same reason: the filter that keeps a quit from reaching FNA, so the shell can ask first.</summary>
+    private readonly SDL.SDL_EventFilter _quitFilter;
+
+    /// <summary>Set by the filter when the window is asked to close; the next frame asks the shell.</summary>
+    private volatile bool _isCloseRequested;
+
+    /// <summary>Set once the shell agreed to close: quits pass from then on.</summary>
+    private bool _isClosing;
+
     private UiEngineContext _uiEngine = null!;
     private WorkshopShell _shell = null!;
     private GameTime _lastGameTime = new();
@@ -69,7 +78,36 @@ public sealed class WorkshopHost : Microsoft.Xna.Framework.Game
         unsafe
         {
             _liveResizeWatch = WatchForLiveResize;
+            _quitFilter = FilterQuit;
         }
+    }
+
+    /// <summary>SDL's event filter: a quit or a request to close the window is kept from FNA (which would end the loop at once) and noted, so the shell can ask about unsaved changes first; everything else passes.</summary>
+    /// <remarks>Called from native code, so nothing may escape it.</remarks>
+    private unsafe bool FilterQuit(IntPtr userdata, SDL.SDL_Event* sdlEvent)
+    {
+        try
+        {
+            var eventType = (SDL.SDL_EventType)sdlEvent->type;
+            if (!_isClosing && eventType is SDL.SDL_EventType.SDL_EVENT_QUIT or SDL.SDL_EventType.SDL_EVENT_WINDOW_CLOSE_REQUESTED)
+            {
+                _isCloseRequested = true;
+                return false;
+            }
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine($"Workshop: filtering a quit failed: {exception}");
+        }
+
+        return true;
+    }
+
+    /// <summary>Quits for real: the filter lets quits pass from now on.</summary>
+    private void CloseNow()
+    {
+        _isClosing = true;
+        Exit();
     }
 
     protected override void Initialize()
@@ -81,6 +119,7 @@ public sealed class WorkshopHost : Microsoft.Xna.Framework.Game
         Window.Title = _options.WindowTitle;
         Window.ClientSizeChanged += OnClientSizeChanged;
         SDL.SDL_AddEventWatch(_liveResizeWatch, IntPtr.Zero);
+        SDL.SDL_SetEventFilter(_quitFilter, IntPtr.Zero);
 
         base.Initialize();
     }
@@ -96,6 +135,12 @@ public sealed class WorkshopHost : Microsoft.Xna.Framework.Game
     {
         _lastGameTime = gameTime;
         _isResizeAwaitingFrame = false;
+        if (_isCloseRequested)
+        {
+            _isCloseRequested = false;
+            _shell.RequestClose(CloseNow);
+        }
+
         _shell.Update(gameTime);
         base.Update(gameTime);
     }
@@ -178,6 +223,7 @@ public sealed class WorkshopHost : Microsoft.Xna.Framework.Game
     protected override void Dispose(bool disposing)
     {
         SDL.SDL_RemoveEventWatch(_liveResizeWatch, IntPtr.Zero);
+        SDL.SDL_SetEventFilter(null, IntPtr.Zero);
 
         if (disposing && _shell is not null)
         {

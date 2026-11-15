@@ -1,32 +1,29 @@
 using Builders.Actions;
 using Builders.Auras;
-using Builders.Browsing;
 using Builders.Items;
 using Builders.MapAreas;
 using Workshop;
 
 namespace Builders.References;
 
-/// <summary>A record's Related window from the reference index: "Uses" (what it names) and "Used by" (what names it), each line opening its record's tab when one shows that kind.</summary>
-/// <remarks>Lines read "Kind: Name (how)" -- "Action: Fireball (casts)" under Uses, "Item: Scroll of Fireball (casts it)" under Used by.</remarks>
+/// <summary>A record's lines in the bottom panel's Uses (what it names) and Used By (what names it), from the reference index, each opening its record's tab when one shows that kind.</summary>
+/// <remarks>Each line is the other record's name, kind and how -- "Fireball, Action, casts" under a scroll's Uses; "Scroll of Fireball, Item, casts it" under the spell's Used By.</remarks>
 public static class ContentLinks
 {
-    public const string UsesHeading = "Uses";
-    public const string UsedByHeading = "Used by";
+    /// <summary>Everything the record names, with its kind and how -- "casts", "grants".</summary>
+    public static IReadOnlyList<WorkshopRelatedRecord> UsesOf(ContentReferenceIndex index, ContentRecordKind kind, Guid id) =>
+        [.. index.Uses(kind, id).Select(reference => RowOf(reference.To, UsesText(reference.Kind)))];
 
-    public static IReadOnlyList<RecordLinkSection> For(ContentReferenceIndex index, ContentRecordKind kind, Guid id) =>
-    [
-        new RecordLinkSection(UsesHeading, [.. index.Uses(kind, id).Select(reference => LinkTo(reference.To, VerbFor(reference.Kind)))]),
-        new RecordLinkSection(UsedByHeading, [.. index.UsedBy(kind, id).Select(reference => LinkTo(reference.From, $"{VerbFor(reference.Kind)} it"))]),
-    ];
+    /// <summary>Everything that names the record, with its kind and how -- "casts it", "grants it".</summary>
+    public static IReadOnlyList<WorkshopRelatedRecord> UsedByOf(ContentReferenceIndex index, ContentRecordKind kind, Guid id) =>
+        [.. index.UsedBy(kind, id).Select(reference => RowOf(reference.From, UsedByText(reference.Kind)))];
 
-    /// <summary>The bottom panel's Dependents for a record: everything that names it, with its kind and how -- "casts it", "grants it".</summary>
-    public static IReadOnlyList<WorkshopDependent> DependentsOf(ContentReferenceIndex index, ContentRecordKind kind, Guid id) =>
-        [.. index.UsedBy(kind, id).Select(reference => new WorkshopDependent(reference.From.Name, reference.From.Kind.ToString(), $"{VerbFor(reference.Kind)} it")
+    private static WorkshopRelatedRecord RowOf(ContentRecord record, string how) =>
+        new(record.Name, record.Kind.ToString(), how)
         {
-            TabTitle = TabTitleFor(reference.From.Kind),
-            RecordId = TabTitleFor(reference.From.Kind) is null ? null : reference.From.Id,
-        })];
+            TabTitle = TabTitleFor(record.Kind),
+            RecordId = TabTitleFor(record.Kind) is null ? null : record.Id,
+        };
 
     /// <summary>The tab that shows records of kind, or null for kinds no tab shows.</summary>
     public static string? TabTitleFor(ContentRecordKind kind) => kind switch
@@ -38,8 +35,13 @@ public static class ContentLinks
         _ => null,
     };
 
-    private static RecordLink LinkTo(ContentRecord record, string how) =>
-        new($"{record.Kind}: {record.Name} ({how})", TabTitleFor(record.Kind), record.Id);
+    /// <summary>How the record that names one does so, read from the named side: "casts it"; "builds with it, in code" for what only code names.</summary>
+    public static string UsedByText(ContentReferenceKind kind) =>
+        kind == ContentReferenceKind.BuildsWith ? "builds with it, in code" : $"{VerbFor(kind)} it";
+
+    /// <summary>How a record names another, read from its own side: "casts"; "builds with, in code" for what only code names.</summary>
+    public static string UsesText(ContentReferenceKind kind) =>
+        kind == ContentReferenceKind.BuildsWith ? "builds with, in code" : VerbFor(kind);
 
     private static string VerbFor(ContentReferenceKind kind) => kind switch
     {
@@ -50,6 +52,7 @@ public static class ContentLinks
         ContentReferenceKind.PlacesBlueprint => "places",
         ContentReferenceKind.UsesPalette => "uses",
         ContentReferenceKind.PlacesArea => "places",
+        ContentReferenceKind.BuildsWith => "builds with",
         _ => kind.ToString(),
     };
 }

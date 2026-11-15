@@ -120,7 +120,7 @@ public sealed class GameLauncher(GameLaunchTarget target) : IDisposable
             {
                 _isBusy = true;
                 status = SetStatus("Building...");
-                _ = Task.Run(() => BuildThenStart(buildCommand, extraArguments, generation));
+                _ = Task.Run(() => BuildThenStartAsync(buildCommand, extraArguments, generation));
                 return true;
             }
 
@@ -205,7 +205,8 @@ public sealed class GameLauncher(GameLaunchTarget target) : IDisposable
         }
     }
 
-    private void BuildThenStart(ProcessCommand buildCommand, string? extraArguments, int generation)
+    /// <summary>Runs the build and starts the game if it succeeded; waits for the build without holding a thread.</summary>
+    private async Task BuildThenStartAsync(ProcessCommand buildCommand, string? extraArguments, int generation)
     {
         int exitCode;
         try
@@ -228,7 +229,7 @@ public sealed class GameLauncher(GameLaunchTarget target) : IDisposable
                 _runningBuild = build;
             }
 
-            build.WaitForExit();
+            await build.WaitForExitAsync().ConfigureAwait(false);
             exitCode = build.ExitCode;
         }
         catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
@@ -286,7 +287,7 @@ public sealed class GameLauncher(GameLaunchTarget target) : IDisposable
         _lastErrorLine = null;
         try
         {
-            _runningGame = StartCapturing(target.ExecutablePath, ArgumentsFor(extraArguments), target.WorkingDirectory, OnGameExited);
+            _runningGame = StartCapturing(target.ExecutablePath, ArgumentsFor(extraArguments), target.WorkingDirectory);
         }
         catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
@@ -301,6 +302,8 @@ public sealed class GameLauncher(GameLaunchTarget target) : IDisposable
             return false;
         }
 
+        var game = _runningGame;
+        _ = Task.Run(() => WatchGameAsync(game));
         status = SetStatus("Game started.");
         return true;
     }
@@ -308,7 +311,7 @@ public sealed class GameLauncher(GameLaunchTarget target) : IDisposable
     private string ArgumentsFor(string? extraArguments) =>
         string.IsNullOrWhiteSpace(extraArguments) ? target.Arguments : $"{target.Arguments} {extraArguments}".Trim();
 
-    private Process? StartCapturing(string executablePath, string arguments, string workingDirectory, EventHandler? exited = null)
+    private Process? StartCapturing(string executablePath, string arguments, string workingDirectory)
     {
         var process = new Process
         {
@@ -320,15 +323,11 @@ public sealed class GameLauncher(GameLaunchTarget target) : IDisposable
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
             },
-            EnableRaisingEvents = exited is not null,
+            EnableRaisingEvents = true,
         };
 
         process.OutputDataReceived += (_, line) => Capture(line.Data, isError: false);
         process.ErrorDataReceived += (_, line) => Capture(line.Data, isError: true);
-        if (exited is not null)
-        {
-            process.Exited += exited;
-        }
 
         if (!process.Start())
         {
@@ -357,14 +356,19 @@ public sealed class GameLauncher(GameLaunchTarget target) : IDisposable
         _pendingOutput.Enqueue(new GameOutputLine(text, isError));
     }
 
-    private void OnGameExited(object? sender, EventArgs eventArgs)
+    /// <summary>Once game has exited and all its output is captured, frees the launcher and records how it ended -- unless a Stop or a later launch already moved on from it. Waits without holding a thread.</summary>
+    /// <remarks>Started off the launching thread, never inline: the launch still holds the lock and sets the launcher busy after it starts the game.</remarks>
+    private async Task WatchGameAsync(Process game)
     {
-        if (sender is not Process game)
+        try
+        {
+            await game.WaitForExitAsync().ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ObjectDisposedException)
         {
             return;
         }
 
-        game.WaitForExit();
         lock (_stateLock)
         {
             if (!ReferenceEquals(game, _runningGame))

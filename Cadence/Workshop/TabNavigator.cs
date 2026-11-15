@@ -9,9 +9,10 @@ namespace Workshop;
 /// </remarks>
 public sealed class TabNavigator(IReadOnlyList<IIdeTab> tabs, Action<int> openTab, IWorkshopStatus status)
 {
-    private (string TabTitle, Guid RecordId)? _pendingRequest;
+    private (string TabTitle, Guid RecordId, string? FieldPath)? _pendingRequest;
 
-    public void RequestOpenRecord(string tabTitle, Guid recordId) => _pendingRequest = (tabTitle, recordId);
+    /// <param name="fieldPath">The field to focus once the record is selected, in a tab that edits (IWorkshopEditingTab); null for none.</param>
+    public void RequestOpenRecord(string tabTitle, Guid recordId, string? fieldPath = null) => _pendingRequest = (tabTitle, recordId, fieldPath);
 
     /// <summary>Carries out the queued request, if any: opens its tab and selects its record. False when there was none or it couldn't be done.</summary>
     public bool ProcessPendingRequest()
@@ -35,6 +36,11 @@ public sealed class TabNavigator(IReadOnlyList<IIdeTab> tabs, Action<int> openTa
         {
             status.Show($"The {request.TabTitle} tab has no record {request.RecordId}.");
             return false;
+        }
+
+        if (request.FieldPath is { } fieldPath && tabs[tabIndex] is IWorkshopEditingTab editingTab)
+        {
+            editingTab.FocusField(fieldPath);
         }
 
         return true;

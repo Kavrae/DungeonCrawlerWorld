@@ -42,6 +42,9 @@ public enum ContentReferenceKind : byte
 
     /// <summary>A fixed placement puts an area in the world.</summary>
     PlacesArea,
+
+    /// <summary>A blueprint's build gives, stocks or rolls from an item, or grants an action -- named in code (UsesItems, UsesActions), so nothing but code can change it.</summary>
+    BuildsWith,
 }
 
 /// <summary>One record of the session's content: what kind, its Guid (Guid.Empty for terrain, which is keyed by name), and its name.</summary>
@@ -112,6 +115,18 @@ public sealed class ContentReferenceIndex
             foreach (var auraGrant in blueprint.Auras)
             {
                 Add(new ContentReference(from, AuraRecord(catalogs.Auras, auraGrant.AuraId), ContentReferenceKind.RadiatesAura));
+            }
+
+            foreach (var itemId in blueprint.UsesItems)
+            {
+                var name = catalogs.ItemCatalog.TryGet(itemId, out var item) ? item.Name : itemId.ToString();
+                Add(new ContentReference(from, new ContentRecord(ContentRecordKind.Item, itemId, name), ContentReferenceKind.BuildsWith));
+            }
+
+            foreach (var actionId in blueprint.UsesActions)
+            {
+                var name = catalogs.ActionCatalog.TryGet(actionId, out var action) ? action.Name : actionId.ToString();
+                Add(new ContentReference(from, new ContentRecord(ContentRecordKind.Action, actionId, name), ContentReferenceKind.BuildsWith));
             }
         }
 

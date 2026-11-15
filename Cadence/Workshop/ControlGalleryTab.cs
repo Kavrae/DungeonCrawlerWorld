@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using UIEngine.UI;
 using UIEngine.UI.ColorPalettes;
+using UIEngine.UI.Fields;
 
 namespace Workshop;
 
@@ -24,7 +25,7 @@ public sealed class ControlGalleryTab : IIdeTab
 
     public string Title => TabTitle;
 
-    public bool ShowsDependents => false;
+    public bool ShowsRelatedRecords => false;
 
     public void Open(WorkshopTabContext context, Rectangle area)
     {
@@ -77,7 +78,47 @@ public sealed class ControlGalleryTab : IIdeTab
 
         var dialogButton = Add<Button>(ref y, "Modal dialog", new Vector2(120, RowHeight), button => button.LeftText = "Open dialog");
         dialogButton.Clicked += _ => OpenDialog(area);
+
+        var searchable = Add<SearchableChoiceField>(ref y, "Searchable choice", new Vector2(FieldWidth, RowHeight), field => field.Configure(ManyOptions, 2, allowsFreeText: false));
+        searchable.Chosen += (index, text) => context.Status.Show($"Searchable choice: {text} ({index})");
+
+        var freeText = Add<SearchableChoiceField>(ref y, "Searchable, free text", new Vector2(FieldWidth, RowHeight), field => field.Configure(Shapes, -1, allowsFreeText: true, "Hexagon"));
+        freeText.Chosen += (index, text) => context.Status.Show($"Searchable, free text: {text} ({index})");
+
+        var multi = Add<MultiChoiceField>(ref y, "Multi-choice", new Vector2(FieldWidth, RowHeight), field => field.Configure(Shapes, [1, 3]));
+        multi.ChoicesChanged += indices => context.Status.Show($"Multi-choice: {string.Join(", ", indices.Select(index => Shapes[index]))}");
+
+        var section = Add<FieldSectionHeader>(ref y, "Section header", new Vector2(FieldWidth + 80, RowHeight), header => header.Configure("Effects (2)", depth: 1, isCollapsible: true, isExpanded: true, ["Add", "^", "v", "X"], [true, false, true, true]));
+        section.ExpandToggled += isExpanded => context.Status.Show($"Section header: {(isExpanded ? "open" : "closed")}");
+        section.ButtonClicked += index => context.Status.Show($"Section header: button {index}");
+
+        AddFieldRow(ref y, new FieldEditorDescription("Name", FieldValueKind.Text), FieldValue.OfText("Wand of Fireball"));
+        AddFieldRow(ref y, new FieldEditorDescription("Gold value (unset)", FieldValueKind.Integer) { Depth = 1, Minimum = 0, IsSet = false }, FieldValue.OfNumber(0));
+        AddFieldRow(ref y, new FieldEditorDescription("Can trade", FieldValueKind.Boolean) { Depth = 1 }, FieldValue.OfBoolean(true));
+        var problemRow = AddFieldRow(ref y, new FieldEditorDescription("Shape", FieldValueKind.Choice) { Depth = 2, Choices = Shapes }, FieldValue.OfChoice(0));
+        problemRow.SetProblem("A problem with this value", isWarning: false);
     }
+
+    private FieldRow AddFieldRow(ref float y, FieldEditorDescription description, FieldValue value)
+    {
+        var row = _context.UiEngine.ElementPoolService.CreateElement<FieldRow>(_window, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, y), Size = new Vector2(LabelWidth + FieldWidth + 120, FieldRow.RowHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+        });
+        row.Configure(description, value);
+        row.Committed += committed => _context.Status.Show($"Field row {description.Label}: {Describe(committed)}");
+        _window.AddChild(row);
+        y += FieldRow.RowHeight + RowGap;
+        return row;
+    }
+
+    private static string Describe(FieldValue value) =>
+        value.ChoiceIndices is { } indices ? string.Join(", ", indices)
+        : value.ChoiceIndex >= 0 ? value.ChoiceIndex.ToString()
+        : value.Text.Length > 0 ? value.Text
+        : $"{value.Number} / {value.Boolean}";
 
     private T Add<T>(ref float y, string label, Vector2 size, Action<T>? configure = null)
         where T : Element

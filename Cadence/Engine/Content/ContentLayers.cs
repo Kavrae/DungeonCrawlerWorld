@@ -41,8 +41,9 @@ public sealed class LayeredRecords<T>
 /// wins. An enabled line puts its record in (an override keeps the place of what it overrides) and clears any redirect
 /// from its Guid; a disabled line ("off") takes the Guid's record out and sets its redirect to its replacement, if any;
 /// a save's removal line ("rm") takes the save's own override away, so the lower layer's record is back. A save may not
-/// disable a record, and only a save may remove one: either is a failure of that line, which is left out. A redirect a
-/// lower layer set survives a higher layer's override of its target, which it then resolves to. Every failure carries its
+/// disable a record, and only a save may remove one: either is a failure of that line, which is left out. A redirect a lower layer set survives a higher layer's override of its target, which it
+/// then resolves to; redirects that lead back to where they started are each a failure of the line that set them, and are
+/// dropped (the records stay disabled, with no replacement). Every failure carries its
 /// layer's name (ContentFailure.Layer); what one costs -- a stopped build, a dropped mod, a skipped record -- is the
 /// caller's to decide by the layer's kind.
 /// </remarks>
@@ -193,6 +194,7 @@ public sealed class ContentLayers
         var seen = new HashSet<Guid>();
         var current = new Dictionary<Guid, MergedLine<TPayload>>();
         var redirects = new Dictionary<Guid, Guid>();
+        var redirectLines = new Dictionary<Guid, (LayerLine<TPayload> Line, ContentLayer Layer)>();
 
         foreach (var (layer, layerLines) in lines)
         {
@@ -237,6 +239,7 @@ public sealed class ContentLayers
                     if (line.Replacement is { } replacement)
                     {
                         redirects[id] = replacement;
+                        redirectLines[id] = (line, layer);
                     }
 
                     continue;
@@ -250,6 +253,8 @@ public sealed class ContentLayers
             }
         }
 
+        RefuseRedirectCycles(redirects, redirectLines, failures);
+
         var winners = new List<MergedLine<TPayload>>(current.Count);
         foreach (var id in order)
         {
@@ -260,6 +265,45 @@ public sealed class ContentLayers
         }
 
         return (winners, redirects);
+    }
+
+    /// <summary>Takes every redirect that leads back to itself out of redirects, each with a failure of the line that set it naming the whole loop: a cycle is a broken record, never a quiet dead end.</summary>
+    /// <remarks>A chain that only runs into a cycle is left alone; the records of the cycle are what failed.</remarks>
+    private static void RefuseRedirectCycles<TPayload>(Dictionary<Guid, Guid> redirects, Dictionary<Guid, (LayerLine<TPayload> Line, ContentLayer Layer)> redirectLines, List<ContentFailure> failures)
+    {
+        var settled = new HashSet<Guid>();
+        foreach (var start in redirects.Keys.ToList())
+        {
+            if (settled.Contains(start))
+            {
+                continue;
+            }
+
+            var path = new List<Guid>();
+            var onPath = new HashSet<Guid>();
+            var walked = start;
+            while (!settled.Contains(walked) && onPath.Add(walked) && redirects.TryGetValue(walked, out var next))
+            {
+                path.Add(walked);
+                walked = next;
+            }
+
+            settled.UnionWith(path);
+            var cycleStart = path.IndexOf(walked);
+            if (cycleStart < 0)
+            {
+                continue;
+            }
+
+            var cycle = path.GetRange(cycleStart, path.Count - cycleStart);
+            var loop = string.Join(" -> ", cycle.Append(walked).Select(ContentGuid.Format));
+            foreach (var id in cycle)
+            {
+                var (line, layer) = redirectLines[id];
+                failures.Add(new ContentFailure(line.File, line.Line, id, $"Its replacement (\"{ContentTable.ReplacementKey}\") leads back to it: {loop}.", Layer: layer.Name));
+                redirects.Remove(id);
+            }
+        }
     }
 
     private sealed record MergedLine<TPayload>(Guid Id, TPayload Payload, ContentLayer Layer, string File, int Line, JsonSourceMap? Source, MergedLine<TPayload>? Beneath);

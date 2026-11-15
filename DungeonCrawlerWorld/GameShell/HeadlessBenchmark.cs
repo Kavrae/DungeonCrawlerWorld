@@ -41,8 +41,9 @@ internal static class HeadlessBenchmark
     /// <param name="diagnosticsFeatures">Memory adds a PoolMemoryReport and Gauges a GaugeSeriesReport over the same frame range; the other features have nothing to report headless.</param>
     /// <param name="diagnosticsLink">Where an IDE listens for this run's frame records and benchmark completion, or null.</param>
     /// <param name="saveName">The save to read definitions from, or null for none: unlike a windowed game, a run with no "--save=" makes no save of its own, so benchmarks never fill the saves folder.</param>
+    /// <param name="masterContentDirectory">The master manifest to read, or null for the copy in the output.</param>
     /// <remarks>Loads no mods: a mod installed in PlayerFolders.Mods would change the world a seed builds, so a benchmark measures the game alone.</remarks>
-    public static int Run(int randomSeed, BenchmarkFrameRange frameRange, IReadOnlyList<Engine.Settings.ISettingsSource> settingsSources, int? mapSizeOverride = null, DiagnosticsFeatures diagnosticsFeatures = DiagnosticsFeatures.None, System.Net.IPEndPoint? diagnosticsLink = null, string? saveName = null)
+    public static int Run(int randomSeed, BenchmarkFrameRange frameRange, IReadOnlyList<Engine.Settings.ISettingsSource> settingsSources, int? mapSizeOverride = null, DiagnosticsFeatures diagnosticsFeatures = DiagnosticsFeatures.None, System.Net.IPEndPoint? diagnosticsLink = null, string? saveName = null, string? masterContentDirectory = null)
     {
         using var timerResolution = WindowsTimerResolution.Request(milliseconds: 1);
         using var diagnostics = new DiagnosticsEngine(diagnosticsFeatures & (DiagnosticsFeatures.Memory | DiagnosticsFeatures.Gauges), randomSeed, frameRange, writesPeriodicReports: false, diagnosticsLink, isHeadless: true);
@@ -61,7 +62,8 @@ internal static class HeadlessBenchmark
             randomSeed,
             settingsSources,
             mapSizeOverride,
-            saveName is null ? null : WorldSessionBootstrapper.SaveNameFor(saveName, randomSeed));
+            saveName is null ? null : WorldSessionBootstrapper.SaveNameFor(saveName, randomSeed),
+            masterContentDirectory);
 
         try
         {

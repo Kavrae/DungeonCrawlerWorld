@@ -119,6 +119,7 @@ public sealed class DropdownController(ElementPoolService elementPoolService, Ui
     public void Dismiss() => Close();
 
     /// <summary>Up/Down move the open dropdown's highlight and Enter chooses it. Returns whether the key was the dropdown's; nothing is when none is open.</summary>
+    /// <remarks>Enter with nothing highlighted in a list opened under an owner is the owner's (a searchable field resolves what was typed); a context menu keeps it.</remarks>
     internal bool HandleNavigationKey(Keys key)
     {
         if (!IsOpen)
@@ -135,8 +136,7 @@ public sealed class DropdownController(ElementPoolService elementPoolService, Ui
                 _menu.MoveHighlight(-1);
                 return true;
             case Keys.Enter:
-                _menu.ChooseHighlighted();
-                return true;
+                return _menu.ChooseHighlighted() || Owner is null;
             default:
                 return false;
         }

@@ -24,12 +24,12 @@ public sealed class ContentLayer
     private readonly string? _directory;
     private readonly IReadOnlyDictionary<string, byte[]>? _bytesByPath;
 
-    private ContentLayer(string name, ContentLayerKind kind, string? directory, IReadOnlyDictionary<string, string>? textByPath)
+    private ContentLayer(string name, ContentLayerKind kind, string? directory, IReadOnlyDictionary<string, byte[]>? bytesByPath)
     {
         Name = name;
         Kind = kind;
         _directory = directory;
-        _bytesByPath = textByPath?.ToDictionary(pair => pair.Key, pair => System.Text.Encoding.UTF8.GetBytes(pair.Value), StringComparer.Ordinal);
+        _bytesByPath = bytesByPath;
     }
 
     /// <summary>What failures and startup lines call the layer ("Master", a mod's name, a save's).</summary>
@@ -37,14 +37,30 @@ public sealed class ContentLayer
 
     public ContentLayerKind Kind { get; }
 
-    /// <summary>The folder the layer reads, or null for one held in memory.</summary>
+    /// <summary>The folder the layer reads or was read from, or null for one made from text.</summary>
     public string? Directory => _directory;
 
-    /// <summary>The layer under directory; a file it lacks is an empty table.</summary>
-    public static ContentLayer FromDirectory(string name, ContentLayerKind kind, string directory) => new(name, kind, directory, textByPath: null);
+    /// <summary>The layer under directory, read as it is asked for; a file it lacks is an empty table.</summary>
+    public static ContentLayer FromDirectory(string name, ContentLayerKind kind, string directory) => new(name, kind, directory, bytesByPath: null);
+
+    /// <summary>The layer under directory, every file read whole now and held -- so a tool rewriting the folder while a session reads it (the Workshop publishing master) never moves a line under it.</summary>
+    public static ContentLayer ReadWhole(string name, ContentLayerKind kind, string directory)
+    {
+        var bytesByPath = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        if (System.IO.Directory.Exists(directory))
+        {
+            foreach (var fullPath in System.IO.Directory.GetFiles(directory, "*", SearchOption.AllDirectories))
+            {
+                bytesByPath[Path.GetRelativePath(directory, fullPath).Replace('\\', '/')] = File.ReadAllBytes(fullPath);
+            }
+        }
+
+        return new(name, kind, directory, bytesByPath);
+    }
 
     /// <summary>A layer of the files textByPath holds, each by its relative path, kept as its UTF-8 bytes -- so a record read by id is sliced from them, never re-encoded with the whole file.</summary>
-    public static ContentLayer FromText(string name, ContentLayerKind kind, IReadOnlyDictionary<string, string> textByPath) => new(name, kind, directory: null, textByPath);
+    public static ContentLayer FromText(string name, ContentLayerKind kind, IReadOnlyDictionary<string, string> textByPath) =>
+        new(name, kind, directory: null, textByPath.ToDictionary(pair => pair.Key, pair => System.Text.Encoding.UTF8.GetBytes(pair.Value), StringComparer.Ordinal));
 
     /// <summary>The whole of the file at path as UTF-8 bytes; false when the layer has no such file.</summary>
     /// <remarks>For a layer held in memory these are the layer's own bytes, not a copy: read them, never write to them.</remarks>
@@ -69,7 +85,7 @@ public sealed class ContentLayer
     }
 
     /// <summary>length bytes of the file at path from offset: one line a table index found there.</summary>
-    /// <remarks>A file only ever grows at its end while a session reads it (a save's tables are appended to), so an offset the index took still names the same line.</remarks>
+    /// <remarks>A file of a layer read as it is asked for only ever grows at its end while a session reads it (a save's tables are appended to), so an offset the index took still names the same line; a folder another tool rewrites is read whole (ReadWhole).</remarks>
     public byte[] ReadBytes(string path, long offset, int length)
     {
         var bytes = new byte[length];

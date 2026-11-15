@@ -22,8 +22,14 @@ public sealed class WorkshopTabContext(UiEngineContext uiEngine, UiLayerStack la
     /// <summary>Opens another tab with one of its records selected -- what a link to another table's record asks for.</summary>
     public TabNavigator Navigator { get; } = navigator;
 
-    /// <summary>Shows what names subject -- the record the tab has selected -- in the bottom panel's Dependents.</summary>
-    public void ShowDependents(string subject, IReadOnlyList<WorkshopDependent> dependents) => bottomPanel.ShowDependents(subject, dependents);
+    /// <summary>Shows what names the record the tab has selected in the bottom panel's Used By, and what it names in Uses.</summary>
+    public void ShowRelatedRecords(IReadOnlyList<WorkshopRelatedRecord> usedBy, IReadOnlyList<WorkshopRelatedRecord> uses) => bottomPanel.ShowRelatedRecords(usedBy, uses);
+
+    /// <summary>Shows how the tab's selected record differs from what it is compared with in the bottom panel's Changes; null takes Changes away (nothing to compare).</summary>
+    public void ShowChanges(WorkshopChanges? changes) => bottomPanel.ShowChanges(changes);
+
+    /// <summary>Gives element keyboard focus -- taking the player to a field.</summary>
+    public void FocusElement(UIEngine.UI.Element element) => inputController.FocusElement(element);
 
     /// <summary>Registers handler with the shell's input controller until the tab closes.</summary>
     public void AddInputHandler(IUiInputHandler handler)

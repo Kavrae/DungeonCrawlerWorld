@@ -34,7 +34,11 @@ public sealed class GameSession
         SettingsFailures = buildPass.Declarations.SettingsFailures;
         ContentStore = contentStore;
         Content = context.Content;
+        ContentChecks = new Content.ContentChecks(context.GameplayTags, context.Auras, context.Terrain, context.StatusEffectAppliers);
     }
+
+    /// <summary>The checks a definition is put through one at a time against this session -- what an editor asks of a record it changes.</summary>
+    public Content.ContentChecks ContentChecks { get; }
 
     public EcsContext EcsContext { get; }
 

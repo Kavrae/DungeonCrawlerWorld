@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using Engine.Content;
 using Engine.Tags;
@@ -92,10 +91,10 @@ public sealed class GameContent
     /// <summary>Where the game's own build output keeps the master manifest.</summary>
     public static string DefaultMasterDirectory => Path.Combine(AppContext.BaseDirectory, "Definitions", "Master");
 
-    /// <summary>The master manifest under directory, as a layer.</summary>
-    public static ContentLayer MasterLayer(string directory) => ContentLayer.FromDirectory(MasterLayerName, ContentLayerKind.Master, directory);
+    /// <summary>The master manifest under directory, as a layer, read whole as it opens: the Workshop publishes into the master a game it started reads, so nothing is read from the folder later.</summary>
+    public static ContentLayer MasterLayer(string directory) => ContentLayer.ReadWhole(MasterLayerName, ContentLayerKind.Master, directory);
 
-    /// <summary>A stack of the master manifest under directory alone.</summary>
+    /// <summary>A stack of the master manifest under directory alone, as it is now.</summary>
     public static ContentLayers MasterOnly(string directory) => new([MasterLayer(directory)]);
 
     /// <summary>Every table, in the order the game reads them.</summary>
@@ -541,26 +540,29 @@ public sealed class GameContent
         where T : class =>
         [.. records.Records.Select(record => new LocatedRecord<T>(record.Value, LocationOf(record)))];
 
-    /// <summary>Writes auras, actions and items to directory's three tables, canonically and in the order given -- the master layer's files.</summary>
-    /// <remarks>Disabled records already in a table are kept as written, after the enabled ones, so re-exporting never drops them.</remarks>
+    /// <summary>Writes auras, actions and items to directory's three tables, canonically and each in Guid order (ContentGuid.FileOrder) -- the master layer's files.</summary>
+    /// <remarks>Disabled records already in a table are kept as written, at their Guid's place among the rest, so re-exporting never drops or moves them.</remarks>
     public static void WriteMaster(string directory, IEnumerable<AuraDefinition> auras, IEnumerable<ActionDefinition> actions, IEnumerable<ItemDefinition> items, ContentTypeRegistry types)
     {
         Directory.CreateDirectory(directory);
-        WriteTable(Path.Combine(directory, AurasFileName), AurasTable, auras, types);
-        WriteTable(Path.Combine(directory, ActionsFileName), ActionsTable, actions, types);
-        WriteTable(Path.Combine(directory, ItemsFileName), ItemsTable, items, types);
+        WriteTable(Path.Combine(directory, AurasFileName), AurasTable, auras, static aura => aura.Id, types);
+        WriteTable(Path.Combine(directory, ActionsFileName), ActionsTable, actions, static action => action.Id, types);
+        WriteTable(Path.Combine(directory, ItemsFileName), ItemsTable, items, static item => item.Id, types);
     }
 
-    private static void WriteTable<T>(string path, string tableName, IEnumerable<T> records, ContentTypeRegistry types)
+    private static void WriteTable<T>(string path, string tableName, IEnumerable<T> records, Func<T, Guid> idOf, ContentTypeRegistry types)
         where T : notnull
     {
-        var text = new StringBuilder(ContentTable.Write(tableName, records, types));
+        var table = ContentTableLines.Parse(ContentTable.Write(tableName, records.OrderBy(idOf, ContentGuid.FileOrder), types));
         foreach (var disabledLine in DisabledLines(path))
         {
-            text.Append(disabledLine).Append('\n');
+            if (ContentTable.TryReadId(disabledLine, out var id) && !table.Contains(id))
+            {
+                table.Put(id, disabledLine);
+            }
         }
 
-        File.WriteAllText(path, text.ToString(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        table.Write(path);
     }
 
     /// <summary>The disabled records' lines already in path, as written.</summary>

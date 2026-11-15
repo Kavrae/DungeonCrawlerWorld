@@ -27,13 +27,13 @@ internal static class AuraContentCodecs
         [
             ContentField.Guid(ContentTable.IdKey, "Id", isRequired: true),
             ContentField.Text("n", "Name", isRequired: true),
-            ContentField.Text("d", "Description"),
-            ContentField.Color("gc", "Glow colour"),
+            ContentField.Text("d", "Description") with { IsMultiline = true },
+            ContentColors.Field("gc", "Glow colour"),
             ContentField.ListOf<Effect>("fx", "Effects each tick", ContentFieldKind.Object),
             ContentField.TagSet("t", "Tags", GameTagDomains.Activation),
-            ContentField.Enum<AuraMagnitude>("mg", "Magnitude"),
-            ContentField.Enum<AuraFalloff>("fo", "Falloff"),
-            ContentField.Number("go", "Glow opacity multiplier", 0, 1),
+            ContentField.Enum("mg", "Magnitude", AuraMagnitude.Power),
+            ContentField.Enum("fo", "Falloff", AuraFalloff.Linear),
+            ContentField.Number("go", "Glow opacity multiplier", 0, 1, 0.5f),
         ]);
 
         public override void WriteProperties(ContentWriter writer, AuraDefinition value)
@@ -69,7 +69,7 @@ internal static class AuraContentCodecs
             ContentField.Reference("au", "Aura", AurasTable, isRequired: true),
             ContentField.Integer("p", "Power", 0, ushort.MaxValue),
             ContentField.Integer("s", "Size", 0, byte.MaxValue),
-            ContentField.Integer("d", "Duration in frames (none: until revoked)", 0, ushort.MaxValue),
+            ContentField.OptionalInteger("d", "Duration in frames (none: until revoked)", 0, ushort.MaxValue),
         ]);
 
         public override void WriteProperties(ContentWriter writer, AuraSourceGrant value)

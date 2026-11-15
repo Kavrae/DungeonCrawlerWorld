@@ -5,6 +5,9 @@ public static class ContentGuid
 {
     private const int EncodedLength = 22;
 
+    /// <summary>The order records of a table are kept in: by their Guids as written in the file, compared ordinally -- so the order is what a reader sees.</summary>
+    public static IComparer<Guid> FileOrder { get; } = Comparer<Guid>.Create(static (left, right) => string.CompareOrdinal(Format(left), Format(right)));
+
     public static string Format(Guid value) =>
         Convert.ToBase64String(value.ToByteArray()).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 

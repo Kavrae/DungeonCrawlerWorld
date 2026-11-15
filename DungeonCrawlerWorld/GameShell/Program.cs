@@ -10,6 +10,7 @@ var randomSeed = RandomSeed.Parse(args);
 var benchmarkFrameRange = BenchmarkFrameRange.Parse(args);
 var mapSizeOverride = DungeonCrawlerWorld.MapSizeArgument.Parse(args);
 var saveName = Engine.Persistence.SaveArgument.Parse(args);
+var masterContentDirectory = DungeonCrawlerWorld.MasterContentArgument.Parse(args);
 IReadOnlyList<ISettingsSource> settingsSources = [new CommandLineSettingsSource(args)];
 
 if (HeadlessArgument.IsPresent(args))
@@ -20,9 +21,9 @@ if (HeadlessArgument.IsPresent(args))
         return 2;
     }
 
-    return DungeonCrawlerWorld.HeadlessBenchmark.Run(randomSeed, headlessRange, settingsSources, mapSizeOverride, diagnosticsFeatures, diagnosticsLink, saveName);
+    return DungeonCrawlerWorld.HeadlessBenchmark.Run(randomSeed, headlessRange, settingsSources, mapSizeOverride, diagnosticsFeatures, diagnosticsLink, saveName, masterContentDirectory);
 }
 
-using var game = new DungeonCrawlerWorld.GameLoop(settingsSources, diagnosticsFeatures, randomSeed, benchmarkFrameRange, mapSizeOverride, diagnosticsLink, saveName);
+using var game = new DungeonCrawlerWorld.GameLoop(settingsSources, diagnosticsFeatures, randomSeed, benchmarkFrameRange, mapSizeOverride, diagnosticsLink, saveName, masterContentDirectory);
 game.Run();
 return 0;

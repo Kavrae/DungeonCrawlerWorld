@@ -492,6 +492,7 @@ public sealed class UiInputController
     }
 
     /// <summary>Tab itself must stay unconditional -- it's how focus moves in the first place, so it can never be gated behind already holding focus.</summary>
+    /// <remarks>A list the focused control opened (a dropdown, a multi-choice) closes first, choosing nothing: what was already chosen in it stays.</remarks>
     private void HandleFocusCycling(KeyboardState keyboardState)
     {
         if (!IsKeyPressed(keyboardState, Keys.Tab))
@@ -502,6 +503,11 @@ public sealed class UiInputController
         var direction = keyboardState.IsKeyDown(Keys.LeftShift) || keyboardState.IsKeyDown(Keys.RightShift)
             ? -1
             : 1;
+        if (_dropdownController is { IsOpen: true } dropdowns && dropdowns.Owner is { } owner && ReferenceEquals(owner, _focusedElement))
+        {
+            dropdowns.Close();
+        }
+
         CycleFocus(direction);
     }
 
@@ -699,7 +705,7 @@ public sealed class UiInputController
         PressedButton?.SetPressed(true);
         DragDelta = Vector2.Zero;
 
-        _textSelectionDragBox = _activeInteraction.Kind == ElementDragInteractionKind.None ? _activeInteraction.Element as TextBox : null;
+        _textSelectionDragBox = _activeInteraction.Kind == ElementDragInteractionKind.None && _activeInteraction.Element is TextBox { Enabled: true } pressedTextBox ? pressedTextBox : null;
 
         if (_activeInteraction.Element is not null)
         {
@@ -716,7 +722,7 @@ public sealed class UiInputController
                 // Close button would focus its search box.
                 if (_activeInteraction.Button is null)
                 {
-                    SetFocus(_activeInteraction.Element.CanUserFocus ? _activeInteraction.Element : null);
+                    SetFocus(_activeInteraction.Element is { CanUserFocus: true, Enabled: true } focusable ? focusable : null);
                 }
             }
             else
@@ -763,7 +769,12 @@ public sealed class UiInputController
         _contentDragHeldFrames = 0;
         _contentDragStartAnnounced = false;
 
-        var source =_activeInteraction.Element as IContentDragSource ?? (_activeInteraction.Element as Window)?.Content as IContentDragSource;
+        if (_activeInteraction.Element is { Enabled: false })
+        {
+            return;
+        }
+
+        var source = _activeInteraction.Element as IContentDragSource ?? (_activeInteraction.Element as Window)?.Content as IContentDragSource;
         if (source is null || !source.TryBeginContentDrag(clickPosition, out var start))
         {
             return;
@@ -783,7 +794,8 @@ public sealed class UiInputController
 
     /// <summary>
     /// Shows the TooltipText of the button or element under a resting pointer once it has stayed there for
-    /// PopupChrome.HoverTooltipDelayFrames, below it; any press, drag or window interaction hides it and starts the wait again.
+    /// PopupChrome.HoverTooltipDelayFrames, below and right of the cursor where it was then (flipped where it wouldn't fit);
+    /// any press, drag or window interaction hides it and starts the wait again.
     /// </summary>
     private void UpdateElementTooltip(MouseState mouseState)
     {
@@ -809,8 +821,17 @@ public sealed class UiInputController
             return;
         }
 
-        _tooltipController.Show(this, _tooltipHoveredElement.Rectangle, PopupAnchor.South, PopupChrome.ElementTooltipGap, PopupChrome.HoverPopupMaximumSize, tooltipText);
+        if (_tooltipHoveredFrames == PopupChrome.HoverTooltipDelayFrames)
+        {
+            _tooltipCursorPosition = CurrentMousePosition;
+        }
+
+        var cursor = new Rectangle(_tooltipCursorPosition.X, _tooltipCursorPosition.Y, 0, (int)PopupChrome.CursorHeight);
+        _tooltipController.Show(this, cursor, PopupAnchor.SouthEast, PopupChrome.ElementTooltipGap, PopupChrome.HoverPopupMaximumSize, tooltipText);
     }
+
+    /// <summary>Where the pointer was when the element tooltip showing now appeared -- it stays there, below and right of the cursor, while the pointer moves within the element.</summary>
+    private Point _tooltipCursorPosition;
 
     /// <summary>Tells every input handler what the pointer is over and where, once per frame after the cursor is chosen, and whether a window move, resize or scrollbar drag is under way (the hovered element isn't refreshed during one).</summary>
     private void NotifyInputHandlersOfPointer()
@@ -1555,6 +1576,11 @@ public sealed class UiInputController
     /// </summary>
     private void CycleFocus(int direction)
     {
+        if (TryCycleTabStops(direction))
+        {
+            return;
+        }
+
         var focusableElements = new List<Element>();
         foreach (var element in _layers[UiLayer.Base])
         {
@@ -1595,6 +1621,53 @@ public sealed class UiInputController
             : ((currentIndex + direction) % focusableElements.Count + focusableElements.Count) % focusableElements.Count;
 
         SetFocus(focusableElements[nextIndex]);
+    }
+
+    /// <summary>From a focused tab stop (Element.IsTabStop), moves focus to the next (direction 1) or previous (-1) one in the same root window, in tree order, wrapping, and brings it into view; false when focus isn't on a tab stop or its window has no other.</summary>
+    /// <remarks>Only from a tab stop, so Tab from the map or a plain window still cycles windows, and never lands in a form the player wasn't in.</remarks>
+    private bool TryCycleTabStops(int direction)
+    {
+        if (_focusedElement is not { IsTabStop: true } focused)
+        {
+            return false;
+        }
+
+        var tabStops = new List<Element>();
+        CollectTabStops(focused.RootElement, tabStops);
+        var index = tabStops.IndexOf(focused);
+        if (tabStops.Count < 2 || index < 0)
+        {
+            return false;
+        }
+
+        var next = tabStops[((index + direction) % tabStops.Count + tabStops.Count) % tabStops.Count];
+        SetFocus(next);
+        next.BringIntoView();
+        return true;
+    }
+
+    /// <summary>Every tab stop under element, in tree order, through visible, unminimized elements only.</summary>
+    private static void CollectTabStops(Element element, List<Element> tabStops)
+    {
+        if (!element.IsVisible)
+        {
+            return;
+        }
+
+        if (element.IsTabStop)
+        {
+            tabStops.Add(element);
+        }
+
+        if (element.DisplayMode == ElementDisplayMode.Minimized)
+        {
+            return;
+        }
+
+        foreach (var child in element.ChildElements)
+        {
+            CollectTabStops(child, tabStops);
+        }
     }
 
     /// <summary>Forwards every key newly pressed this frame to whichever element holds focus. Tab is excluded since it's already claimed above for focus-cycling.</summary>
@@ -1807,11 +1880,11 @@ public sealed class UiInputController
         _hoveredInteractionPosition = position;
         _hoveredInteractionLayersVersion = _layers.Version;
         _hoveredInteractionTreeVersion = treeVersion;
-        SetPointerOverChain(_hoveredInteraction.Element);
+        SetPointerOverChain(_hoveredInteraction.Element, position);
     }
 
-    /// <summary>Moves Element.IsPointerOver from the previously hovered element and its ancestors to hovered and its ancestors.</summary>
-    private void SetPointerOverChain(Element? hovered)
+    /// <summary>Moves Element.IsPointerOver from the previously hovered element and its ancestors to hovered and its ancestors, with the position it was found at.</summary>
+    private void SetPointerOverChain(Element? hovered, Point position)
     {
         foreach (var element in _pointerOverChain)
         {
@@ -1822,6 +1895,7 @@ public sealed class UiInputController
         for (var element = hovered; element is not null; element = element.ParentElement)
         {
             element.IsPointerOver = true;
+            element.PointerOverPosition = position;
             _pointerOverChain.Add(element);
         }
     }

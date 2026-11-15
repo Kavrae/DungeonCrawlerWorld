@@ -34,8 +34,8 @@ internal static class AreaContentCodecs
             return;
         }
 
-        writer.Integer("w", present.X);
-        writer.Integer("h", present.Y);
+        writer.OptionalInteger("w", present.X);
+        writer.OptionalInteger("h", present.Y);
     }
 
     private static Vector2Byte? ReadSize(ContentObject element, string typeName)
@@ -61,10 +61,10 @@ internal static class AreaContentCodecs
         [
             ContentField.Guid(ContentTable.IdKey, "Id", isRequired: true),
             ContentField.Text("n", "Name", isRequired: true),
-            ContentField.Text("d", "Description"),
+            ContentField.Text("d", "Description") with { IsMultiline = true },
             ContentField.TagSet("tg", "Tags", GameTagDomains.Area),
-            new ContentField("w", "Width", ContentFieldKind.Integer, IsRequired: true, Minimum: 1, Maximum: ushort.MaxValue),
-            new ContentField("h", "Height", ContentFieldKind.Integer, IsRequired: true, Minimum: 1, Maximum: ushort.MaxValue),
+            ContentField.Integer("w", "Width", 1, ushort.MaxValue) with { IsRequired = true },
+            ContentField.Integer("h", "Height", 1, ushort.MaxValue) with { IsRequired = true },
             new ContentField("pal", "Palettes", ContentFieldKind.List, typeof(Guid), ContentFieldKind.Reference, ReferencedTable: GameContent.AreaPalettesTable),
             ContentField.ListOf<AreaCell>("leg", "Legend", ContentFieldKind.Object),
             ContentField.Object<AreaLayers>("lay", "Layers", isRequired: true),
@@ -139,8 +139,8 @@ internal static class AreaContentCodecs
         public override ContentSchema Schema { get; } = new(nameof(AreaCell),
         [
             ContentField.Text("s", "Symbol", isRequired: true),
-            ContentField.Text("ter", "Floor terrain"),
-            ContentField.Text("st", "Wall"),
+            ContentField.OptionalText("ter", "Floor terrain"),
+            ContentField.OptionalText("st", "Wall"),
             ContentField.Boolean("clr", "Clears the wall"),
             ContentField.ListOf<AreaSpawn>("sp", "Spawns", ContentFieldKind.Object),
         ]);
@@ -172,9 +172,9 @@ internal static class AreaContentCodecs
         public override ContentSchema Schema { get; } = new(nameof(AreaSpawn),
         [
             ContentField.Guid("bp", "Blueprint"),
-            ContentField.Integer("w", "Width", 1, byte.MaxValue),
-            ContentField.Integer("h", "Height", 1, byte.MaxValue),
-            ContentField.Integer("ch", "Chance (percent)", 1, 100),
+            ContentField.OptionalInteger("w", "Width", 1, byte.MaxValue),
+            ContentField.OptionalInteger("h", "Height", 1, byte.MaxValue),
+            ContentField.Integer("ch", "Chance (percent)", 1, 100, AreaSpawn.AlwaysChance),
             ContentField.ListOf<AreaWeightedBlueprint>("of", "One of", ContentFieldKind.Object),
         ]);
 
@@ -202,7 +202,7 @@ internal static class AreaContentCodecs
         public override ContentSchema Schema { get; } = new(nameof(AreaWeightedBlueprint),
         [
             ContentField.Guid("bp", "Blueprint", isRequired: true),
-            ContentField.Integer("wt", "Weight", 1, int.MaxValue),
+            ContentField.Integer("wt", "Weight", 1, int.MaxValue, AreaWeightedBlueprint.DefaultWeight),
         ]);
 
         public override void WriteProperties(ContentWriter writer, AreaWeightedBlueprint value)
@@ -223,14 +223,14 @@ internal static class AreaContentCodecs
             ContentField.Text("pid", "Placement id", isRequired: true),
             ContentField.Integer("x", "X"),
             ContentField.Integer("y", "Y"),
-            ContentField.Enum<MapLayer>("l", "Layer"),
+            ContentField.Enum("l", "Layer", MapLayer.Ground),
             ContentField.Guid("bp", "Blueprint", isRequired: true),
-            ContentField.Integer("w", "Width", 1, byte.MaxValue),
-            ContentField.Integer("h", "Height", 1, byte.MaxValue),
-            ContentField.Integer("ch", "Chance (percent)", 1, 100),
+            ContentField.OptionalInteger("w", "Width", 1, byte.MaxValue),
+            ContentField.OptionalInteger("h", "Height", 1, byte.MaxValue),
+            ContentField.Integer("ch", "Chance (percent)", 1, 100, AreaSpawn.AlwaysChance),
             ContentField.Boolean("u", "Unique"),
             ContentField.Guid("fb", "Fallback blueprint"),
-            ContentField.Text("d", "Description"),
+            ContentField.OptionalText("d", "Description") with { IsMultiline = true },
         ]);
 
         public override void WriteProperties(ContentWriter writer, AreaEntityPlacement value)
@@ -267,8 +267,8 @@ internal static class AreaContentCodecs
             ContentField.Text("mid", "Marker id", isRequired: true),
             ContentField.Integer("x", "X"),
             ContentField.Integer("y", "Y"),
-            ContentField.Enum<MapLayer>("l", "Layer"),
-            new ContentField("k", "Kind", ContentFieldKind.Enum, typeof(AreaMarkerKind), IsRequired: true),
+            ContentField.Enum("l", "Layer", MapLayer.Ground),
+            ContentField.Enum("k", "Kind", AreaMarkerKind.None, isRequired: true),
         ]);
 
         public override void WriteProperties(ContentWriter writer, AreaMarker value)

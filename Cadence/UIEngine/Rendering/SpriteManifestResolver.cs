@@ -52,6 +52,8 @@ public sealed class SpriteManifestResolver
 
             _entriesByName[entry.Name] = new ResolvedEntry(cells, new TerrainSpriteSet(entry, SheetFor));
         }
+
+        Names = [.. _entriesByName.Keys.Order(StringComparer.Ordinal)];
     }
 
     /// <summary>Loads and checks the manifest file at path; an entry that breaks a rule is left out and listed in ManifestProblems.</summary>
@@ -60,6 +62,9 @@ public sealed class SpriteManifestResolver
 
     /// <summary>Why each manifest entry left out was left out (SpriteManifest.Problems); a host reports them at startup.</summary>
     public IReadOnlyList<string> ManifestProblems { get; }
+
+    /// <summary>Every entry's name, in ordinal order -- what a picker of sprite names offers.</summary>
+    public IReadOnlyList<string> Names { get; }
 
     /// <summary>Writes one line per entry the manifest left out, and returns how many there were.</summary>
     public int ReportManifestProblems(TextWriter output)

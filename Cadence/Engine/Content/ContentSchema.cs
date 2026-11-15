@@ -41,6 +41,14 @@ public enum ContentFieldKind : byte
 /// <param name="IsRequired">The field must be present; every other field may be omitted, meaning its default.</param>
 /// <param name="ReferencedTable">For a Reference (or a List of them): the table the Guid names a record in.</param>
 /// <param name="TagDomain">For a Tag or TagSet: the domain every tag it holds must be in -- the reader fails a record holding any other.</param>
+/// <param name="Default">
+/// What an omitted field means: a string for Text, a long for Integer and Color, a float for Number, a bool for Boolean,
+/// the enum's member for Enum. Null when an omitted field holds no value at all -- an optional Text or Integer, and every
+/// Guid, Reference, Tag, TagSet, Object, Polymorphic and List. The codec passes the same value to the writer and the reader,
+/// and both check it against this one (the writer always, the reader in Debug), so it is never a second, drifting copy.
+/// </param>
+/// <param name="IsMultiline">For Text: prose an editor shows on several lines (a description); reading and writing are the same either way.</param>
+/// <remarks>A DisplayName may end in a hint in parentheses -- "Action lock in frames (none: the entity's own)" -- which an editor shows in the field's tooltip rather than its label.</remarks>
 public sealed record ContentField(
     string Key,
     string DisplayName,
@@ -51,23 +59,32 @@ public sealed record ContentField(
     string? ReferencedTable = null,
     double? Minimum = null,
     double? Maximum = null,
-    GameplayTagDomain? TagDomain = null)
+    GameplayTagDomain? TagDomain = null,
+    object? Default = null,
+    bool IsMultiline = false)
 {
-    public static ContentField Text(string key, string displayName, bool isRequired = false) => new(key, displayName, ContentFieldKind.Text, IsRequired: isRequired);
+    public static ContentField Text(string key, string displayName, bool isRequired = false, string defaultValue = "") => new(key, displayName, ContentFieldKind.Text, IsRequired: isRequired, Default: defaultValue);
 
-    public static ContentField Integer(string key, string displayName, double? minimum = null, double? maximum = null) => new(key, displayName, ContentFieldKind.Integer, Minimum: minimum, Maximum: maximum);
+    /// <summary>A Text field whose omission means no text at all, rather than an empty one.</summary>
+    public static ContentField OptionalText(string key, string displayName) => new(key, displayName, ContentFieldKind.Text);
 
-    public static ContentField Number(string key, string displayName, double? minimum = null, double? maximum = null) => new(key, displayName, ContentFieldKind.Number, Minimum: minimum, Maximum: maximum);
+    public static ContentField Integer(string key, string displayName, double? minimum = null, double? maximum = null, long defaultValue = 0) => new(key, displayName, ContentFieldKind.Integer, Minimum: minimum, Maximum: maximum, Default: defaultValue);
 
-    public static ContentField Boolean(string key, string displayName) => new(key, displayName, ContentFieldKind.Boolean);
+    /// <summary>An Integer field whose omission means no number at all; any value it holds, zero included, is written.</summary>
+    public static ContentField OptionalInteger(string key, string displayName, double? minimum = null, double? maximum = null) => new(key, displayName, ContentFieldKind.Integer, Minimum: minimum, Maximum: maximum);
 
-    public static ContentField Enum<TEnum>(string key, string displayName) where TEnum : struct, System.Enum => new(key, displayName, ContentFieldKind.Enum, typeof(TEnum));
+    public static ContentField Number(string key, string displayName, double? minimum = null, double? maximum = null, float defaultValue = 0f) => new(key, displayName, ContentFieldKind.Number, Minimum: minimum, Maximum: maximum, Default: defaultValue);
+
+    public static ContentField Boolean(string key, string displayName, bool defaultValue = false) => new(key, displayName, ContentFieldKind.Boolean, Default: defaultValue);
+
+    public static ContentField Enum<TEnum>(string key, string displayName, TEnum defaultValue = default, bool isRequired = false) where TEnum : struct, System.Enum => new(key, displayName, ContentFieldKind.Enum, typeof(TEnum), IsRequired: isRequired, Default: defaultValue);
 
     public static ContentField Guid(string key, string displayName, bool isRequired = false) => new(key, displayName, ContentFieldKind.Guid, IsRequired: isRequired);
 
     public static ContentField Reference(string key, string displayName, string referencedTable, bool isRequired = false) => new(key, displayName, ContentFieldKind.Reference, IsRequired: isRequired, ReferencedTable: referencedTable);
 
-    public static ContentField Color(string key, string displayName) => new(key, displayName, ContentFieldKind.Color);
+    /// <param name="defaultPacked">The packed colour an omitted field means -- the engine knows no colour type, so the game names it.</param>
+    public static ContentField Color(string key, string displayName, uint defaultPacked) => new(key, displayName, ContentFieldKind.Color, Default: (long)defaultPacked);
 
     public static ContentField Tag(string key, string displayName, GameplayTagDomain domain) => new(key, displayName, ContentFieldKind.Tag, TagDomain: domain);
 
@@ -106,4 +123,22 @@ public sealed class ContentSchema
     public bool HasKey(string key) => _fieldsByKey.ContainsKey(key);
 
     public bool TryGetField(string key, out ContentField field) => _fieldsByKey.TryGetValue(key, out field!);
+
+    /// <summary>The field declared under key; throws, naming the type, for a key the schema doesn't declare.</summary>
+    public ContentField FieldOf(string key) =>
+        _fieldsByKey.TryGetValue(key, out var field)
+            ? field
+            : throw new InvalidOperationException($"The {TypeName} codec uses '{key}', which its schema doesn't declare.");
+
+    /// <summary>The failure for a codec that treats an omitted field as passed (null for no value) where its schema declares another default.</summary>
+    public InvalidOperationException DefaultMismatch(ContentField field, object? passed) =>
+        new($"The {TypeName} codec treats an omitted '{field.Key}' as {DescribeDefault(passed)}, but its schema declares {DescribeDefault(field.Default)}.");
+
+    /// <summary>A default as the messages name it: "none" for no value.</summary>
+    public static string DescribeDefault(object? value) => value switch
+    {
+        null => "none",
+        string text => $"\"{text}\"",
+        _ => value.ToString() ?? "none",
+    };
 }

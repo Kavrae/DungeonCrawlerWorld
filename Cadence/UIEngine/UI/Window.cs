@@ -437,22 +437,16 @@ public class Window : Element
     /// </summary>
     private void RepositionTitleButtons()
     {
-        for (var index = 0; index < _titleButtons.Count; index++)
+        var right = HeaderSize.X;
+        foreach (var button in _titleButtons)
         {
-            var button = _titleButtons[index];
-            if (index == 0)
-            {
-                button.PositionInHeader(new Vector2(HeaderSize.X - button.CurrentSize.X - 3, 3), AbsolutePosition);
-            }
-            else
-            {
-                var previousButton = _titleButtons[index - 1];
-                button.PositionInHeader(new Vector2(
-                    previousButton.RelativePosition.X - previousButton.CurrentSize.X - 3,
-                    previousButton.RelativePosition.Y), AbsolutePosition);
-            }
+            right -= button.CurrentSize.X + TitleButtonGap;
+            button.PositionInHeader(new Vector2(right, System.MathF.Max(0f, (HeaderSize.Y - button.CurrentSize.Y) / 2f)), AbsolutePosition);
         }
     }
+
+    /// <summary>The space right of each title button: between two, and between the last and the title bar's right edge.</summary>
+    private const float TitleButtonGap = 3f;
 
     protected override void RecalculateHeaderExtras() => RepositionTitleButtons();
 

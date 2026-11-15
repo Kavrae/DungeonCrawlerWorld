@@ -79,7 +79,7 @@ public sealed class SpritesTab : IIdeTab
 
     public string Title => TabTitle;
 
-    public bool ShowsDependents => false;
+    public bool ShowsRelatedRecords => false;
 
     /// <summary>Reads the manifest at manifestPath and registers the tab's elements with uiEngine's pool -- once per IDE run.</summary>
     /// <param name="spritesheetsDirectory">The spritesheets folder, relative to the exe's output directory, as the host gave UiEngineBootstrapper.</param>

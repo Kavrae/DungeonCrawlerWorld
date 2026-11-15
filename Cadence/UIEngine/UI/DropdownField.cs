@@ -79,6 +79,8 @@ public sealed class DropdownField(ElementServices services, DropdownController d
 
     public bool IsListOpen => dropdowns.IsOpen && ReferenceEquals(dropdowns.Owner, this);
 
+    public override bool IsTabStop => Enabled;
+
     private void Choose(int optionIndex)
     {
         if (optionIndex == SelectedIndex)
@@ -120,12 +122,23 @@ public sealed class DropdownField(ElementServices services, DropdownController d
         dropdowns.OpenBelow(this, _options, SelectedIndex, ListMaximumHeight);
     }
 
+    /// <summary>Draws the focus mark over everything else while focused.</summary>
+    public override void Draw(GameTime gameTime)
+    {
+        base.Draw(gameTime);
+
+        if (IsFocused)
+        {
+            DrawFocusIndicator(Rectangle);
+        }
+    }
+
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = Render.Batch;
 
         var text = SelectedLabel ?? Placeholder;
-        var textColor = SelectedLabel is null ? WindowPalette.GhostText : WindowPalette.BodyTextColor;
+        var textColor = SelectedLabel is null ? WindowPalette.GhostTextOnLightColor : WindowPalette.BodyTextColor;
         var textPosition = new Vector2(HorizontalTextInset, 0);
         var textSize = ContentSize - new Vector2(HorizontalTextInset * 2 + ArrowWidth + ArrowRightInset, 0);
         if (text.Length > 0)

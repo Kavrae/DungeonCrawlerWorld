@@ -16,6 +16,27 @@ public sealed class ContentLayersTests
     private static readonly Guid SecondId = new("5b0f6f5e-6b8c-4b1e-9a51-000000000002");
     private static readonly Guid ThirdId = new("5b0f6f5e-6b8c-4b1e-9a51-000000000003");
 
+    [TestMethod]
+    public void ALayerReadWhole_KeepsTheBytesItOpenedWith_WhenTheFolderIsRewritten()
+    {
+        var directory = Directory.CreateTempSubdirectory("content-layer-");
+        try
+        {
+            var path = Path.Combine(directory.FullName, FileName);
+            File.WriteAllText(path, "first line\nsecond line\n");
+            var layer = ContentLayer.ReadWhole("Master", ContentLayerKind.Master, directory.FullName);
+
+            File.WriteAllText(path, "a much longer first line that moves everything after it\nsecond line\n");
+
+            Assert.AreEqual("second line", System.Text.Encoding.UTF8.GetString(layer.ReadBytes(FileName, 11, 11)));
+            Assert.AreEqual(directory.FullName, layer.Directory);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
     private sealed record NamedRecord(Guid Id, string Name);
 
     private sealed class NamedRecordCodec : ContentCodec<NamedRecord>
@@ -194,6 +215,47 @@ public sealed class ContentLayersTests
         Read(failures, save);
 
         Assert.AreEqual(FirstId, Assert.ContainsSingle(failures).RecordId);
+    }
+
+    [TestMethod]
+    public void AHoldKey_IsNoEnvelopeKey_SoItsLineFails()
+    {
+        var failures = new List<ContentFailure>();
+        var drafts = Layer("Drafts", ContentLayerKind.Drafts, $"{{\"id\":\"{ContentGuid.Format(FirstId)}\",\"n\":\"First\",\"hold\":true}}");
+
+        Read(failures, drafts);
+
+        Assert.AreEqual(FirstId, Assert.ContainsSingle(failures).RecordId);
+    }
+
+    [TestMethod]
+    public void AReplacementCycle_FailsEachOfItsLines_AndLeavesNoRedirect()
+    {
+        var fourthId = new Guid("5b0f6f5e-6b8c-4b1e-9a51-000000000004");
+        var failures = new List<ContentFailure>();
+        var master = Layer("Master", ContentLayerKind.Master,
+            Disabled(FirstId, replacement: SecondId),
+            Disabled(SecondId, replacement: ThirdId),
+            Disabled(ThirdId, replacement: FirstId),
+            Disabled(fourthId, replacement: FirstId));
+
+        var records = Read(failures, master);
+
+        CollectionAssert.AreEquivalent(new[] { FirstId, SecondId, ThirdId }, failures.Select(failure => failure.RecordId).ToArray());
+        CollectionAssert.AreEquivalent(new[] { 2, 3, 4 }, failures.Select(failure => failure.Line).ToArray());
+        Assert.IsTrue(failures.All(failure => failure.Layer == "Master"));
+        Assert.IsTrue(failures.All(failure => failure.Reason.Contains(ContentGuid.Format(FirstId), StringComparison.Ordinal)));
+        CollectionAssert.AreEquivalent(new[] { fourthId }, records.Redirects.Keys.ToArray());
+    }
+
+    [TestMethod]
+    public void AReplacementChain_ThatEndsAtARecord_IsNoCycle()
+    {
+        var master = Layer("Master", ContentLayerKind.Master, Disabled(FirstId, replacement: SecondId), Disabled(SecondId, replacement: ThirdId), Line(ThirdId, "Third"));
+
+        var records = ReadCleanly(master);
+
+        Assert.HasCount(2, records.Redirects);
     }
 
     [TestMethod]

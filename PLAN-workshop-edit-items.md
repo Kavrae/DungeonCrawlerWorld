@@ -5,7 +5,8 @@ The design confirmed there on 2026-10-16 ("The editor", "Saving: master and draf
 Decisions 8-20) stands and is not reopened. This plan checks it against the code as it is on 2026-11-12, settles what
 it left open, and splits it into phases.
 
-**Status:** written 2026-11-12 from a read of the code. Nothing is built. Decisions 1-11 and 14 were confirmed
+**Status:** complete -- Phases 0-3 built and checked in the Workshop by 2026-11-14. Written 2026-11-12 from a read of
+the code. Decisions 1-11 and 14 were confirmed
 2026-11-12 (3, 4, 6 and 11 with the changes written into them). Decisions 12 and 13 were confirmed the same day as the interim
 answer: terrain and blueprints become content afterwards, as TODO.md entries of their own (see "Code-held references:
 the interim and the end state"). Starts after `PLAN-npc-behavior-composition.md` (see "Order against other plans").
@@ -259,6 +260,14 @@ for testing before the next.
 
 ### Phase 0 -- Format groundwork (no UI)
 
+Built 2026-11-13, awaiting the in-game checks. As built: `ContentField.Default` (with `OptionalText`/`OptionalInteger`
+for "none" and `ContentColors.Field` for the game's white), checked by every `ContentWriter` method and, in Debug, every
+`ContentObject` reader; `ContentTable.HoldKey`, refused by `ContentLayers` outside a Drafts layer; replacement cycles
+refused in the layer merge (`RefuseRedirectCycles`); `ContentTableLines` with `ContentGuid.FileOrder`;
+`MasterContentArgument` in GameShell and `RepositoryPaths.GameLaunchArguments` for Play; `GameContent.WriteMaster` in
+Guid order, and the three master tables re-exported once in that order (a pure reorder; the seed-1 headless fingerprint,
+frames 600-1800, is `6704D5A44661CC6B` before and after, and the same with `--master-content=` on the source tree).
+
 1. `ContentField.Default` on every factory method, set in every codec's schema; the writer's check and the reader's
    Debug check (Decision 7). Optional fields declare "none".
 2. The `hold` envelope key, refused outside a Drafts layer; a replacement cycle is a failure.
@@ -285,6 +294,39 @@ cycle fails each of its lines.
   run-to-run spread (the reader's check is Debug-only).
 
 ### Phase 1 -- Editing in memory (nothing is written)
+
+Built 2026-11-13, awaiting the in-Workshop checks. As built, and where it differs from what follows:
+- **UIEngine.UI.Fields:** `FieldEditorDescription`/`FieldValue`, `FieldRow` (label, control by kind, reset), `FieldSectionHeader`
+  (collapsible heading with buttons), `SearchableChoiceField`, `MultiChoiceField`; all on the Controls tab.
+- **Cadence/Workshop/Editing:** `EditableContentRecord` holds the record as a `System.Text.Json` `JsonObject` (no node type
+  of its own: it is already lossless and ordered), `ContentPath`, `ContentSchemaValidation`, `ContentEditLog`,
+  `ContentFieldValues` (the one map between a content field and a row) and `ContentInspector`, with
+  `IContentInspectorSource` for what a game adds.
+- **Game side (Builders/Editing):** `ContentWorkspace` (session, shared log, undo/redo and where they take the player,
+  reference lookup and aura resolution for the decode), `ContentEditingTable<T>` and `ContentRecordDocument<T>` in place of
+  a `ContentTableDescription<T>`, and `GameInspectorSource`. `GameSession.ContentChecks` is new. The Items tab is the first
+  user; `RecordBrowserTab` gained the inspector column (`HasInspector`).
+- **Shell:** `IWorkshopEditingTab`, field paths on Error List lines (`WorkshopProblem.FieldPath`, carried by `TabNavigator`
+  to `FocusField`), the `*` on an editing tab's tile, and Undo/Redo as the App's commands (Ctrl+Z, Ctrl+Y, no tile).
+- **Found while building:** a flags enum (a targeting shape, "Adjacent, Self") is edited as a multi-choice and checked as
+  the reader reads it. A reference to a record no table holds is a warning, not an error: the Scroll of Torch names a
+  spell no action has, which the codec allows.
+- **Not done here:** the custom editors are previews among the rows (the shape under a targeting spec, the icon above a
+  definition's appearance), and the sprite picker lists names without drawing each; tag descriptions aren't shown in the
+  tag pickers (a dropdown option has no tooltip). A mod's item is shown read-only, with a line saying so.
+- **After the first checks (2026-11-14):** rows are dark with white labels (unset ones grey) and their controls light
+  with dark text (`WindowPalette.EditableControlBackground`, `DimmedLabelTextColor`, `GhostTextOnLightColor`); a
+  display name's trailing "(hint)" goes to the tooltip (`ContentFieldLabels`); `ContentField.IsMultiline` makes the
+  description a multi-line row; a multi-choice list draws checkboxes (`DropdownOption.IsChecked`,
+  `Button.CheckBoxState`); a disabled element takes a press and does nothing, so it never reaches the heading behind it
+  (Element hit-testing, engine-wide); Tab from a control moves to the next one in its window, skipping read-only and
+  disabled ones (`Element.IsTabStop`, engine-wide, only from a control already focused); the inspector keeps its scroll
+  and closed headings through rebuilds and a tab switch (it showed nothing on return before); the browser keeps its
+  search and shows the selected row; a New button makes an item (`ContentEditingTable.CreateNew`, undone by taking it
+  away: a log change's JSON is null where the record doesn't exist); an item's activator is shown before its tags
+  (`IContentInspectorSource.FieldsInDisplayOrder`); a glyph and colour, or a sprite, another action or item also has is
+  a warning at that field (17 shipped items share sprites today); the Error List highlights the row under the pointer,
+  and one click opens the record at its field, a failed check's field read from its message (`ContentProblemLocator`).
 
 1. `UIEngine.UI.Fields` and the missing controls (collapsible section, searchable choice, multi-choice), each added to
    the Controls tab.
@@ -318,6 +360,40 @@ steps on one field are one step; schema validation and the decode agree over mut
 
 ### Phase 2 -- Saving
 
+Built 2026-11-14, awaiting the in-Workshop checks. As built, and where it differs from what follows:
+- **Files:** `ContentTableFiles` (Cadence/Workshop/Editing) is one table's master and drafts paths over `ContentTableLines`;
+  a drafts file left with no record is deleted. There is no `ContentTableDocuments`: the game-side `ContentEditingTable<T>`
+  opens every master line (one the session left out too, previewed as a stand-in until it decodes,
+  `ItemsTab.PlaceholderJsonOf`) and every draft, and a document carries its saved `MasterLine`, `DraftJson` and hold.
+- **Drafts are not a layer of the Workshop's session**: the session is master and mods, and the table opens drafts
+  itself, so a draft that fails isn't also a load problem. (Decision 11's "drafts sit above mods" is unneeded while no
+  other tab reads drafts.)
+- **Two keys (changed 2026-11-14 on testing):** Ctrl+S saves every changed record to Drafts and never touches master;
+  Ctrl+Shift+S publishes (`ContentWorkspace.PublishAll`), routing as written below, so whatever fails is saved as a
+  draft. The trial build is `ContentSession.TrialBuild` (the built-ins over master in memory, failures collected). Both
+  first commit a field's typed text, as Enter would. A record's Publish does the same for it alone (failures to Drafts,
+  not a refusal); Save as Draft saves it alone to Drafts. A master record deleted leaves master only on a publish.
+  **Held is gone** (Decision 5 dropped): with Ctrl+S never publishing, it only kept a record out of a publish. The
+  engine has no `"hold"` key either: a line holding one fails as any undeclared key does.
+- **Not filled in yet:** a required value an edit or undo newly leaves missing (a list element just added, a type just
+  picked) isn't shown as a problem -- no field error, no Error List line, no "doesn't decode" strip -- until the record
+  is saved or it is filled in (`ContentRecordDocument.NotFilledInYet`, from `ContentFieldProblem.IsMissing`). It still
+  stops the record: a save sends it to Drafts, and then it shows.
+- **Commands** on a record are buttons over the inspector and the same options on its row's right-click menu
+  (`RecordBrowserTab.CommandsFor`, `RecordCommand`). Rows read `*`, `[Draft]`, `[Held]` and `(!)`. Delete is a step in the
+  log (undone by bringing the record back); a save takes the line out of master and Drafts.
+- **Rebuild:** `ContentWorkspace` holds the session, `References` and `Origins`, rebuilds on a worker after a save
+  (`ContentSaving.BuildSession`) and swaps in `Update`, called by the shell each frame through `IWorkshopEditing`; the tabs
+  read the workspace and reopen on `SessionReplaced` (`RecordBrowserTab.Reopen`, selection kept by id); the session-bound
+  windows' factories are swapped with `ElementPoolService.ReplaceFactory`.
+- **Dependents** (`ContentWorkspace.DependentsOf`) join the documents' reference walk (`ContentReferenceWalk`) with the
+  catalog index, which now has blueprints' `UsesItems`/`UsesActions` ("builds with it, in code") -- Phase 3 step 3, pulled
+  forward so Delete refuses what code names.
+- **Quit:** FNA can be held open -- an SDL event filter keeps the quit from FNA (`WorkshopHost`) -- so it is Decision 14's
+  confirmed prompt (Save, Discard, Cancel; Save is to Drafts), no fallback. Play and Build and Play ask when anything is
+  unpublished (Publish and Play, Play Anyway, Cancel). Save and Publish are shell commands with tiles when the host has
+  `WorkshopTabSet.Editing`.
+
 1. `ContentTableDocuments` over master and drafts; Ctrl+S and its routing; the trial build of master alone.
 2. Publish, Hold as draft, New, Duplicate, Delete; row and tab markers.
 3. The session rebuild on a worker, `ReplaceFactory<T>`, tabs and previews reading the workspace (Decision 11).
@@ -350,10 +426,47 @@ a record whose only problem is one field-level error goes to Drafts; a new recor
 
 ### Phase 3 -- Disabling, and the template check
 
+Built and checked 2026-11-14. As built, and where it differs from what follows:
+- **`off` and `rep` live in the record's JSON**, which the inspector already left out of its fields, so Disable,
+  Enable and choosing a replacement are ordinary undo steps, and Cascade is one step over several records
+  (`ContentWorkspace.ApplyStep`). Master's disabled lines are opened as documents (they decode: the envelope keys are
+  allowed), published as `ContentTable.WriteDisabled`. Rows read `[Disabled]` (greyed, `-> replacement`); there is no
+  strikethrough in the UI.
+- **The Disabled section** heads the inspector of a disabled record (`ContentInspector.BuildDisabledSection`), its
+  Replacement a searchable choice over the table's published, enabled records
+  (`IContentInspectorSource.ReplacementChoices`).
+- **The dialog** (`ContentEditingTab.Disable`) lists what names the record, what Cascade would also disable, what it
+  can't (code, or a table no tab edits -- which disables Cascade with that reason) and the drafts it leaves alone, over
+  the replacement picker. With nothing naming the record it disables at once.
+- **Field-level problems across records** (`RefreshCrossRecordProblems`): a replacement that isn't a published record of
+  the table, or whose chain comes back round, is an error at `rep`; an enabled record naming one disabled with nothing at
+  the end of its replacements is an error at that reference. The layer merge's cycle failure was Phase 0's.
+- **Step 3** was done in Phase 2.
+- **Template check:** the generic tab is `ContentEditingTab<T, TPreview>`; `ItemsTab` is what an item adds to it. An
+  Auras editing tab on it was one file of about forty lines plus the table's construction, and a test drove its table
+  through editing, a one-line publish and a disable plan (which found the code-held lava terrain). Neither was kept,
+  as planned. IMPLEMENTATION-NOTES "Workshop content editing" has the list for adding one.
+- **After the first checks (2026-11-14):** the shell's commands read Save All and Publish All, laid out Save All,
+  Publish All, Debug, Play, Build and Play; a browser's selected row is Windows 11's light blue
+  (`WindowPalette.ListSelectionColor`) and a disabled row's text `DimmedRowTextColor`; the disable dialog lists each
+  dependent once, grouped under "Kind (how it names it)"; Play asks only when a publish would change master -- a draft
+  with errors stays a draft whatever is published, so it no longer counts (`ContentRecordDocument.IsWaitingToPublish`).
+- **Related is gone (Decision 1's open question, settled 2026-11-14):** the bottom panel's Dependents became Used By
+  and gained Uses beside it (what the selected record names: for an editing tab, its JSON as edited, then the index),
+  so every tab's preview takes the column's whole height. Play and Build and Play hide while a game runs.
+- **Deletions are saved too (2026-11-14):** Save All writes a deleted published record into Drafts as a removal line
+  (its id and `"rm": true`), so the deletion survives quitting with Save and reopening; Publish All takes it out of
+  master and the line with it; undone and saved, the line goes. A draft identical to master's record is no draft
+  (removed rather than written), so Save as Draft is offered only for a record with unsaved changes.
+- **`ContentManifestExporter` retired (2026-11-14)**, as Bookkeeping planned: the Workshop writes master.
+  `GameContent.WriteMaster` stays, the canonical whole-table writer (a test uses it).
+- **Wrap-up:** the Controls tab stays (it is where `UIEngine.UI.Fields` is tried by hand); "Workshop: edit Items" is
+  gone from TODO.md and the Actions, Auras, map areas and sprites entries point at the notes.
+
 1. Disable/Enable, the Disabled and Replacement section, the dialog with its replacement picker, Cascade as one step,
    code-held dependents (Decision 12).
 2. Cycle refusal at the field; the error for published content naming a disabled record with no replacement.
-3. `ContentReferenceIndex` gains blueprint `UsesActions`/`UsesItems`.
+3. `ContentReferenceIndex` gains blueprint `UsesActions`/`UsesItems`. (Done in Phase 2.)
 4. Wrap-up: IMPLEMENTATION-NOTES "Workshop content editing" with an "adding an editing tab" list; the Controls tab kept
    or removed; "Workshop: edit Actions/Auras/map areas/sprites" in TODO.md re-pointed at what was built.
 

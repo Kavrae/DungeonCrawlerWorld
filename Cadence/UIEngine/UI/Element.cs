@@ -234,6 +234,57 @@ public class Element(ElementServices services)
     /// <remarks>Set by UiInputController for the hovered element and every ancestor; not refreshed during a window move, resize or scrollbar drag. Cleared when the element is built from its pool.</remarks>
     public bool IsPointerOver { get; internal set; }
 
+    /// <summary>Where the pointer was when UiInputController last found this element under it; meaningful only while IsPointerOver.</summary>
+    public Point PointerOverPosition { get; internal set; }
+
+    /// <summary>Whether Tab stops here: a control the player edits or chooses with, enabled and not read-only. None by default.</summary>
+    /// <remarks>Tab from one tab stop moves focus to the next in the same root window, in tree order, skipping labels, disabled and read-only controls and anything hidden.</remarks>
+    public virtual bool IsTabStop => false;
+
+    private static readonly BorderThickness FocusIndicatorThickness = BorderThickness.Uniform(new Vector2(2, 2));
+
+    /// <summary>The focused control's mark: a gold border (WindowPalette.FocusAccentColor) around screenRectangle -- what a TextBox, DropdownField, MultiChoiceField and Toggle draw while focused.</summary>
+    protected void DrawFocusIndicator(Rectangle screenRectangle)
+    {
+        var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(screenRectangle, FocusIndicatorThickness);
+        BorderRenderer.Draw(Render.Batch, BorderStyle.Flat, WindowPalette.FocusAccentColor, top, bottom, left, right);
+    }
+
+    /// <summary>Scrolls every scrolling ancestor, as little as it takes on each axis, so this element is in view.</summary>
+    /// <remarks>Innermost first; a scroll arranges at once, so each outer ancestor reads where the inner scroll left this element.</remarks>
+    public void BringIntoView()
+    {
+        for (var ancestor = _parent; ancestor is not null; ancestor = ancestor._parent)
+        {
+            if (ancestor.CanUserScrollVertical)
+            {
+                var top = AbsolutePosition.Y - ancestor.ContentAbsolutePosition.Y + ancestor.ScrollOffset.Y;
+                ancestor.ScrollIntoView(top, top + CurrentSize.Y);
+            }
+
+            if (ancestor.CanUserScrollHorizontal)
+            {
+                var left = AbsolutePosition.X - ancestor.ContentAbsolutePosition.X + ancestor.ScrollOffset.X;
+                ancestor.ScrollIntoViewHorizontally(left, left + CurrentSize.X);
+            }
+        }
+    }
+
+    /// <summary>Scrolls horizontally as little as it takes so the content between left and right is in view, left winning when it can't all fit.</summary>
+    public void ScrollIntoViewHorizontally(float left, float right)
+    {
+        if (left < _scrollOffset.X)
+        {
+            ScrollTo(new Vector2(left, _scrollOffset.Y));
+            return;
+        }
+
+        if (right > _scrollOffset.X + _contentState.Size.X)
+        {
+            ScrollTo(new Vector2(right - _contentState.Size.X, _scrollOffset.Y));
+        }
+    }
+
     private static int _treeVersion;
 
     /// <summary>Changes whenever any element gains or loses a child or changes visibility -- UiInputController hit-tests again when it does, so content rebuilt under a still mouse is hovered the same frame it would be after a move.</summary>
@@ -241,7 +292,8 @@ public class Element(ElementServices services)
 
     private static void MarkTreeChanged() => Interlocked.Increment(ref _treeVersion);
 
-    /// <summary>Whether this element can be found by hit-testing (FindTopmostHit/TryHitTestInteraction) at all -- defaults to just IsVisible; Button overrides this to also require Enabled, so a disabled button is never hovered, pressed, or clicked, rather than every caller having to remember to check Enabled itself.</summary>
+    /// <summary>Whether this element can be found by hit-testing (FindTopmostHit/TryHitTestInteraction) as itself -- defaults to just IsVisible; Button, Toggle and TextBox override this to also require Enabled, so a disabled one is never hovered or pressed as itself.</summary>
+    /// <remarks>A visible, disabled element is still what a press on it lands on: it takes the press and does nothing with it, so the press never reaches what is under it (a heading behind a disabled button).</remarks>
     protected virtual bool IsHitTestable => _isVisible;
 
     /// <summary>
@@ -1007,7 +1059,8 @@ public class Element(ElementServices services)
     /// handled it -- UiInputController offers the tap to the element under the cursor, then to each
     /// ancestor until one does.
     /// </summary>
-    internal bool HandleRightClickTap(Point position) => OnRightClickTapAction(position);
+    /// <remarks>A disabled element takes the tap and does nothing with it, as it does a click, so neither it nor an ancestor opens a menu.</remarks>
+    internal bool HandleRightClickTap(Point position) => !Enabled || OnRightClickTapAction(position);
 
     /// <summary>
     /// Settable per-instance right-click handler -- lets any Element opt into a right-click
@@ -1116,10 +1169,16 @@ public class Element(ElementServices services)
     /// <remarks>
     /// The header always handles its own clicks. A content click is handled when OnContentClickAction says so or anything
     /// listens to Clicked; otherwise UiInputController offers it to the parent, so a label inside a clickable row clicks
-    /// the row. A click outside both is never handled.
+    /// the row. A click outside both is never handled. A disabled element handles every click by doing nothing, so its
+    /// parent never gets it.
     /// </remarks>
     public bool HandleClick(Point mousePosition)
     {
+        if (!Enabled)
+        {
+            return true;
+        }
+
         // _header.Rectangle is sized/positioned from _header.Size/_header.AbsolutePosition
         // unconditionally (RecalculateRectangles doesn't know about _header.ShowHeader), so
         // without this guard a header-less element's upper region is a dead zone: clicks there
@@ -1249,9 +1308,14 @@ public class Element(ElementServices services)
         // interaction target -- matching WPF's Visibility.Hidden/Collapsed, both of which stop
         // hit-testing, unlike this codebase's previous behavior where hiding something only
         // stopped it from being drawn, not from being clicked/dragged/dropped onto.
-        if (!IsHitTestable || !_geometry.Rectangle.Contains(position))
+        if (!_geometry.Rectangle.Contains(position))
         {
             return ElementInteraction.NotHit;
+        }
+
+        if (!IsHitTestable)
+        {
+            return _isVisible && !Enabled ? ElementInteraction.Click(this) : ElementInteraction.NotHit;
         }
 
         var button = FindHeaderButtonAt(position);

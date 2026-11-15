@@ -1,42 +1,57 @@
+using System.Text.Json.Nodes;
 using Builders.Browsing;
+using Builders.Editing;
 using Builders.References;
-using Game.Content;
-using Engine.Tags;
+using Engine.Content;
+using Game.Modules.Actions;
 using Game.Modules.Inventory;
 using Presentation.UI.Inventory;
-using Workshop;
+using UIEngine.UI;
+using Workshop.Editing;
 
 namespace Builders.Items;
 
-/// <summary>The Items tab: every item in the session's catalog, grouped by how it's used, the selected one in Item Details, and what it casts, grants or is used by -- read-only.</summary>
+/// <summary>The Items tab: every item the Workshop holds, grouped by how it's used, edited in the inspector and shown in Item Details as it reads now (ContentEditingTab).</summary>
 /// <remarks>Item Details shows a definition with no stack behind it (ItemDetailsWindow.NoStackInstanceId), so it has no blocker and no Compare.</remarks>
-public sealed class ItemsTab(ItemCatalog itemCatalog, ContentReferenceIndex references, GameplayTagRegistry gameplayTags, ContentOrigins origins, int previewEntityId) : RecordBrowserTab<ItemDefinition, ItemDetailsWindow>
+public sealed class ItemsTab(ContentEditingTable<ItemDefinition> table, ContentEditing editing, IContentInspectorSource inspectorSource, ElementPoolService elementPool)
+    : ContentEditingTab<ItemDefinition, ItemDetailsWindow>(table, editing, inspectorSource, elementPool)
 {
     public const string TabTitle = "Items";
 
-    public override string Title => TabTitle;
+    private const string NewItemGlyph = "?";
+    private const string ItemNameKey = ActivatableContent.NameKey;
+    private const string GlyphKey = ActivatableContent.GlyphKey;
 
-    protected override string BrowserTitle => $"Items ({itemCatalog.Count})";
+    public override string Title => TabTitle;
 
     protected override string SearchGhostText => "Search items";
 
     protected override string PreviewTitle => "Item Details";
 
-    protected override IEnumerable<ItemDefinition> AllRecords => itemCatalog.Definitions;
+    protected override string SingularName => "item";
 
-    protected override Guid IdOf(ItemDefinition item) => item.Id;
+    protected override string NameKey => ItemNameKey;
 
-    protected override IReadOnlyList<RecordBrowserSection<ItemDefinition>> BuildSections(string search) =>
-        ItemBrowserSections.Build(itemCatalog.Definitions, search, gameplayTags);
+    protected override JsonObject NewRecordFields(string name) => new() { [ItemNameKey] = name, [GlyphKey] = NewItemGlyph };
 
-    protected override RecordRowAppearance AppearanceOf(ItemDefinition item) => new(origins.Label(GameContent.ItemsTable, item.Id, item.Name), item.SpriteName, item.Glyph, item.GlyphColor);
+    protected override IReadOnlyList<RecordBrowserSection<ItemDefinition>> SectionsOf(IEnumerable<ItemDefinition> definitions, string search) =>
+        ItemBrowserSections.Build(definitions, search, Workspace.Session.Catalogs.GameplayTags);
 
-    protected override void ShowInPreview(ItemDetailsWindow preview, ItemDefinition item, float contentWidth) =>
-        preview.Configure(previewEntityId, ItemDetailsWindow.NoStackInstanceId, item, contentWidth);
+    protected override RecordRowAppearance LookOf(ItemDefinition item) => new(item.Name, item.SpriteName, item.Glyph, item.GlyphColor);
 
-    protected override IReadOnlyList<RecordLinkSection> LinksOf(ItemDefinition item) =>
-        ContentLinks.For(references, ContentRecordKind.Item, item.Id);
+    protected override void ShowDefinition(ItemDetailsWindow preview, ItemDefinition item, float contentWidth) =>
+        preview.Configure(Workspace.Session.World.PlayerEntityId, ItemDetailsWindow.NoStackInstanceId, item, contentWidth);
 
-    protected override IReadOnlyList<WorkshopDependent> DependentsOf(ItemDefinition item) =>
-        ContentLinks.DependentsOf(references, ContentRecordKind.Item, item.Id);
+    /// <summary>Item Details' own comparison colouring: each line better or worse than the other versions'.</summary>
+    protected override void ShowComparedDefinition(ItemDetailsWindow preview, ItemDefinition item, float contentWidth, IReadOnlyList<ItemDefinition> comparedAgainst) =>
+        preview.Configure(Workspace.Session.World.PlayerEntityId, ItemDetailsWindow.NoStackInstanceId, item, contentWidth, comparedAgainst);
+
+    /// <summary>A record standing in for one that doesn't decode: its own name and glyph when it has them as text.</summary>
+    public static string PlaceholderJsonOf(EditableContentRecord record) =>
+        new JsonObject
+        {
+            [ContentTable.IdKey] = ContentGuid.Format(record.Id),
+            [ItemNameKey] = record.Root[ItemNameKey] is JsonValue name && name.TryGetValue<string>(out var nameText) && nameText.Length > 0 ? nameText : $"Item {ContentGuid.Format(record.Id)}",
+            [GlyphKey] = record.Root[GlyphKey] is JsonValue glyph && glyph.TryGetValue<string>(out var glyphText) && glyphText.Length > 0 ? glyphText : NewItemGlyph,
+        }.ToJsonString();
 }

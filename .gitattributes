@@ -3,3 +3,6 @@
 *.fx -text
 *.fxb binary
 *.fxb.sha256 -text
+
+# Content tables are edited a line at a time by the Workshop; keep them LF so every line it writes matches its neighbours.
+*.jsonl text eol=lf

@@ -74,10 +74,22 @@ public sealed class Button(ElementServices services, SpriteSheetService? spriteS
     /// <summary>Draws an accent at the left edge -- a Dropdown row holding a DropdownField's current value.</summary>
     public bool IsMarked { get; set; }
 
+    /// <summary>Draws a checkbox, checked or not, left of a left-aligned label -- a row of a list where several can be chosen; null (the default) for none.</summary>
+    public bool? CheckBoxState { get; set; }
+
+    /// <summary>The checkbox square's side.</summary>
+    public const float CheckBoxSide = 12f;
+
+    /// <summary>How much of a left-aligned label's width a checkbox takes: its side and the gap after it.</summary>
+    public const float CheckBoxWidth = CheckBoxSide + 6f;
+
+    private const float CheckMarkInset = 2f;
+    private const float CheckMarkThickness = 2f;
+
     /// <summary>True while the mouse is held down over this button -- DrawContent swaps Outset/Inset while true, giving the pressed-in look. Set by UiInputController on press/release (see PressedButton).</summary>
     public bool IsPressed { get; private set; }
 
-    /// <summary>A disabled button is excluded from hit-testing entirely -- never hovered, pressed, or clicked -- rather than every caller having to remember to check Enabled itself.</summary>
+    /// <summary>A disabled button is never hovered, pressed or clicked as a button, rather than every caller having to remember to check Enabled itself; a press on it is taken and does nothing (Element.IsHitTestable).</summary>
     protected override bool IsHitTestable => base.IsHitTestable && Enabled;
 
     private BorderStyle _restingBorderStyle;
@@ -115,6 +127,7 @@ public sealed class Button(ElementServices services, SpriteSheetService? spriteS
         IsHovered = false;
         IsHighlighted = false;
         IsMarked = false;
+        CheckBoxState = null;
         IsPressed = false;
         LeftAlign = false;
         _sprite = spriteSheetService?.Sprites.FirstOrNull(options.Button?.SpriteName);
@@ -235,6 +248,12 @@ public sealed class Button(ElementServices services, SpriteSheetService? spriteS
             // column sits flush against the row's edges.
             var textFootprintPosition = new Vector2(HorizontalTextInset, 0);
             var textFootprintSize = ContentSize - new Vector2(HorizontalTextInset * 2, 0);
+            if (CheckBoxState is { } isChecked)
+            {
+                DrawCheckBox(spriteBatch, isChecked);
+                textFootprintPosition.X += CheckBoxWidth;
+                textFootprintSize.X -= CheckBoxWidth;
+            }
 
             if (!string.IsNullOrEmpty(LeftText))
             {
@@ -248,6 +267,21 @@ public sealed class Button(ElementServices services, SpriteSheetService? spriteS
         }
 
         DrawHotkeyLabel(spriteBatch);
+    }
+
+    /// <summary>The square of a checkbox row, drawn left of the text: white, with a flat border and, when checked, a cross.</summary>
+    private void DrawCheckBox(SpriteEffectBatch spriteBatch, bool isChecked)
+    {
+        var side = (int)CheckBoxSide;
+        var box = new Rectangle((int)HorizontalTextInset, (int)((ContentSize.Y - CheckBoxSide) / 2f), side, side);
+        var opacity = Enabled ? 1f : 0.5f;
+        spriteBatch.FillRectangle(box, Color.White * opacity);
+        var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(box, BorderThickness.Uniform(Vector2.One));
+        BorderRenderer.Draw(spriteBatch, BorderStyle.Flat, WindowPalette.BorderColor * opacity, top, bottom, left, right);
+        if (isChecked)
+        {
+            CrossRenderer.Draw(spriteBatch, new Vector2(box.X, box.Y), new Vector2(box.Width, box.Height), CheckMarkInset, CheckMarkThickness, WindowPalette.BodyTextColor * opacity);
+        }
     }
 
     /// <summary>Top-left corner, over whatever else DrawContent just drew -- see HotkeyLabel's own doc comment. Anchored to AbsolutePosition (the button's whole rectangle, outside the border inset), not ContentAbsolutePosition, with the same padding and the same Enabled-driven alpha every other part of this button's draw already uses.</summary>

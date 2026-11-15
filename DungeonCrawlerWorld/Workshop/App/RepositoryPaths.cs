@@ -34,6 +34,12 @@ internal static class RepositoryPaths
             ? Path.Combine(root, "DungeonCrawlerWorld", "Content", "Definitions", "Master")
             : Path.Combine(AppContext.BaseDirectory, "Definitions", "Master");
 
+    /// <summary>The IDE's drafts beside the master it edits, in the source tree: never copied to the game.</summary>
+    public static string DraftsContentDirectory() => Path.Combine(Path.GetDirectoryName(MasterContentDirectory())!, "Drafts");
+
+    /// <summary>What Play starts the game with: the master the IDE edits, so a record it saves is in the next game played, with no build between.</summary>
+    public static string GameLaunchArguments() => CommandLineArguments.Join([$"--master-content={MasterContentDirectory()}"]);
+
     /// <summary>The repository's Log folder, beside the solution; the IDE's own folder when it isn't running from a source tree.</summary>
     public static string LogDirectory() => Path.Combine(RepositoryRoot() ?? AppContext.BaseDirectory, "Log");
 

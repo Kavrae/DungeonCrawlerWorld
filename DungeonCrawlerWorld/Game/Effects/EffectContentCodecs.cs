@@ -33,7 +33,7 @@ internal static class EffectContentCodecs
         [
             ContentField.Enum<BodyPartTargetingKind>("k", "Kind"),
             ContentField.Enum<BodyPartType>("pt", "Part type"),
-            ContentField.Enum<BodyPartFallback>("fb", "Fallback"),
+            ContentField.Enum("fb", "Fallback", BodyPartFallback.Random),
         ]);
 
         public override void WriteProperties(ContentWriter writer, BodyPartTargeting value)

@@ -1,3 +1,4 @@
+using Builders.Editing;
 using Builders.MapAreas;
 using Engine.Content;
 using Engine.Math;
@@ -75,11 +76,42 @@ public static class ContentSession
         foreach (var failure in gameSession.ContentFailures)
         {
             var problem = new WorkshopProblem(WorkshopProblemSeverity.Error, failure.Reason, failure.Location);
-            problems.Add(IsAreaFile(failure.File) ? problem with { TabTitle = MapTab.TabTitle, RecordId = failure.RecordId } : problem);
+            problems.Add(TabTitleOf(failure.File) is { } tabTitle ? problem with { TabTitle = tabTitle, RecordId = failure.RecordId } : problem);
         }
 
         return problems;
     }
+
+    /// <summary>Every file under masterDirectory, by its path inside it ("Items.jsonl", "Areas/start.json"): master as it is on disk now.</summary>
+    public static IReadOnlyDictionary<string, string> ReadMasterFiles(string masterDirectory)
+    {
+        var textByPath = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var path in Directory.GetFiles(masterDirectory, "*", SearchOption.AllDirectories))
+        {
+            textByPath[Path.GetRelativePath(masterDirectory, path).Replace('\\', '/')] = File.ReadAllText(path, System.Text.Encoding.UTF8);
+        }
+
+        return textByPath;
+    }
+
+    /// <summary>A trial build of the built-ins alone over master as files holds it (every master file, by path): what master would load as, failures collected, never simulated.</summary>
+    public static ContentTrialOutcome TrialBuild(IReadOnlyDictionary<string, string> files, IReadOnlyList<ISettingsSource> settingsSources)
+    {
+        var layers = new ContentLayers([ContentLayer.FromText(GameContent.MasterLayerName, ContentLayerKind.Master, files)]);
+        try
+        {
+            var build = GameBuildPass.BuildModules(GameBootstrapper.BuiltInModules(), [], GameBuildPass.CreatePlaceholderMap(), layers, sessionSeed: 0, settingsSources, InitialEntityCapacity, InitialComponentCapacity, purpose: Engine.Bootstrap.EcsBuildPurpose.Trial, collectsContentFailures: true);
+            return new ContentTrialOutcome(build.Context.ContentFailures, null);
+        }
+        catch (Exception exception)
+        {
+            return new ContentTrialOutcome([], FirstLineOf(exception.Message));
+        }
+    }
+
+    /// <summary>The tab that shows records of file, for a failure to open them: the Map tab for an area, palette or placement, the Items tab for an item.</summary>
+    private static string? TabTitleOf(string file) =>
+        IsAreaFile(file) ? MapTab.TabTitle : file == GameContent.ItemsFileName ? Builders.Items.ItemsTab.TabTitle : null;
 
     private static bool IsAreaFile(string file) =>
         file.StartsWith($"{GameContent.AreasDirectoryName}/", StringComparison.Ordinal)

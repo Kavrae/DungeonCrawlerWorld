@@ -8,7 +8,8 @@ namespace Engine.Content;
 /// <summary>Writes content values as JSON through their registered codecs: keyed fields, defaults omitted, polymorphic values with their discriminator first.</summary>
 /// <remarks>
 /// A codec's WriteProperties calls the keyed methods here; every key must be declared by the schema of the codec whose
-/// object is being written, or the write throws -- a codec can't write a field it doesn't describe. The output is
+/// object is being written, or the write throws -- a codec can't write a field it doesn't describe -- and the default it
+/// passes must be the field's declared ContentField.Default (none for an optional, object or list method). The output is
 /// canonical for a given value: keys in the order the codec writes them, floats in their shortest round-trip form, a
 /// tag set's names sorted ordinally (a set's own order follows tag ids, which vary between runs), Guids as 22-character
 /// base64url.
@@ -49,7 +50,12 @@ public sealed class ContentWriter
 
     public void String(string key, string value, string defaultValue = "")
     {
-        CheckKey(key);
+        var field = FieldOf(key);
+        if (field.Default is not string declared || declared != defaultValue)
+        {
+            throw CurrentSchema.DefaultMismatch(field, defaultValue);
+        }
+
         if (value != defaultValue)
         {
             _json.WriteString(key, value);
@@ -59,7 +65,7 @@ public sealed class ContentWriter
     /// <summary>Omitted when value is null.</summary>
     public void OptionalString(string key, string? value)
     {
-        CheckKey(key);
+        CheckNoDefault(key);
         if (value is not null)
         {
             _json.WriteString(key, value);
@@ -68,7 +74,12 @@ public sealed class ContentWriter
 
     public void Integer(string key, long value, long defaultValue = 0)
     {
-        CheckKey(key);
+        var field = FieldOf(key);
+        if (field.Default is not long declared || declared != defaultValue)
+        {
+            throw CurrentSchema.DefaultMismatch(field, defaultValue);
+        }
+
         if (value != defaultValue)
         {
             _json.WriteNumber(key, value);
@@ -78,7 +89,7 @@ public sealed class ContentWriter
     /// <summary>Omitted when value is null; any value, zero included, is written.</summary>
     public void OptionalInteger(string key, long? value)
     {
-        CheckKey(key);
+        CheckNoDefault(key);
         if (value is { } present)
         {
             _json.WriteNumber(key, present);
@@ -87,7 +98,12 @@ public sealed class ContentWriter
 
     public void UnsignedInteger(string key, uint value, uint defaultValue = 0)
     {
-        CheckKey(key);
+        var field = FieldOf(key);
+        if (field.Default is not long declared || declared != defaultValue)
+        {
+            throw CurrentSchema.DefaultMismatch(field, defaultValue);
+        }
+
         if (value != defaultValue)
         {
             _json.WriteNumber(key, value);
@@ -96,7 +112,12 @@ public sealed class ContentWriter
 
     public void Number(string key, float value, float defaultValue = 0f)
     {
-        CheckKey(key);
+        var field = FieldOf(key);
+        if (field.Default is not float declared || declared != defaultValue)
+        {
+            throw CurrentSchema.DefaultMismatch(field, defaultValue);
+        }
+
         if (value != defaultValue)
         {
             _json.WriteNumber(key, value);
@@ -105,19 +126,29 @@ public sealed class ContentWriter
 
     public void Boolean(string key, bool value, bool defaultValue = false)
     {
-        CheckKey(key);
+        var field = FieldOf(key);
+        if (field.Default is not bool declared || declared != defaultValue)
+        {
+            throw CurrentSchema.DefaultMismatch(field, defaultValue);
+        }
+
         if (value != defaultValue)
         {
             _json.WriteBoolean(key, value);
         }
     }
 
-    /// <summary>By name, so reordering an enum never changes what a file means.</summary>
+    /// <summary>By name, so reordering an enum never changes what a file means. Left out when it is the default, unless the field is required: a required enum has no default worth meaning, so it is always written.</summary>
     public void Enum<TEnum>(string key, TEnum value, TEnum defaultValue = default)
         where TEnum : struct, System.Enum
     {
-        CheckKey(key);
-        if (!EqualityComparer<TEnum>.Default.Equals(value, defaultValue))
+        var field = FieldOf(key);
+        if (field.Default is not TEnum declared || !EqualityComparer<TEnum>.Default.Equals(declared, defaultValue))
+        {
+            throw CurrentSchema.DefaultMismatch(field, defaultValue);
+        }
+
+        if (field.IsRequired || !EqualityComparer<TEnum>.Default.Equals(value, defaultValue))
         {
             _json.WriteString(key, value.ToString());
         }
@@ -126,14 +157,14 @@ public sealed class ContentWriter
     /// <summary>Always written: a Guid field is an identity or a reference, never optional by default.</summary>
     public void Guid(string key, Guid value)
     {
-        CheckKey(key);
+        CheckNoDefault(key);
         _json.WriteString(key, ContentGuid.Format(value));
     }
 
     /// <summary>Omitted when value is null.</summary>
     public void OptionalGuid(string key, Guid? value)
     {
-        CheckKey(key);
+        CheckNoDefault(key);
         if (value is { } present)
         {
             _json.WriteString(key, ContentGuid.Format(present));
@@ -143,7 +174,7 @@ public sealed class ContentWriter
     /// <summary>Omitted when tag is None.</summary>
     public void Tag(string key, GameplayTag tag)
     {
-        CheckKey(key);
+        CheckNoDefault(key);
         if (!tag.IsNone)
         {
             _json.WriteString(key, tag.Name);
@@ -153,7 +184,7 @@ public sealed class ContentWriter
     /// <summary>The tags' names, sorted; omitted when the set is empty.</summary>
     public void Tags(string key, GameplayTagSet tags)
     {
-        CheckKey(key);
+        CheckNoDefault(key);
         if (tags.IsEmpty)
         {
             return;
@@ -179,7 +210,7 @@ public sealed class ContentWriter
     public void Object<T>(string key, T? value)
         where T : class
     {
-        CheckKey(key);
+        CheckNoDefault(key);
         if (value is null)
         {
             return;
@@ -193,7 +224,7 @@ public sealed class ContentWriter
     public void ValueObject<T>(string key, T value)
         where T : struct
     {
-        CheckKey(key);
+        CheckNoDefault(key);
         _json.WritePropertyName(key);
         WriteObject(_types.GetValueCodec(typeof(T)), value, discriminator: null, envelope: null);
     }
@@ -202,7 +233,7 @@ public sealed class ContentWriter
     public void Polymorphic<TBase>(string key, TBase? value)
         where TBase : class
     {
-        CheckKey(key);
+        CheckNoDefault(key);
         if (value is null)
         {
             return;
@@ -216,7 +247,7 @@ public sealed class ContentWriter
     public void List<T>(string key, IReadOnlyList<T> values)
         where T : notnull
     {
-        CheckKey(key);
+        CheckNoDefault(key);
         if (values.Count == 0)
         {
             return;
@@ -243,7 +274,7 @@ public sealed class ContentWriter
     /// <summary>A list of Guids, each base64url; omitted when empty.</summary>
     public void GuidList(string key, IReadOnlyList<Guid> values)
     {
-        CheckKey(key);
+        CheckNoDefault(key);
         if (values.Count == 0)
         {
             return;
@@ -261,7 +292,7 @@ public sealed class ContentWriter
     /// <summary>A list of strings, in order; omitted when empty.</summary>
     public void StringList(string key, IReadOnlyList<string> values)
     {
-        CheckKey(key);
+        CheckNoDefault(key);
         if (values.Count == 0)
         {
             return;
@@ -300,12 +331,18 @@ public sealed class ContentWriter
         _json.WriteEndObject();
     }
 
-    private void CheckKey(string key)
+    private ContentSchema CurrentSchema => _schemas.Peek();
+
+    /// <summary>The field key names in the schema of the object being written; throws for a key the schema doesn't declare.</summary>
+    private ContentField FieldOf(string key) => CurrentSchema.FieldOf(key);
+
+    /// <summary>Checks key is declared with no default value: a field whose omission means nothing at all.</summary>
+    private void CheckNoDefault(string key)
     {
-        var schema = _schemas.Peek();
-        if (!schema.HasKey(key))
+        var field = FieldOf(key);
+        if (field.Default is not null)
         {
-            throw new InvalidOperationException($"The {schema.TypeName} codec writes '{key}', which its schema doesn't declare.");
+            throw CurrentSchema.DefaultMismatch(field, null);
         }
     }
 }

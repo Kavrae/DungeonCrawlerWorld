@@ -26,38 +26,26 @@ public sealed class ContentLinksTests
     }
 
     [TestMethod]
-    public void AScroll_LinksToItsSpellInTheActionsTab()
+    public void AScrollsUses_ListItsSpell_OpeningItInTheActionsTab()
     {
-        var scroll = Session.Value.Catalogs.ItemCatalog.Definitions.First(item => item.Activator is ScrollActivator);
+        var scroll = Session.Value.Catalogs.ItemCatalog.Definitions.First(item => item.Activator is ScrollActivator && Session.Value.Catalogs.ActionCatalog.TryGet(((ScrollActivator)item.Activator!).SpellId, out _));
         var spell = Session.Value.Catalogs.ActionCatalog.Definitions.Single(action => action.Id == ((ScrollActivator)scroll.Activator!).SpellId);
 
-        var uses = ContentLinks.For(Index.Value, ContentRecordKind.Item, scroll.Id).Single(section => section.Heading == ContentLinks.UsesHeading);
+        var use = ContentLinks.UsesOf(Index.Value, ContentRecordKind.Item, scroll.Id).Single(use => use.RecordId == spell.Id);
 
-        var link = uses.Links.Single(link => link.TargetId == spell.Id);
-        Assert.AreEqual(ActionsTab.TabTitle, link.TargetTabTitle);
-        Assert.AreEqual($"Action: {spell.Name} (casts)", link.Text);
+        Assert.AreEqual(spell.Name, use.Name);
+        Assert.AreEqual(nameof(ContentRecordKind.Action), use.Kind);
+        Assert.AreEqual("casts", use.Relationship);
+        Assert.AreEqual(ActionsTab.TabTitle, use.TabTitle);
     }
 
     [TestMethod]
-    public void TheSpell_LinksBackToTheScroll_UnderUsedBy()
+    public void TheSpellsUsedBy_ListTheScrollThatCastsIt_OpeningItInTheItemsTab()
     {
         var scroll = Session.Value.Catalogs.ItemCatalog.Definitions.First(item => item.Activator is ScrollActivator);
         var spellId = ((ScrollActivator)scroll.Activator!).SpellId;
 
-        var usedBy = ContentLinks.For(Index.Value, ContentRecordKind.Action, spellId).Single(section => section.Heading == ContentLinks.UsedByHeading);
-
-        var link = usedBy.Links.Single(link => link.TargetId == scroll.Id);
-        Assert.AreEqual(ItemsTab.TabTitle, link.TargetTabTitle);
-        Assert.AreEqual($"Item: {scroll.Name} (casts it)", link.Text);
-    }
-
-    [TestMethod]
-    public void TheSpellsDependents_ListTheScrollThatCastsIt_OpeningItInTheItemsTab()
-    {
-        var scroll = Session.Value.Catalogs.ItemCatalog.Definitions.First(item => item.Activator is ScrollActivator);
-        var spellId = ((ScrollActivator)scroll.Activator!).SpellId;
-
-        var dependent = ContentLinks.DependentsOf(Index.Value, ContentRecordKind.Action, spellId).Single(dependent => dependent.RecordId == scroll.Id);
+        var dependent = ContentLinks.UsedByOf(Index.Value, ContentRecordKind.Action, spellId).Single(dependent => dependent.RecordId == scroll.Id);
 
         Assert.AreEqual(scroll.Name, dependent.Name);
         Assert.AreEqual(nameof(ContentRecordKind.Item), dependent.Kind);
@@ -66,11 +54,11 @@ public sealed class ContentLinksTests
     }
 
     [TestMethod]
-    public void AnAurasDependents_IncludeWhatNoTabShows_WithNothingToOpen()
+    public void AnAurasUsedBy_IncludeWhatNoTabShows_WithNothingToOpen()
     {
         var terrainReference = Index.Value.UsedBy(ContentRecordKind.Aura, Game.Modules.Auras.BuiltInAuraIds.Lava).First(reference => reference.From.Kind == ContentRecordKind.Terrain);
 
-        var dependent = ContentLinks.DependentsOf(Index.Value, ContentRecordKind.Aura, Game.Modules.Auras.BuiltInAuraIds.Lava).Single(dependent => dependent.Name == terrainReference.From.Name);
+        var dependent = ContentLinks.UsedByOf(Index.Value, ContentRecordKind.Aura, Game.Modules.Auras.BuiltInAuraIds.Lava).Single(dependent => dependent.Name == terrainReference.From.Name);
 
         Assert.AreEqual("radiates it", dependent.Relationship);
         Assert.IsNull(dependent.TabTitle);
@@ -78,11 +66,9 @@ public sealed class ContentLinksTests
     }
 
     [TestMethod]
-    public void EveryRecord_HasUsesThenUsedBy()
+    public void ARecordNothingNames_AndThatNamesNothing_HasNoLines()
     {
-        var sections = ContentLinks.For(Index.Value, ContentRecordKind.Action, Guid.NewGuid());
-
-        CollectionAssert.AreEqual(new[] { ContentLinks.UsesHeading, ContentLinks.UsedByHeading }, sections.Select(section => section.Heading).ToArray());
-        Assert.IsTrue(sections.All(section => section.Links.Count == 0));
+        Assert.IsEmpty(ContentLinks.UsesOf(Index.Value, ContentRecordKind.Action, Guid.NewGuid()));
+        Assert.IsEmpty(ContentLinks.UsedByOf(Index.Value, ContentRecordKind.Action, Guid.NewGuid()));
     }
 }

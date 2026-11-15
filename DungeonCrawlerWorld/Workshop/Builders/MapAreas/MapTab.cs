@@ -1,6 +1,6 @@
 using Builders.Browsing;
+using Builders.Editing;
 using Builders.References;
-using Engine.Tags;
 using Game.Areas;
 using Game.Content;
 using Microsoft.Xna.Framework;
@@ -18,7 +18,7 @@ namespace Builders.MapAreas;
 /// column, shown while the record has a map; the pointer is followed by an input handler registered while the tab is
 /// open, for its readout.
 /// </remarks>
-public sealed class MapTab(AreaCatalog areas, ContentReferenceIndex references, GameplayTagRegistry gameplayTags, ContentOrigins origins) : RecordBrowserTab<MapContentRecord, MapPreviewWindow>
+public sealed class MapTab : RecordBrowserTab<MapContentRecord, MapPreviewWindow>
 {
     public const string TabTitle = "Map";
     public const string CellDetailsTitle = "Cell Details";
@@ -26,14 +26,44 @@ public sealed class MapTab(AreaCatalog areas, ContentReferenceIndex references, 
     private const float MapPreviewWidth = 720f;
     private const float CellDetailsGap = 8f;
 
-    private readonly IReadOnlyList<MapContentRecord> _records = MapContentRecord.AllIn(areas);
+    private readonly ContentWorkspace _workspace;
+    private IReadOnlyList<MapContentRecord> _records;
+    private int _recordsSessionVersion;
 
     private WorkshopTabContext? _context;
     private CellDetailsWindow? _cellDetailsWindow;
 
+    public MapTab(ContentWorkspace workspace)
+    {
+        _workspace = workspace;
+        _records = MapContentRecord.AllIn(workspace.Session.Catalogs.Areas);
+        _recordsSessionVersion = workspace.SessionVersion;
+        workspace.SessionReplaced += Reopen;
+    }
+
+    private AreaCatalog Areas => _workspace.Session.Catalogs.Areas;
+
+    private ContentReferenceIndex References => _workspace.References;
+
+    private ContentOrigins Origins => _workspace.Origins;
+
+    private IReadOnlyList<MapContentRecord> Records
+    {
+        get
+        {
+            if (_recordsSessionVersion != _workspace.SessionVersion)
+            {
+                _recordsSessionVersion = _workspace.SessionVersion;
+                _records = MapContentRecord.AllIn(Areas);
+            }
+
+            return _records;
+        }
+    }
+
     public override string Title => TabTitle;
 
-    protected override string BrowserTitle => $"Map ({areas.Areas.Count} areas)";
+    protected override string BrowserTitle => $"Map ({Areas.Areas.Count} areas)";
 
     protected override string SearchGhostText => "Search areas";
 
@@ -41,18 +71,18 @@ public sealed class MapTab(AreaCatalog areas, ContentReferenceIndex references, 
 
     protected override float PreviewWidth => MapPreviewWidth;
 
-    protected override IEnumerable<MapContentRecord> AllRecords => _records;
+    protected override IEnumerable<MapContentRecord> AllRecords => Records;
 
     protected override Guid IdOf(MapContentRecord record) => record.Id;
 
     protected override IReadOnlyList<RecordBrowserSection<MapContentRecord>> BuildSections(string search) =>
-        MapBrowserSections.Build(_records, areas, search, gameplayTags);
+        MapBrowserSections.Build(Records, Areas, search, _workspace.Session.Catalogs.GameplayTags);
 
     protected override RecordRowAppearance AppearanceOf(MapContentRecord record) => record.Kind switch
     {
-        ContentRecordKind.Area => new(origins.Label(GameContent.AreasTable, record.Id, record.Name), null, "#", Color.LightGray),
-        ContentRecordKind.AreaPalette => new(origins.Label(GameContent.AreaPalettesTable, record.Id, record.Name), null, "%", Color.LightGray),
-        _ => new(origins.Label(GameContent.AreaPlacementsTable, record.Id, record.Name), null, "+", Color.LightGray),
+        ContentRecordKind.Area => new(Origins.Label(GameContent.AreasTable, record.Id, record.Name), null, "#", Color.LightGray),
+        ContentRecordKind.AreaPalette => new(Origins.Label(GameContent.AreaPalettesTable, record.Id, record.Name), null, "%", Color.LightGray),
+        _ => new(Origins.Label(GameContent.AreaPlacementsTable, record.Id, record.Name), null, "+", Color.LightGray),
     };
 
     protected override string PreviewTitleFor(MapContentRecord record) => record.Kind switch
@@ -75,11 +105,11 @@ public sealed class MapTab(AreaCatalog areas, ContentReferenceIndex references, 
     protected override void ShowInDetails(Window details, MapContentRecord record, float contentWidth) =>
         ((MapDetailsWindow)details).Configure(record, contentWidth);
 
-    protected override IReadOnlyList<RecordLinkSection> LinksOf(MapContentRecord record) =>
-        ContentLinks.For(references, record.Kind, record.Id);
+    protected override IReadOnlyList<WorkshopRelatedRecord> UsesOf(MapContentRecord record) =>
+        ContentLinks.UsesOf(References, record.Kind, record.Id);
 
-    protected override IReadOnlyList<WorkshopDependent> DependentsOf(MapContentRecord record) =>
-        ContentLinks.DependentsOf(references, record.Kind, record.Id);
+    protected override IReadOnlyList<WorkshopRelatedRecord> UsedByOf(MapContentRecord record) =>
+        ContentLinks.UsedByOf(References, record.Kind, record.Id);
 
     protected override void OnOpened(WorkshopTabContext context)
     {

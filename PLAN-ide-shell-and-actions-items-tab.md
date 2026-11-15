@@ -587,7 +587,10 @@ The plan as written:
 
 Edit Items, Edit Actions and Edit Auras are TODO.md items now (Engine, High): "Workshop: edit Items", "Workshop: edit
 Actions", "Workshop: edit Auras". Their design is this plan's "The editor", "Saving: master and drafts" and "Disabling a
-master record" sections and Decisions 8-20.
+master record" sections and Decisions 8-20. Edit Items was planned in `PLAN-workshop-edit-items.md` and built
+2026-11-14; that plan departs from this one in three places: one undo log for the workspace, not one per tab (its
+Decision 6); the reference question is the documents' walk joined with the catalog index (its Decision 13); and there is
+no "held" draft -- Ctrl+S saves to Drafts, Publish to master.
 
 ## Open questions
 

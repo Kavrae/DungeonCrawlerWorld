@@ -29,6 +29,12 @@ public static class WindowPalette
     /// <summary>Translucent hover-highlight overlay, drawn under content that's currently under the cursor (a column header, say) -- alpha kept low enough that whatever it's drawn over still reads through it.</summary>
     public static Color HighlightColor = Color.Gold * 0.5f;
 
+    /// <summary>The selected row of a list on a light panel (PanelContentColor): Windows 11's light blue, so dark text -- and dimmed text -- reads on it.</summary>
+    public static Color ListSelectionColor = new(204, 232, 255);
+
+    /// <summary>Text of a row that is out of play (a disabled record) on a light panel: lighter than BodyTextColor, still readable on ListSelectionColor.</summary>
+    public static Color DimmedRowTextColor = new(90, 90, 90);
+
     /// <summary>Universal window title-bar/header background -- fixed regardless of focus; a focused window is shown via FocusAccentColor on its border instead of a header-color swap.</summary>
     public static Color HeaderBackground = new(22, 22, 22);
 
@@ -78,4 +84,19 @@ public static class WindowPalette
 
     /// <summary>Generic label text drawn on ControlBackground -- GridControl's count label, sort button, and toggle labels.</summary>
     public static Color ControlLabelTextColor = Color.White;
+
+    /// <summary>Label text on a dark background that is dimmed but still read -- a field showing only its default.</summary>
+    public static Color DimmedLabelTextColor = new(150, 150, 150);
+
+    /// <summary>Placeholder text on a light control (PanelContentColor), where GhostText would vanish.</summary>
+    public static Color GhostTextOnLightColor = new(105, 105, 105);
+
+    /// <summary>The background of an editable control set on a dark panel -- a text box, number, dropdown or checkbox in an editor's rows: light, with BodyTextColor text.</summary>
+    public static Color EditableControlBackground = Color.LightGray;
+
+    /// <summary>The bar at the left of an editor row whose value differs from the version it is compared with -- never red or green, which read as a verdict.</summary>
+    public static Color ChangedValueMarkerColor = new(86, 156, 214);
+
+    /// <summary>How wide that bar is.</summary>
+    public const int ChangedValueMarkerWidth = 3;
 }

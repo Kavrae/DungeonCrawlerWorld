@@ -22,18 +22,18 @@ internal static class InventoryContentCodecs
         public override ContentSchema Schema { get; } = new(nameof(ItemDefinition),
         [
             .. ActivatableContent.LeadingFields,
-            ContentField.Polymorphic<IActionActivator>("ac", "Activator"),
+            ContentField.Polymorphic<IActionActivator>(ActivatableContent.ActivatorKey, "Activator"),
             ContentField.Integer("gv", "Gold value", 0),
-            ContentField.Integer("ms", "Maximum shop stock (none: the default)", 0),
+            ContentField.OptionalInteger("ms", "Maximum shop stock (none: the default)", 0),
             ContentField.Polymorphic<IItemContents>("ct", "Contents"),
-            ContentField.Boolean("tr", "Can trade"),
+            ContentField.Boolean("tr", "Can trade", defaultValue: true),
             .. ActivatableContent.TrailingFields,
         ]);
 
         public override void WriteProperties(ContentWriter writer, ItemDefinition value)
         {
             ActivatableContent.WriteLeading(writer, value);
-            writer.Polymorphic("ac", value.Activator);
+            writer.Polymorphic(ActivatableContent.ActivatorKey, value.Activator);
             writer.Integer("gv", value.GoldValue);
             writer.OptionalInteger("ms", value.MaximumShopStock);
             writer.Polymorphic("ct", value.Contents);
@@ -43,15 +43,15 @@ internal static class InventoryContentCodecs
 
         public override ItemDefinition Read(ContentObject element) => new(
             element.Guid(ContentTable.IdKey),
-            element.String("n"),
-            element.OptionalString("sp"),
-            element.String("g"),
-            element.Color("gc"),
-            element.Tags("t"),
+            element.String(ActivatableContent.NameKey),
+            element.OptionalString(ActivatableContent.SpriteNameKey),
+            element.String(ActivatableContent.GlyphKey),
+            element.Color(ActivatableContent.GlyphColorKey),
+            element.Tags(ActivatableContent.TagsKey),
             element.List<Effect>("fx"),
             element.String("d"),
             element.String("su"),
-            element.Polymorphic<IActionActivator>("ac"),
+            element.Polymorphic<IActionActivator>(ActivatableContent.ActivatorKey),
             ContentNumbers.Int32(element.Integer("gv"), "gv"),
             ContentNumbers.Int32(element.OptionalInteger("ms"), "ms"),
             element.Polymorphic<IItemContents>("ct"),
@@ -68,7 +68,7 @@ internal static class InventoryContentCodecs
         public override ContentSchema Schema { get; } = new(nameof(ItemContentsEntry),
         [
             ContentField.Reference(ContentTable.IdKey, "Item", ItemsTable, isRequired: true),
-            ContentField.Integer("q", "Quantity", 1, ushort.MaxValue),
+            ContentField.Integer("q", "Quantity", 1, ushort.MaxValue, defaultValue: 1),
         ]);
 
         public override void WriteProperties(ContentWriter writer, ItemContentsEntry value)

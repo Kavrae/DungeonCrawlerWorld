@@ -49,8 +49,10 @@ public sealed class Toggle(ElementServices services)
 
     public bool IsOn { get; private set; }
 
-    /// <summary>A disabled toggle keeps its state, draws its checkbox darkened (WindowPalette.DisabledBackground) with its mark, border and label dimmed, and is never hit-tested, so a click can't flip it.</summary>
+    /// <summary>A disabled toggle keeps its state, draws its checkbox darkened (WindowPalette.DisabledBackground) with its mark, border and label dimmed, and takes a click without flipping.</summary>
     protected override bool IsHitTestable => base.IsHitTestable && Enabled;
+
+    public override bool IsTabStop => Enabled;
 
     /// <summary>Shows isOn without notifying onToggled -- for a caller that keeps several toggles in step (an "All" toggle and the ones it covers).</summary>
     public void SetIsOn(bool isOn) => IsOn = isOn;
@@ -72,9 +74,40 @@ public sealed class Toggle(ElementServices services)
     /// <summary>Flips state and notifies onToggled -- fires from OnContentClickAction (before the base Clicked event, see Element's own doc comment on that ordering), the same "subclass owns its own click behavior" mechanism TextWindow already uses rather than this element self-subscribing to its own public event.</summary>
     protected override bool OnContentClickAction(Point mousePosition)
     {
+        Flip();
+        return true;
+    }
+
+    /// <summary>Focused, Space flips it as a click does.</summary>
+    protected override void OnKeyPressAction(Microsoft.Xna.Framework.Input.Keys key)
+    {
+        if (key == Microsoft.Xna.Framework.Input.Keys.Space && Enabled)
+        {
+            Flip();
+        }
+    }
+
+    private void Flip()
+    {
         IsOn = !IsOn;
         _onToggled?.Invoke(IsOn);
-        return true;
+    }
+
+    /// <summary>Draws the focus mark around the checkbox square while focused.</summary>
+    public override void Draw(GameTime gameTime)
+    {
+        base.Draw(gameTime);
+
+        if (!IsFocused)
+        {
+            return;
+        }
+
+        var checkbox = ComputeLayout().Checkbox;
+        var origin = ContentDrawOrigin;
+        var onScreen = new Rectangle(checkbox.X + (int)origin.X, checkbox.Y + (int)origin.Y, checkbox.Width, checkbox.Height);
+        onScreen.Inflate(2, 2);
+        DrawFocusIndicator(onScreen);
     }
 
     public override void DrawContent(GameTime gameTime)

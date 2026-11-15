@@ -3472,6 +3472,108 @@ and UIEngine only, added to the game's IDE by its App after Map (`--tab=Sprites`
   `SlotFiller` and its GDI+ painters stay with the tool until "Workshop: edit sprites and retire SpriteManifestBuilder"
   (TODO.md) moves editing into the tab and deletes it.
 
+### Workshop content editing (2026-11-14)
+
+`PLAN-workshop-edit-items.md`, Phases 0-3. The Items tab edits, saves and disables; everything under it is built for
+any table with a codec.
+
+- **Where it lives.** Engine (`Engine.Content`): `ContentField.Default`, `ContentTableLines` (a table file by Guid,
+  every other line kept byte for byte, new lines at their Guid's place). UIEngine (`UIEngine.UI.Fields`): a row control
+  per value kind behind `FieldEditorDescription`, which names no content type. `Cadence/Workshop/Editing`: the record as
+  JSON (`EditableContentRecord`), schema validation, the generated `ContentInspector`, the undo log, the reference walk
+  and `ContentTableFiles`. The game's Workshop (`Builders/Editing`): `ContentWorkspace` (the model: the session, the
+  log, the tables, what may be done to a record and doing it, the rebuild), `ContentSaver` (routing and writing a save),
+  `ContentEditing` (the side the tabs and the shell talk to: status text, the open tab's typed text, undo navigation,
+  the session swap), `ContentEditingTable<T>` (one table's documents), `ContentEditingTab<T, TPreview>` (the tab) and
+  `SessionContentTables` (each table a record can name, read from the session -- the one place a table name meets its
+  catalog).
+- **Rules live in the workspace, never the tab.** Delete (a published record only while nothing names it), Disable (a
+  published record) and Enable each have a refusal (`ContentWorkspace.DeleteRefusal`/`DisableRefusal`/`EnableRefusal`)
+  that the command's Enabled and tooltip read and the operation checks again, so every caller gets the same answer.
+  The workspace returns what happened (a refusal, a `ContentSaveReport`, a `ContentEditStep`); `ContentEditing` turns it
+  into the status line. Records are keyed by table and Guid (`ContentRecordKey`) wherever more than one table can meet.
+- **Change tracking is the record's.** Every change goes through `EditableContentRecord`'s methods, which advance its
+  `Version`; its JSON, `IsChanged` and each document's reference walk (`ContentRecordDocument.ReferencesNamed`) are worked
+  out once per change, so the shell's per-frame unsaved check costs nothing. `Root` is for reading: a write to it is
+  missed. Looks are compared through an index by glyph and colour and by sprite, not pair by pair.
+- **The record is its JSON, never the definition.** Unknown keys and wrong-kind values are kept and shown read-only;
+  the definition is decoded from the JSON after every edit, for the preview and the checks. Master is written only by
+  the codec, from what that decode gives (`ContentTable.WriteLine`/`WriteDisabled`), so a published line is canonical;
+  a draft line is the JSON as edited, decoding or not.
+- **Saving.** Ctrl+S writes every changed record to `Definitions/Drafts` and never touches master. Publish (Ctrl+Shift+S,
+  or a record's Publish) routes each record: an error at any layer, or naming a record that is only a draft, keeps it
+  in Drafts; the rest are trial-built over master alone in memory, and each the build fails goes to Drafts with the
+  failure. There is no "held" state: once Ctrl+S stopped publishing, the only thing it did was keep a draft out of
+  Publish. A deleted published record is saved as a removal line in Drafts (`{"id":…,"rm":true}`,
+  `ContentTableFiles.RemovalLine`) and leaves master on the next publish; a draft identical to master's record is
+  removed rather than written. A publish reads master once (`ContentSaving.ReadMasterFiles`): its trial builds and its
+  writes start from that one reading, so what was tried is what is written. It runs on the main thread, about 0.1 s a
+  trial round warm: moving it to a worker would need edits frozen until it lands, since `CompleteSave` marks the records
+  as saved.
+- **Not filled in yet.** A required value an edit or undo newly leaves missing isn't shown as a problem until the
+  record is saved or the value is filled in; it still stops the record publishing.
+- **Disabling is ordinary editing.** `off` and `rep` are written into the record's JSON (the inspector shows them as
+  its Disabled section, not as fields), so Disable, Enable and choosing a replacement are undo steps like any other, and
+  Cascade is one step over several records (`ContentWorkspace.ApplyStep`). Cross-record problems -- a replacement that
+  isn't published or comes back round, an enabled record naming one disabled with nothing replacing it -- are worked
+  out after every change (`RefreshCrossRecordProblems`). What only code names (blueprints' `UsesItems`/`UsesActions`,
+  terrain) refuses Delete and Cascade; Replacement still works.
+- **The session.** The Workshop's own session is rebuilt on a worker after each save, its mods validated again against
+  master as saved (`WorkshopContentBuilds`, App; previews use the mods the latest build validated), and swapped between
+  frames in one order (`ContentEditing.Update`): window factories bound to the old session are replaced first
+  (`ElementPoolService.ReplaceFactory`), then the workspace's session, whose `SessionReplaced` reopens the tabs, keeping
+  their selection by Guid. Documents, edits and the log outlive it. Undo and Redo are the shell's (`IWorkshopEditing`),
+  given its `TabNavigator`, and focus the control of the field the step changed (`ContentEditStep.OriginFieldPath`, from
+  `ContentInspectorEdit.FieldPath`; `off`/`rep` for Disable, Enable and Cascade) in the open tab or the tab they open --
+  the nearest row above it when the field is gone; New and Delete name none.
+- **Adding an editing tab** (checked with Auras, 2026-11-14, and not kept):
+  1. A `ContentEditingTable<T>` in `BuilderTabs.Create` over the session's definitions: name, mod origin, the per-record
+     checks (`ContentChecks.ProblemsOf`), and optionally its look (for the same-look warning) and a stand-in for a
+     record that doesn't decode.
+  2. A tab deriving `ContentEditingTab<T, TPreview>`: title, nouns, the name key, a new record's starting fields,
+     browser sections, the row's look and the preview. About forty lines. Its Uses and Used By (the bottom panel) come
+     from the workspace: the documents' reference walk joined with the index.
+  3. Its preview window's factory in `BuilderTabs.RegisterElementFactories` if it reads the session (so it is
+     replaced on a rebuild).
+  4. Anything only the game knows about its records (sprite pickers, notes, decorations) goes in `GameInspectorSource`,
+     naming fields by the codec's own key constants (`ActivatableContent.*Key`), never a literal.
+  5. A table records can name that isn't in `SessionContentTables` yet gets its entry there.
+
+### Workshop compare with master (2026-11-15)
+
+`PLAN-workshop-draft-to-master-compare.md`, Phases 0-4 (its research section holds what other editors do and what their
+users report). Every editing tab compares its records with master's line, at the field, in a list and as previews.
+
+- **One diff, over JSON, naming no layer.** `ContentRecordDiff` (`Cadence/Workshop/Editing`) compares two versions of a
+  record as its codecs read them: an omitted field equals its default, key order and number spelling never matter, a
+  tag set is a set, an unknown key or wrong-kind value compares as raw JSON. A list matches equal entries in order
+  first, then equal ones moved, then pairs what is left in order as one entry changed -- in a polymorphic list only two
+  of the same `$`, since an entry of another type is another entry (found in testing: a DirectHeal replaced by a
+  DirectDamage read as one changed entry whose revert turned it back). A changed `$` on a single field is one change.
+  The baseline is the caller's, so the mods plan's layer-against-layer view uses it unchanged.
+- **Master is the only baseline.** `ContentRecordDocument.DifferencesFromMaster`, worked out once per change of the
+  record or its master line; "since my last save" is undo's job. Values read through `ContentDifferenceText` (defaults,
+  references by name, a member by its `$`), shared by the inspector's tooltips and Changes.
+- **One revert path.** `ContentRecordRevert` puts one difference back; the inspector's `<` button, Changes' right-click
+  and Revert All (`record.Restore(masterLine)`) are each one undo step through the tab's `Table.Apply`. A row's revert
+  button's place is kept whether shown or not, so a control never moves; rows have no Unset button (dropped in
+  testing as noise: revert, Delete and editing cover it).
+- **Where it shows.** The inspector marks a changed row and every heading above it (a bar, never red/green), counts
+  what a closed heading hides, and gives a removed list entry or unknown key a dimmed label-only row in its place;
+  "Changes only" (a `RecordViewOption`, a checkbox right of the command bar) hides the rest, decided when rows are
+  built. The bottom panel's Changes lists the selected record's differences; To Publish (a tab of its own, since an
+  editing tab always has a selection) lists every record a publish would write, refreshed on `ProblemsVersion`. Its
+  tiles are grouped: Error List and To Publish (the whole Workshop), a gap, then the selected record's.
+- **Master moved on disk.** A publish compares each record's line on disk with the one it was opened with
+  (`ContentSaveEntry.OpenedMasterLine`); a difference keeps the record in Drafts, writes nothing over it, and offers
+  Reload Master, which takes the line found as the baseline and keeps the edits -- so Changes shows what publishing
+  would undo. Reload stays manual until a three-way merge exists (TODO.md).
+- **Compare Previews** is a DynamicHud window (not modal, fits its contents, so not resizable) with the tab's own
+  preview three times: Master, Draft, Unsaved. A version that is missing, doesn't decode or equals one to its left reads
+  as a line instead; Draft and Unsaved are coloured against master through the preview's own comparison
+  (`ShowComparedDefinition`; Item Details' better/worse), master never. It refills on every selection and edit, and is
+  reopened when the tab's windows are rebuilt.
+
 ### Component writes: write scopes and struct updaters (2026-11-03, scopes 2026-11-06)
 
 - **Two forms, one notification.** Every in-place write is versioned and observed, whichever form makes it.

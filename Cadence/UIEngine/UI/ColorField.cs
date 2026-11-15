@@ -21,17 +21,23 @@ public sealed class ColorField(ElementServices services, CursorTextContent? curs
     /// <summary>Raised with the new colour when the player changes it. Not raised when the text read back to the same colour.</summary>
     public event Action<Color>? ValueChanged;
 
-    public void Configure(Color value)
+    public override void Build(Element? parent, ElementOptions options)
     {
-        Value = value;
-        TextSubmitted += _ => CommitText();
+        base.Build(parent, options);
+
+        TextSubmitted += _ => CommitTypedText();
         FocusChanged += _ =>
         {
             if (!IsFocused)
             {
-                CommitText();
+                CommitTypedText();
             }
         };
+    }
+
+    public void Configure(Color value)
+    {
+        Value = value;
     }
 
     public override void Initialize()
@@ -86,7 +92,8 @@ public sealed class ColorField(ElementServices services, CursorTextContent? curs
             ? $"#{color.R:X2}{color.G:X2}{color.B:X2}"
             : $"#{color.R:X2}{color.G:X2}{color.B:X2}{color.A:X2}";
 
-    private void CommitText()
+    /// <summary>Takes what is typed as the colour now (text that isn't a colour shows the colour again), as leaving the field or Enter does -- for an owner that reads Value on a press that doesn't move focus.</summary>
+    public void CommitTypedText()
     {
         if (TryParse(OriginalText, out var typed) && typed != Value)
         {

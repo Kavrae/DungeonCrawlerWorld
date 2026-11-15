@@ -66,5 +66,9 @@ public sealed class UiEngineContext(
         pool.RegisterFactory(() => new ToggleList(services));
         pool.RegisterFactory(() => new TextDivider(services));
         pool.RegisterFactory(() => new FractionBarElement(services));
+        pool.RegisterFactory(() => new UI.Fields.SearchableChoiceField(services, contextMenuController.Dropdowns, cursorTextContent, contextMenuController));
+        pool.RegisterFactory(() => new UI.Fields.MultiChoiceField(services, contextMenuController.Dropdowns));
+        pool.RegisterFactory(() => new UI.Fields.FieldRow(services));
+        pool.RegisterFactory(() => new UI.Fields.FieldSectionHeader(services));
     }
 }

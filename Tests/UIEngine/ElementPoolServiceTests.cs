@@ -32,6 +32,43 @@ public sealed class ElementPoolServiceTests
     }
 
     [TestMethod]
+    public void ReplaceFactory_NoElementTheOldFactoryMade_IsHandedOutAgain()
+    {
+        var pool = new ElementPoolService();
+        var made = new List<(TextWindow Window, int Factory)>();
+        pool.RegisterFactory(() => Made(1));
+        var pooledBefore = pool.CreateElement<TextWindow>(null, FixedOptions());
+        var inUseBefore = pool.CreateElement<TextWindow>(null, FixedOptions());
+        pool.CloseElement(pooledBefore);
+
+        pool.ReplaceFactory(() => Made(2));
+        pool.CloseElement(inUseBefore);
+        var first = pool.CreateElement<TextWindow>(null, FixedOptions());
+        var second = pool.CreateElement<TextWindow>(null, FixedOptions());
+
+        Assert.AreNotSame(pooledBefore, first);
+        Assert.AreNotSame(inUseBefore, first);
+        Assert.AreNotSame(pooledBefore, second);
+        Assert.AreNotSame(inUseBefore, second);
+        Assert.AreEqual(2, made.Single(entry => ReferenceEquals(entry.Window, first)).Factory);
+
+        TextWindow Made(int factory)
+        {
+            var window = new TextWindow(TestElementServices.For(pool));
+            made.Add((window, factory));
+            return window;
+        }
+    }
+
+    [TestMethod]
+    public void ReplaceFactory_ForATypeWithNone_Throws()
+    {
+        var pool = new ElementPoolService();
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => pool.ReplaceFactory(() => new TextWindow(TestElementServices.For(pool))));
+    }
+
+    [TestMethod]
     public void CreateElement_FactoryMakingASubclass_ThrowsNamingBoth()
     {
         var pool = new ElementPoolService();

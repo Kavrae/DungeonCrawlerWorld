@@ -41,17 +41,17 @@ internal static class ActionContentCodecs
             ContentField.Enum<TargetShape>("sh", "Shape"),
             ContentField.Integer("r", "Maximum range", 0),
             ContentField.Integer("a", "Area size", 0),
-            ContentField.Enum<TargetingModes>("mo", "Targeting modes"),
-            ContentField.Enum<TargetModeAffects>("ta", "Target mode affects"),
-            ContentField.Enum<TargetAnchor>("an", "Anchor"),
+            ContentField.Enum("mo", "Targeting modes", TargetingModes.Both),
+            ContentField.Enum("ta", "Target mode affects", TargetModeAffects.Area),
+            ContentField.Enum("an", "Anchor", TargetAnchor.PathEnd),
             ContentField.Integer("mn", "Minimum range", 0),
-            ContentField.Enum<TargetPath>("pa", "Path"),
-            ContentField.Enum<ProjectilePathEnd>("pe", "Projectile path end"),
+            ContentField.Enum("pa", "Path", TargetPath.Placed),
+            ContentField.Enum("pe", "Projectile path end", ProjectilePathEnd.AtAimedTile),
             ContentField.Integer("ph", "Projectile hit count (65535: every entity on the way)", 0, ushort.MaxValue),
-            ContentField.Enum<LineOfSightRule>("al", "Aim line of sight"),
-            ContentField.Enum<PathWallRule>("pw", "Path walls"),
+            ContentField.Enum("al", "Aim line of sight", LineOfSightRule.NotRequired),
+            ContentField.Enum("pw", "Path walls", PathWallRule.StopsAtWall),
             ContentField.Integer("wb", "Wall bounce count", 0, byte.MaxValue),
-            ContentField.Enum<LineOfSightRule>("sl", "Shape line of sight"),
+            ContentField.Enum("sl", "Shape line of sight", LineOfSightRule.NotRequired),
         ]);
 
         public override void WriteProperties(ContentWriter writer, TargetingSpec value)
@@ -94,8 +94,8 @@ internal static class ActionContentCodecs
         public override ContentSchema Schema { get; } = new(nameof(ActionTiming),
         [
             ContentField.Enum<ActionTimingCategory>("c", "Category"),
-            ContentField.Integer("lf", "Action lock in frames (none: the entity's own)", 0, ushort.MaxValue),
-            ContentField.Integer("cd", "Cooldown in frames", 0, ushort.MaxValue),
+            ContentField.OptionalInteger("lf", "Action lock in frames (none: the entity's own)", 0, ushort.MaxValue),
+            ContentField.OptionalInteger("cd", "Cooldown in frames", 0, ushort.MaxValue),
             ContentField.Boolean("rl", "Releases the action lock"),
         ]);
 
@@ -148,27 +148,27 @@ internal static class ActionContentCodecs
         public override ContentSchema Schema { get; } = new(nameof(ActionDefinition),
         [
             .. ActivatableContent.LeadingFields,
-            ContentField.Polymorphic<IActionActivator>("ac", "Activator", isRequired: true),
+            ContentField.Polymorphic<IActionActivator>(ActivatableContent.ActivatorKey, "Activator", isRequired: true),
             .. ActivatableContent.TrailingFields,
         ]);
 
         public override void WriteProperties(ContentWriter writer, ActionDefinition value)
         {
             ActivatableContent.WriteLeading(writer, value);
-            writer.Polymorphic("ac", value.Activator);
+            writer.Polymorphic(ActivatableContent.ActivatorKey, value.Activator);
             ActivatableContent.WriteTrailing(writer, value);
         }
 
         public override ActionDefinition Read(ContentObject element)
         {
-            var activator = element.Polymorphic<IActionActivator>("ac")!;
+            var activator = element.Polymorphic<IActionActivator>(ActivatableContent.ActivatorKey)!;
             return new ActionDefinition(
                 element.Guid(ContentTable.IdKey),
-                element.String("n"),
-                element.OptionalString("sp"),
-                element.String("g"),
-                element.Color("gc"),
-                element.Tags("t"),
+                element.String(ActivatableContent.NameKey),
+                element.OptionalString(ActivatableContent.SpriteNameKey),
+                element.String(ActivatableContent.GlyphKey),
+                element.Color(ActivatableContent.GlyphColorKey),
+                element.Tags(ActivatableContent.TagsKey),
                 element.List<Effect>("fx"),
                 activator,
                 element.String("d"),
@@ -324,33 +324,46 @@ internal static class ActivatorContent
 /// <remarks>"t" is DeclaredTags -- the activator's implied tags are never written, since they follow the activator.</remarks>
 public static class ActivatableContent
 {
+    public const string NameKey = "n";
+
+    public const string SpriteNameKey = "sp";
+
+    public const string GlyphKey = "g";
+
+    public const string GlyphColorKey = "gc";
+
+    public const string TagsKey = "t";
+
+    /// <summary>The activator's key, which each type writes after the leading fields.</summary>
+    public const string ActivatorKey = "ac";
+
     public static IReadOnlyList<ContentField> LeadingFields { get; } =
     [
         ContentField.Guid(ContentTable.IdKey, "Id", isRequired: true),
-        ContentField.Text("n", "Name", isRequired: true),
-        ContentField.Text("sp", "Sprite name"),
-        ContentField.Text("g", "Glyph"),
-        ContentField.Color("gc", "Glyph colour"),
-        ContentField.TagSet("t", "Tags", GameTagDomains.Activation),
-        ContentField.ListOf<Effect>("fx", "Effects", ContentFieldKind.Object),
+        ContentField.Text(NameKey, "Name", isRequired: true),
+        ContentField.OptionalText(SpriteNameKey, "Sprite name"),
+        ContentField.Text(GlyphKey, "Glyph"),
+        ContentColors.Field(GlyphColorKey, "Glyph colour"),
+        ContentField.TagSet(TagsKey, "Tags", GameTagDomains.Activation),
+        ContentField.ListOf<Effect>("fx", "Effects (what using it does to its targets; what a toggle holds while on)", ContentFieldKind.Object),
     ];
 
     public static IReadOnlyList<ContentField> TrailingFields { get; } =
     [
-        ContentField.Text("d", "Description"),
+        ContentField.Text("d", "Description") with { IsMultiline = true },
         ContentField.Text("su", "Summary"),
         ContentField.Object<ToggleSpec>("tog", "Toggle"),
-        ContentField.ListOf<Effect>("ae", "Activation effects", ContentFieldKind.Object),
+        ContentField.ListOf<Effect>("ae", "Activation effects (the costs on the user to activate it: applied to whoever uses it, all or nothing, before anything else -- a mana drain, a health drain)", ContentFieldKind.Object),
     ];
 
     public static void WriteLeading(ContentWriter writer, ActivatableDefinition value)
     {
         writer.Guid(ContentTable.IdKey, value.Id);
-        writer.String("n", value.Name);
-        writer.OptionalString("sp", value.SpriteName);
-        writer.String("g", value.Glyph);
-        writer.Color("gc", value.GlyphColor);
-        writer.Tags("t", value.DeclaredTags);
+        writer.String(NameKey, value.Name);
+        writer.OptionalString(SpriteNameKey, value.SpriteName);
+        writer.String(GlyphKey, value.Glyph);
+        writer.Color(GlyphColorKey, value.GlyphColor);
+        writer.Tags(TagsKey, value.DeclaredTags);
         writer.List("fx", value.Effects);
     }
 

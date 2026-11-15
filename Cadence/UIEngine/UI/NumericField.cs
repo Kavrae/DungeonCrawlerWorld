@@ -36,6 +36,12 @@ public sealed class NumericField(ElementServices services, CursorTextContent? cu
         _step = step;
         _decimalPlaces = decimalPlaces;
         Value = Normalize(value);
+    }
+
+    public override void Build(Element? parent, ElementOptions options)
+    {
+        base.Build(parent, options);
+
         TextSubmitted += _ => CommitTypedText();
         FocusChanged += _ =>
         {

@@ -19,7 +19,8 @@ namespace UIEngine.UI;
 /// </summary>
 /// <remarks>
 /// A list taller than the height Show is given scrolls. One row at a time is highlighted -- the hovered one, or the one
-/// Up/Down moved to (see MoveHighlight) -- and Enter chooses it. A marked row (a DropdownField's current value) draws an
+/// Up/Down moved to (see MoveHighlight) -- and Enter chooses it. Choosing a checkbox row (DropdownOption.IsChecked)
+/// turns it and leaves the list open. A marked row (a DropdownField's current value) draws an
 /// accent at its left edge.
 /// </remarks>
 public sealed class Dropdown(ElementServices services)
@@ -99,7 +100,7 @@ public sealed class Dropdown(ElementServices services)
                 continue;
             }
 
-            _optionRows.Add(AddOptionRow(option, width, y, isMarked: optionIndex == markedIndex));
+            _optionRows.Add(AddOptionRow(option, optionIndex, width, y, isMarked: optionIndex == markedIndex));
             y += RowHeight;
         }
 
@@ -125,7 +126,7 @@ public sealed class Dropdown(ElementServices services)
         AddChild(header);
     }
 
-    private Button AddOptionRow(DropdownOption option, float width, float y, bool isMarked)
+    private Button AddOptionRow(DropdownOption option, int optionIndex, float width, float y, bool isMarked)
     {
         var rowSize = new Vector2(width, RowHeight);
 
@@ -143,17 +144,32 @@ public sealed class Dropdown(ElementServices services)
         button.Enabled = option.Enabled;
         button.LeftAlign = true; // A menu row always reads left-aligned, even without a HotkeyText column -- not the ink-centered look Button otherwise defaults to.
         button.IsMarked = isMarked;
-        button.Clicked += _ => Choose(option);
+        button.CheckBoxState = option.IsChecked;
+        button.Clicked += _ => Choose(optionIndex);
 
         AddChild(button);
         return button;
     }
 
-    private void Choose(DropdownOption option)
+    /// <summary>Runs the option at optionIndex: opens its submenu, or turns a checkbox row and leaves the list open with its scroll and highlight where they are, or runs it and closes.</summary>
+    private void Choose(int optionIndex)
     {
+        var option = _options[optionIndex];
         if (option.Submenu is { } submenu)
         {
             _pendingSubmenu = submenu;
+            return;
+        }
+
+        if (option.IsChecked is { } isChecked)
+        {
+            _options[optionIndex] = option with { IsChecked = !isChecked };
+            if (_optionRows[optionIndex] is { } row)
+            {
+                row.CheckBoxState = !isChecked;
+            }
+
+            option.OnSelect();
             return;
         }
 
@@ -190,7 +206,7 @@ public sealed class Dropdown(ElementServices services)
             return false;
         }
 
-        Choose(_options[_highlightedIndex]);
+        Choose(_highlightedIndex);
         return true;
     }
 
@@ -280,7 +296,7 @@ public sealed class Dropdown(ElementServices services)
         var widest = 0f;
         foreach (var option in options)
         {
-            var labelWidth = _font.MeasureString(option.Label).X;
+            var labelWidth = _font.MeasureString(option.Label).X + (option.IsChecked is null ? 0f : Button.CheckBoxWidth);
             var hotkeyWidth = option.HotkeyText is null ? 0f : HotkeyGap + _font.MeasureString(option.HotkeyText).X;
             widest = System.Math.Max(widest, labelWidth + hotkeyWidth);
         }

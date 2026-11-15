@@ -20,7 +20,8 @@ public sealed record ListViewRow(IReadOnlyList<string> Cells, string? IconGlyph 
 /// <summary>
 /// Rows under column headers -- the Error List, Dependents, a record picker. Clicking a sortable header sorts by it, and
 /// again reverses it; a click selects a row and a second click on it within the double-click window activates it, as do
-/// Enter and a double-click. Focused, Up/Down/Home/End move the selection. The header stays put while the rows scroll.
+/// Enter and a double-click. Focused, Up/Down/Home/End move the selection. The header stays put while the rows scroll, and
+/// the row under the pointer is highlighted.
 /// </summary>
 /// <remarks>
 /// Drawn by itself rather than from child elements, so a list of thousands costs only the rows on screen. A cell too long
@@ -41,6 +42,7 @@ public sealed class ListView(ElementServices services)
     private static readonly Color HeaderTextColor = WindowPalette.ControlLabelTextColor;
     private static readonly Color SelectedRowColor = WindowPalette.HighlightColor;
     private static readonly Color AlternateRowColor = Color.Black * 0.04f;
+    private static readonly Color HoveredRowColor = WindowPalette.HighlightColor * 0.45f;
 
     private readonly SpriteFontBase _font = services.FontService.GetFont(FontChrome.DefaultFontSize);
 
@@ -86,6 +88,9 @@ public sealed class ListView(ElementServices services)
 
     /// <summary>Raised by a double-click on a row or Enter on the selected one.</summary>
     public event Action<ListViewRow>? RowActivated;
+
+    /// <summary>Raised by every click on a row, after it is selected -- for a list where one click goes to the row (the Error List).</summary>
+    public event Action<ListViewRow>? RowClicked;
 
     public override void Build(Element? parent, ElementOptions options)
     {
@@ -325,6 +330,7 @@ public sealed class ListView(ElementServices services)
         if (_lastClickedRow is { } row)
         {
             Select(row);
+            RowClicked?.Invoke(row);
         }
 
         return true;
@@ -394,6 +400,7 @@ public sealed class ListView(ElementServices services)
         var spriteBatch = Render.Batch;
         var width = ContentSize.X;
 
+        var hoveredRow = IsPointerOver ? RowAt(PointerOverPosition) : null;
         var firstVisible = System.Math.Max(0, (int)(ScrollOffset.Y / RowHeight));
         var lastVisible = System.Math.Min(_order.Length - 1, (int)((ScrollOffset.Y + ContentSize.Y - HeaderHeight) / RowHeight));
         for (var displayIndex = firstVisible; displayIndex <= lastVisible; displayIndex++)
@@ -401,7 +408,11 @@ public sealed class ListView(ElementServices services)
             var rowIndex = _order[displayIndex];
             var row = _rows[rowIndex];
             var top = HeaderHeight + displayIndex * RowHeight;
-            if (ReferenceEquals(row, SelectedRow))
+            if (ReferenceEquals(row, hoveredRow) && !ReferenceEquals(row, SelectedRow))
+            {
+                spriteBatch.FillRectangle(new Rectangle(0, (int)top, (int)width, (int)RowHeight), HoveredRowColor);
+            }
+            else if (ReferenceEquals(row, SelectedRow))
             {
                 spriteBatch.FillRectangle(new Rectangle(0, (int)top, (int)width, (int)RowHeight), SelectedRowColor);
             }

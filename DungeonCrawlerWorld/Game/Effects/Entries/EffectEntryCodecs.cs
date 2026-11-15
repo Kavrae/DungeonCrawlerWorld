@@ -35,7 +35,7 @@ internal static class EffectEntryCodecs
             ContentField.Integer("mx", "Maximum flat damage", short.MinValue, short.MaxValue),
             ContentField.Number("pct", "Percentage damage"),
             BodyPartTargetingContent.Field,
-            ContentField.Enum<BodyPartTargetMode>("bm", "Body part target mode"),
+            ContentField.Enum("bm", "Body part target mode", BodyPartTargetMode.SingleTarget),
         ]);
 
         public override void WriteProperties(ContentWriter writer, DirectDamage value)
@@ -62,7 +62,7 @@ internal static class EffectEntryCodecs
             ContentField.Number("pct", "Percent of maximum health"),
             ContentField.Number("fl", "Flat amount"),
             BodyPartTargetingContent.Field,
-            ContentField.Enum<BodyPartTargetMode>("bm", "Body part target mode"),
+            ContentField.Enum("bm", "Body part target mode", BodyPartTargetMode.All),
         ]);
 
         public override void WriteProperties(ContentWriter writer, DirectHeal value)
@@ -109,25 +109,25 @@ internal static class EffectEntryCodecs
 
     private sealed class TerrainChangeCodec : ContentCodec<TerrainChange>
     {
-        public override ContentSchema Schema { get; } = new(nameof(TerrainChange), [ContentField.Text("tr", "Terrain key", isRequired: true)]);
+        public override ContentSchema Schema { get; } = new(nameof(TerrainChange), [ContentField.Text(TerrainChangeContent.TerrainKey, "Terrain key", isRequired: true)]);
 
-        public override void WriteProperties(ContentWriter writer, TerrainChange value) => writer.String("tr", value.TerrainKey);
+        public override void WriteProperties(ContentWriter writer, TerrainChange value) => writer.String(TerrainChangeContent.TerrainKey, value.TerrainKey);
 
-        public override TerrainChange Read(ContentObject element) => new(element.String("tr"));
+        public override TerrainChange Read(ContentObject element) => new(element.String(TerrainChangeContent.TerrainKey));
     }
 
     private sealed class StatModifierGrantCodec : ContentCodec<StatModifierGrant>
     {
         public override ContentSchema Schema { get; } = new(nameof(StatModifierGrant),
         [
-            ContentField.Enum<StatModifierTarget>("tg", "Target"),
+            ContentField.Enum<StatModifierTarget>("tg", "Target", isRequired: true),
             ContentField.Enum<StatModifierOperation>("op", "Operation"),
-            ContentField.Enum<StatModifierPolarity>("pol", "Polarity"),
+            ContentField.Enum<StatModifierPolarity>("pol", "Polarity", isRequired: true),
             ContentField.Boolean("cm", "Can be modified"),
             ContentField.Number("m", "Magnitude"),
-            ContentField.Integer("d", "Duration in frames (none: permanent)", 0, ushort.MaxValue),
+            ContentField.OptionalInteger("d", "Duration in frames (none: permanent)", 0, ushort.MaxValue),
             ContentField.Tag("ct", "Condition tag", GameTagDomains.Activation),
-            ContentField.Enum<StatModifierStacking>("st", "Stacking"),
+            ContentField.Enum("st", "Stacking", StatModifierStacking.Add),
             ContentField.Boolean("fd", "Duration is fixed (never scaled)"),
         ]);
 
@@ -160,11 +160,11 @@ internal static class EffectEntryCodecs
     {
         public override ContentSchema Schema { get; } = new(nameof(StatusEffectGrant),
         [
-            ContentField.Enum<StatusEffectType>("ty", "Status effect"),
-            ContentField.Integer("c", "Stacks", 0),
-            ContentField.Enum<StatusEffectGrantMode>("md", "Mode"),
+            ContentField.Enum<StatusEffectType>("ty", "Status effect", isRequired: true),
+            ContentField.Integer("c", "Stacks", 0, defaultValue: 1),
+            ContentField.Enum("md", "Mode", StatusEffectGrantMode.Add),
             BodyPartTargetingContent.Field,
-            ContentField.Integer("d", "Duration in the effect's ticks (none: the effect's own)", 1, ushort.MaxValue),
+            ContentField.OptionalInteger("d", "Duration in the effect's ticks (none: the effect's own)", 1, ushort.MaxValue),
         ]);
 
         public override void WriteProperties(ContentWriter writer, StatusEffectGrant value)
@@ -188,8 +188,8 @@ internal static class EffectEntryCodecs
     {
         public override ContentSchema Schema { get; } = new(nameof(StatusEffectImmunityGrant),
         [
-            ContentField.Enum<StatusEffectType>("ty", "Status effect"),
-            ContentField.Integer("d", "Duration in frames (none: until revoked)", 0, ushort.MaxValue),
+            ContentField.Enum<StatusEffectType>("ty", "Status effect", isRequired: true),
+            ContentField.OptionalInteger("d", "Duration in frames (none: until revoked)", 0, ushort.MaxValue),
         ]);
 
         public override void WriteProperties(ContentWriter writer, StatusEffectImmunityGrant value)
@@ -238,7 +238,7 @@ internal static class EffectEntryCodecs
 
     private sealed class StatusEffectRemovalCodec : ContentCodec<StatusEffectRemoval>
     {
-        public override ContentSchema Schema { get; } = new(nameof(StatusEffectRemoval), [ContentField.Enum<StatusEffectType>("ty", "Status effect")]);
+        public override ContentSchema Schema { get; } = new(nameof(StatusEffectRemoval), [ContentField.Enum<StatusEffectType>("ty", "Status effect", isRequired: true)]);
 
         public override void WriteProperties(ContentWriter writer, StatusEffectRemoval value) => writer.Enum("ty", value.Type);
 
@@ -262,4 +262,10 @@ internal static class EffectEntryCodecs
 
         public override ChainedEffect Read(ContentObject element) => new(element.Number("ch"), element.List<Effect>("fx"));
     }
+}
+
+/// <summary>The keys of a TerrainChange record, for a tool that offers choices for them.</summary>
+public static class TerrainChangeContent
+{
+    public const string TerrainKey = "tr";
 }

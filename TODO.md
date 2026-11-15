@@ -46,39 +46,11 @@ membership. Dependencies, out of scope here: a floor-end event (see EndOfLevelSt
 class-selection UI, the advancement rules themselves, the residue roll. Ends with an in-game test and
 a `phase-performance-testing` A/B.
 
-#### Workshop: edit Items
-
-**Planned:** `PLAN-workshop-edit-items.md` (2026-11-12; decisions confirmed the same day, 12 and 13 as an interim
-until blueprints and terrain are content). Starts after
-`PLAN-npc-behavior-composition.md`, before `PLAN-generated-component-property-access.md`.
-
-Cadence Workshop's tabs are view-only (`PLAN-ide-shell-and-actions-items-tab.md`, landed through Phase 4). This is that
-plan's Phase 5: the generic editing machinery, first used by the Items tab. Its design is the plan's "The editor",
-"Saving: master and drafts" and "Disabling a master record" sections and Decisions 8-20, all confirmed 2026-10-16.
-- **Edit:** a `ContentDocument` (the record as the codec reads and writes it), the generated inspector with a field editor
-  per `ContentFieldKind`, the polymorphic type picker, custom targeting and appearance editors, per-edit decode into the
-  preview with failures shown at the field, per-record validation into the Error List, undo/redo.
-- **Save:** master and drafts (`Content/Definitions/Drafts`, never copied to the game), Ctrl+S, Publish/Hold,
-  New/Duplicate/Delete, the trial build of master alone, unsaved markers, the quit prompt, the session rebuild.
-- **Disable:** Disable/Enable, the replacement field, the confirmation dialog (Replacement with its picker, Cascade,
-  Cancel) when master dependents name the record, and redirect resolution.
-- **Already in place:** the controls (`DropdownField`, `NumericField`, `ColorField`, `ListView`, `ListEditor`,
-  `SplitPane`, `ModalDialog`), the bottom panel (Error List, Dependents) and the reference index; codecs with enforced
-  schemas; `off`/`rep` envelope keys and catalog redirects.
-- **Found while planning:** `ContentField` has no default value -- each codec passes its defaults to the writer and
-  reader (`BodyPartTargetMode` defaults differ by entry, `CanTrade` defaults to true), so the inspector can't show what
-  an omitted field means. Give `ContentField` a default and have the writer check the one a codec passes against it, so
-  writing every record (which `ContentCodecTests` does) proves they agree.
-- **Worth splitting:** in-memory editing, saving, and disabling are each a phase's worth, tested in-game in turn. Where
-  the inspector sits in the three-column layout is still to decide.
-- Tests and in-game checks: the plan's Phase 5 list (round-trip every built-in item unchanged, a schema for every entry,
-  activator and contents type, an undecodable record surviving as a draft, the draft rule, disabling with and without
-  dependents, Cascade undone in one step, replacement chains and cycles; change the Wand of Fireball's damage and see a
-  one-line `git diff`; disable the Health Potion with and without the Mana Potion as replacement).
-
 #### Workshop: edit Actions
 
-The plan's Phase 6, on "Workshop: edit Items"'s machinery: the Actions tab's inspector and saving -- a spell's mana (a
+On the Items tab's machinery (IMPLEMENTATION-NOTES "Workshop content editing", "Adding an editing tab"): a
+`ContentEditingTable<ActionDefinition>` and an Actions tab deriving `ContentEditingTab`, replacing today's read-only one,
+plus the custom pieces: a spell's mana (a
 `ManaDrain` among its activation effects), timing and toggle spec. Checks: change an action's range and see it in a
 scroll that casts it; a toggle action that breaks the toggle rules lands in Drafts with its error in the Error List;
 disabling an action that content names asks first, and Cascade disables its dependents. The plan's example, Fireball
@@ -87,17 +59,20 @@ Fireball carries its own effects, so pick an action a scroll casts (Heal, by the
 
 #### Workshop: edit Auras
 
-The plan's Phase 7: the Auras tab's inspector and saving, keeping the reference rule (a published item can't grant an
-aura held as a draft). Checks: change the Toxic Idol's aura power and see it in the game; hold it as a draft and see the
-game keep the old one; disabling the aura asks first with the Idol as its dependent; Confirm With Replacement redirects
+On the Items tab's machinery, as "Workshop: edit Actions" (the template check of 2026-11-14 already ran an Auras table
+through editing, publishing and the disable plan). The reference rule holds as it is (a published item can't name an
+aura that is only a draft). Also: an item's decode resolves an aura through the workspace (`ContentWorkspace.TryResolve`),
+which should look in the Auras table's documents first once it is held. Checks: change the Toxic Idol's aura power and
+see it in the game; save it as a draft and see the game keep the old one; disabling the aura asks first with the Idol as its dependent; Confirm With Replacement redirects
 it to another aura, and the Idol radiates that one in the game. Afterwards the data-driven plan's "indented copy for
 reading" can go.
 
 #### Workshop: edit map areas
 
 The Map tab is read-only (child 6 of the epic, landed; IMPLEMENTATION-NOTES "Map areas, fixed placements and the Workshop Map tab"): areas, palettes and fixed
-placements are authored as text files until this lands. This is the edit half, on "Workshop: edit Items"'s machinery
-(document, inspector, drafts and master, Publish, disabling, undo/redo), writing the same files -- one area per file,
+placements are authored as text files until this lands. This is the edit half, on the Items tab's machinery
+(IMPLEMENTATION-NOTES "Workshop content editing": the workspace, its log, Save/Publish and drafts, disabling; an area is
+a document of its own, a file per area, so it needs its own `ContentTableFiles` equivalent), writing the same files -- one area per file,
 rows one per line -- so a hand-written area and a saved one look the same.
 - **Painting** (Tiled, LDtk): a symbol palette panel built from the area's resolved legend (palettes, then its own),
   with each symbol drawn as the cell it makes; brush, rectangle, line and flood fill; an eyedropper; erase to
@@ -121,34 +96,88 @@ rows one per line -- so a hand-written area and a saved one look the same.
 
 #### Workshop: edit sprites and retire SpriteManifestBuilder
 
-Start after "Workshop: edit Items" is complete, on its machinery. Epic child 7 (landed 2026-10-22) ended
+On the Items tab's machinery (IMPLEMENTATION-NOTES "Workshop content editing"; the workspace's log, Save/Publish and the
+quit prompt). Epic child 7 (landed 2026-10-22) ended
 with a read-only Sprites tab in `Cadence/Workshop` -- sheet view, placement and link previews drawn through the sprite
 effect, warnings in the Error List -- and the WinForms `Cadence/Tools/SpriteManifestBuilder` still the way entries are
 authored. This is the editing half of its plan's former Phases 5 and 6. The read-side rules are already shared: `SpriteLinkLayout` and
 `SpriteEntryRules` moved into SpriteFormat (IMPLEMENTATION-NOTES "The Workshop Sprites tab"); the editing state
 (`EntryPart`), `SlotFiller`, the editing gestures in `EntryRules` and the copy/fill dialogs move into the tab here.
-- **Decide first: drafts for the manifest.** "Workshop: edit Items" saves a record to master or `Definitions/Drafts`. The
+- **Decide first: drafts for the manifest.** The Items tab saves a record to `Definitions/Drafts` (Ctrl+S) or master (Publish). The
   manifest is one JSON file in SpriteFormat's own model, with no codec, and nothing the game loads can fail on a sprite (a
   missing name draws its glyph and logs one warning). Either the Sprites tab takes drafts too -- an unfinished entry held
   out of `SpriteManifest.json` in a drafts manifest the game never loads, published when done -- or it saves straight to
   the manifest as the WinForms tool does, with unfinished linked sets saved as they are today (null slots). Settle it
-  against how "Workshop: edit Items" ends up, and record the answer in IMPLEMENTATION-NOTES.
+  against the Items tab's, and record the answer in IMPLEMENTATION-NOTES.
 - **Edit:** everything the WinForms tool edits -- new, delete (several at once), name and kind (Options, Linked set, Wall);
   place and remove options by click and drag with a span; slots, copy-to-slots, fill-empty-slots; wall face and top;
   variant sets, chances (totalling 100%) and tints (`ColorField`); flip and turn (a quarter turn of a non-square cell
   refused); stretch, pixels per tile, pivot by number and by click, footprint; the already-used warning. Undo/redo, Ctrl+S,
-  the unsaved marker and the quit prompt from "Workshop: edit Items".
+  the unsaved marker and the quit prompt from the workspace.
 - **Save:** through SpriteFormat exactly as the WinForms tool does (upsert by name, so re-saving an unchanged entry is
   byte-identical), refusing reach and chance problems with the same messages, then reload the IDE's own
   `SpriteManifestResolver` so the other tabs (item icons, Map previews) show the change without restarting.
 - **Retire:** once the tab does everything the WinForms tool does, delete `Cadence/Tools/SpriteManifestBuilder` and its
   solution entry, and stop naming it in CLAUDE.md, the epic, SpriteFormat's and `SpritePlacementMath`'s comments and
   `Content.csproj`'s note. Notes into IMPLEMENTATION-NOTES "The Sprites tab".
+- **Picking a sprite for an item or action:** the Items tab's "Sprite name" row becomes a "Select" button beside the
+  sprite preview. It opens the Sprites tab with a "Select" button in the middle of its menu bar, disabled until a sprite
+  is selected; pressing it writes that sprite's name to the item (one undo step, in the Items tab's log) and returns to
+  the Items tab on that item. Meanwhile the Sprites tab works as it always does -- add, edit and delete entries before
+  choosing one. The Actions tab gets the same once it edits.
 - Tests: the editing types moved from the WinForms tool (`EntryPart`, `SlotFiller`, the gestures), now testable in
   `Workshop.Tests`; saving an unchanged manifest is byte-identical; the save refusals.
 - Checks: re-create an existing entry from scratch and save -- `git diff` shows nothing; add a tinted variant and see it in
   the Items tab's icon without restarting; undo a fill-empty-slots in one step; quit with unsaved changes and be asked;
   build and run with the WinForms project gone.
+
+#### Workshop: filters on the editing tabs
+
+A browser (`RecordBrowserTab`) narrows its list only by the search box, which matches a name or a tag's display name
+(`RecordBrowserSections.Matches`). There is no way to see only the drafts, only what has errors, or only what differs
+from master. Add filters to every browser, in the 340-wide column it has.
+
+How other tools keep it compact (researched 2026-11-15):
+- **VS Code's settings editor:** a funnel button inside the right end of the search box opens a menu; a pick puts a
+  token in the search text (`@modified`), tokens combine, and typing one does the same. No extra row at all.
+- **Unity's Project window:** the same idea -- `t:` and `l:` tokens in the search text, with menu buttons beside the box
+  that write them.
+- **Unreal's Content Browser:** a Filters button in the search bar opens a menu; each enabled filter becomes a pill
+  that is clicked on and off without being removed; filters are kept per user; a custom filter is a saved search string.
+- **GitHub / GitLab issues:** typed `key:value` qualifiers with suggestions as you type, plus menus. Reported
+  problems: several kinds of control that apply and clear differently, and (GitLab 8.16) the mouse and the keyboard
+  doing different things to the same filter.
+- **Design-system guidance** (PatternFly, Ripple, Learning Equality): what is applied stays visible as chips with one
+  Clear; an option that would match nothing is hidden or dimmed.
+
+Proposed shape, to confirm when this is planned:
+- **A funnel button inside the search box**, showing the number of filters on. It opens the shared `Dropdown` with
+  checkbox rows under headings, each with the count it would leave: State (Unsaved, Draft, Differs from master, Has
+  errors, Disabled, Deleted), Source (master, each mod), and whatever the tab adds (an item's activator, an action's
+  timing). Tags are picked through "Workshop tag selection: a popup with checkboxes" (Medium).
+- **Applied filters are chips in one wrapping row under the search box**, each removed by its own x, with Clear at the
+  end. The row has no height while nothing is on.
+- Within a heading the choices are either-or; across headings, and with the search text, all must hold.
+- One path: decide whether a filter can also be typed (`is:draft`). If so the menu writes the token and the chip is
+  the token, never a second state beside it.
+- A list a filter empties says which filters hide everything and offers Clear. Decide what happens to a selected
+  record a filter hides (likely: it stays selected and shown in the inspector, and the browser says it is hidden).
+- Kept per user and per tab beside the Debug tab's launch options (`%LOCALAPPDATA%/Cadence/Workshop`), never in content.
+- Built in `Cadence/Workshop` over `RecordBrowserTab`, so read-only tabs (Map, Sprites) get it with their own choices.
+- "Differs from master" comes from `PLAN-workshop-draft-to-master-compare.md` (its `ContentRecordDiff`), which
+  deferred the filter to here. "Workshop testing selection" (Medium) adds its filter here; "Workshop bulk editing"'s
+  field-value queries (Medium) extend this bar rather than adding another; "Workshop Error List: columns, severity
+  and filters" (Medium) should reuse the same controls.
+Checks: Draft + Has errors lists exactly the drafts with errors; the count on the funnel and the chips agree; Clear
+restores the list; search text and filters combine; the filters are still on after restarting the Workshop.
+
+Sources: [VS Code settings filters](https://code.visualstudio.com/docs/configure/settings),
+[Unity classic search](https://docs.unity3d.com/6/Documentation/Manual/search-classic.html),
+[Unreal filters and collections](https://dev.epicgames.com/documentation/en-us/unreal-engine/filters-and-collections-in-unreal-engine),
+[GitHub issue filtering](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/filtering-and-searching-issues-and-pull-requests),
+[GitLab filter usability issue](https://gitlab.com/gitlab-org/gitlab-ce/issues/26749),
+[PatternFly filters](https://v4-archive.patternfly.org/v4/design-guidelines/usage-and-behavior/filters),
+[Learning Equality filters](https://design-system.learningequality.org/filters).
 
 #### Aura glow clarity: an FFXIV-style aura look, or a soft bleed with a highlight line; lights as their own effect
 
@@ -219,6 +248,179 @@ stale focused view, a hotkey letter while a ListView has focus, Escape with a co
 then an in-game and in-Workshop check of every hotkey and the TextBox/DropdownField/ListView keys.
 
 ### Medium Priority
+
+#### Workshop: plan editing mods, layer by layer
+
+Plan (no code yet) how the Workshop edits mod content, not only master's. Today a record only a mod has is shown
+read-only, and a master record a mod replaces opens as master's, editable, labelled "[replaced by <mod>]"
+(`ContentRecordDocument.ReplacedInGameBy`) -- one document per Guid, always the version the Workshop writes. The plan
+settles:
+- **Where a mod's edits go.** The game reads the installed copy (`%LocalAppData%\DungeonCrawlerWorld\Mods\<mod>\Definitions`);
+  a mod in this repo has its source in `DungeonCrawlerWorld/Mods/<project>/Definitions`, which `-p:DeployToGame=true`
+  copies over the installed one; a third-party mod may have no source at all. Edits must land in the source the mod is
+  built from, never a copy a deploy overwrites.
+- **Drafts and publish per layer.** One Drafts folder sits above every mod today, so a draft of a mod's record competes
+  with master's draft of the same Guid. Each editable layer likely needs drafts of its own, and Publish a target of its
+  own.
+- **What a publish is tried against.** Master's trial is the built-ins over master; a mod's is the mod's own validation
+  (`ModValidation`: the built-ins plus that mod), and a mod that fails it is dropped whole -- so one record's publish
+  can knock out the whole mod. Decide whether that refuses the record, as a master trial does.
+- **The resolved result as its own file.** Consider writing what the layers resolve to -- master, then each mod, then
+  the drafts on top -- as a separate generated file per table, read-only, so what the game will load can be read,
+  diffed and searched without running it. Decide whether anything reads it (the Workshop's own session, the game) or it
+  is for people only, and when it is regenerated.
+- **A record the mod disables.** A mod's `"off"` line leaves no winning line and, without a replacement, no redirect, so
+  the Workshop can't say a mod disables a master record today; it opens as master's with no note. The layers need to
+  say so.
+- **A UI to view every layer's version of a record.** For the selected record, each layer that has a line for its Guid
+  -- master, each mod in load order, the save if one is open, drafts -- side by side or as a list, with which one wins,
+  what each changes from the one beneath it (a field diff), disabled and removal lines shown as such, and opening the
+  one to edit. Decide where it lives (a panel beside the inspector, a bottom-panel tab like Used By and Uses) and how
+  the layer being edited is chosen.
+
+#### Workshop tag selection: a popup with checkboxes
+
+Today a tag set in the Workshop inspector is a multi-choice dropdown and a single tag a searchable list. Replace both
+with one popup made for picking tags:
+- Standard checkbox controls, one per tag, laid out as the tag tree (children under their parent).
+- Smart selection: a tag whose child is already chosen can't be chosen (the child already is it), and choosing a parent
+  of a chosen tag is refused with the reason, never silently replacing the child.
+- A search box filtering by name, keeping each match's ancestors visible.
+- Each tag's declared description as its tooltip (`GameplayTagRegistry` holds them).
+- Look for other places that pick several things from a long list (sprite names, references, flags enums, the Debug
+  tab's launch options) and, if any would use it, make it a generic UIEngine control rather than a tag picker.
+
+#### Workshop testing selection: start the game with chosen items and actions
+
+Any item or action in the Workshop can be marked as part of the testing selection (a checkbox on its browser row, and
+a "Testing selection" filter to see them together). Starting the game from the Workshop (Play, Build and Play) gives the
+player every selected item -- in its inventory, one stack each -- and every selected action -- granted and bound to a
+free hotbar slot where there is one -- so a change can be tried at once without Admin Mode or finding the thing.
+- The selection is per user, kept with the Debug tab's launch options (`%LOCALAPPDATA%/Cadence/Workshop`), never in
+  content, and survives restarting the Workshop.
+- It travels to the game the way the other launch options do (a command-line argument the game reads, like
+  `--master-content=`), naming Guids; the game grants them through the same commands Admin Mode uses
+  (`InventoryCommands`, `ActionGrantEffects`), after the player spawns. An id the game doesn't know is reported once
+  and skipped.
+- Shown on the Debug tab's Launch page beside the other options, with a count and a Clear button, and in the launched
+  command line.
+- Unsaved edits: the game reads master as saved, so a selected record with unsaved changes is launched as saved;
+  say so in the status line when that happens.
+
+#### Workshop bulk editing: a table view, multi-select edits and queries
+
+The editing tabs edit one record at a time (`PLAN-workshop-edit-items.md` "Not built by this plan": multi-select
+editing, copy and paste of fields or entries, search across field values). Balancing is comparing and changing one
+value across many records, which is what spreadsheets and grid editors are used for. Add, on the workspace's documents
+and log so every edit is an ordinary one -- checked, previewed, undone, saved and published as today:
+- **A table view** of a tab's records beside the browser and inspector: one row per record, columns from the schema's
+  fields (scalar fields by default; a nested path such as an effect entry's amount chosen as a column), sortable,
+  each cell edited by the same `UIEngine.UI.Fields` row control the inspector uses. Problems mark the cell their path
+  names. Which columns are shown is per user, never in content.
+- **Multi-select:** select several records (browser or table) and set a field on all of them as one undo step; a field
+  the selected records disagree on shows as mixed. Decide how a polymorphic slot or a list is handled when the
+  selected records differ in shape (likely: only paths every selected record has are editable).
+- **Copy and paste** of a field, an object or a list entry (an effect entry) between records, checked against the
+  target's schema at the path it lands on; a paste that doesn't fit is refused with the reason.
+- **Queries:** filter a tab by field values (a path, a comparison, a value -- "fire damage above 10 and no cooldown"),
+  combined, with saved queries per user; the browser and the table both show the result.
+- Decide whether a table copies out as tab-separated text for a spreadsheet, and whether pasting one back is an edit.
+Checks: raise every potion's heal by 20% in one step and undo it; paste an effect entry from one item into another;
+a query finds exactly the items the shipped content says it should.
+
+#### Content inheritance: records derived from a parent
+
+Plan (no code yet) records that name a parent record and hold only what they change, so a family (a sword and its
+tiers, a potion and its sizes) shares one base and a change to the base reaches every child. Today Duplicate copies a
+record and the copy never hears of the original again. The plan settles:
+- **Where a child is resolved.** In the layer merge (`ContentLayers`), so the codec and the game only ever see whole
+  records, or in the codecs. Likely the merge: a child's line is its parent's winning JSON with the child's keys over
+  it, then decoded as any record. Decide what a later layer overriding the parent (a mod, a save) does to its
+  children -- likely they follow, as everything that names a Guid follows a replacement.
+- **Merge rules per value kind.** An object merges key by key; a list replaces whole, or is addressed by entry (needs a
+  stable key per entry, which effect lists don't have); a polymorphic slot whose `$` changes replaces whole.
+- **Abstract records:** a parent that is only a template, never loaded or listed in game catalogs.
+- **Refusals,** as `rep` refuses them: a parent cycle, a parent in another table, a published child of a draft-only
+  parent, depth past a limit. Disabling a parent with children asks, as disabling any record with dependents does
+  (Used By lists children).
+- **The Workshop:** an inherited value shown greyed with the parent named, like a default, with "reset to parent"
+  where "reset to default" is today; Duplicate gains "Derive"; the inspector can show where each value comes from.
+- **Master's file format:** a child's line holds only its own keys, so a change to the parent is one line in git.
+- Code-held ids (`BuiltIn*Ids`) and the reference walk need no change if children are whole records by the time
+  anything reads them; confirm.
+
+#### Workshop: three-way merge when master changed under an edit
+
+Plan (design first, no code yet). Today a publish that finds a record's master line changed on disk since it was opened
+(git, another editor) refuses it, keeps it in Drafts and offers Reload Master, which takes the line on disk as the
+baseline and keeps the edits (`PLAN-workshop-draft-to-master-compare.md` Decision 9; `ContentSaver.RefuseMovedMaster`,
+`ContentEditingTable.ReloadMaster`). Reload doesn't merge: the record still holds the old values of whatever the
+outside change touched, so publishing after it undoes that change -- shown in Changes, but easy to miss. Reload stays
+manual until this lands, never automatic.
+
+The Workshop already holds all three versions: the line it opened (the base), the record as edited (ours) and the line
+on disk (theirs), and `ContentRecordDiff` compares any two. A field only one side changed takes that side; only a field
+both changed differently is a conflict. A clean merge would publish with nothing lost and nothing asked.
+
+Merge UIs are often more confusing than the conflict they resolve, so the design is the work:
+- **Research first,** as the compare plan did: how other tools present a three-way conflict (git merge tools, Unity
+  Smart Merge, Plastic SCM, Perforce's resolve, xEdit's patches, CMS editors with concurrent edits) and what their users
+  report -- which presentations people misread, which make them pick the wrong side, which they skip.
+- **Prefer what the Workshop already shows** -- the inspector's markers, Changes, the Compare Previews window -- over a
+  new three-pane screen. A conflict should read as "you set X, master now says Y", with the base only when it explains
+  the choice.
+- **What merges by itself, and whether to say so:** a field only theirs changed coming into the record silently is
+  still a change the designer didn't make; decide whether it is listed once ("taken from master: ...") or marked like
+  any change.
+- **Lists:** effect entries have no stable key, so a list both sides changed may only merge whole; decide where the
+  line is drawn (the same pairing rule as the diff: same type, in order).
+- **Record-level cases:** master deleted it while it was edited, it was disabled on one side, a new record of ours whose
+  Guid appears in theirs, a line on disk that doesn't parse (always refused, never merged).
+- **Undo and drafts:** a merge is one undo step; a refused merge keeps today's Drafts behaviour.
+- Applies to deletions too (master changed a record ours deleted), and later to mod layers ("Workshop: plan editing
+  mods, layer by layer").
+Checks: a teammate's change to one field and ours to another publish together with both kept; both changing one field
+is refused naming it, with both values; a list entry added on each side merges or conflicts as the design decides.
+
+#### Workshop field compare: a mod's record against its mod's line
+
+The compare against master is built (`PLAN-workshop-draft-to-master-compare.md`, complete 2026-11-15; IMPLEMENTATION-NOTES
+"Workshop compare with master"): markers and revert in the inspector, Changes, To Publish, Compare Previews. What is
+left waits on "Workshop: plan editing mods, layer by layer": once a mod's records are editable, a record a mod owns or
+replaces compares against that mod's line, its origin -- the layer it was opened from and is published to, read from
+the document (`ContentRecordLocation.Layer`), never assumed to be master. Today `ContentRecordDocument.DifferencesFromMaster`
+and the tab's "Master" baseline name are master's; `ContentRecordDiff` and `ContentComparison` already name no layer.
+The moved-baseline check at publish applies to a mod's line the same way.
+Checks: on a record ExampleMod replaces, edits compare against ExampleMod's line, not master's, in the inspector,
+Changes and Compare Previews (its first column named for the mod).
+
+#### Name the Workshop "The Alchemist's Creation Station"
+
+A visual rename only: what the player and developer see -- the window title, the shell's title text, the About or start
+line, the executable's displayed product name if shown anywhere -- reads "The Alchemist's Creation Station". Projects,
+folders, assemblies, namespaces, types (`WorkshopShell`, `Cadence/Workshop`, `DungeonCrawlerWorld.Workshop.exe`) and
+CLAUDE.md's references stay "Workshop". Put the name in one constant the shell reads, so it changes in one place.
+
+#### Selectable read-only text
+
+Read-only limits editing, never copying: read-only text can be selected and copied like any text box's. First user:
+the Workshop inspector's read-only rows (the Id, a value of the wrong kind), which are labels today
+(`FieldRow.CreateValueLabel`) and can't be selected at all.
+- `TextBox`'s selection machinery (hit-testing, double/triple-click, click-drag, Ctrl+A, Ctrl+C) is built against
+  `TextWindow`'s wrap and display, not anything editing-specific -- none of it needs a caret or typing. Move selection
+  and copy up onto `TextWindow` (opt-in, so a plain label never takes a press), leaving `TextBox` to add the caret and
+  editing.
+- Selectable read-only text still draws as a label (no box, no caret), takes focus for Ctrl+C, and is never a Tab stop.
+- Not `Window.TitleText`: title text is a separate raw-string mechanism, not built on `TextWindow`, and rebuilding it to
+  copy short static labels costs more than it gives.
+
+#### Workshop Error List: columns, severity and filters
+
+Model it on Visual Studio's Error List:
+- Resizable columns (drag a header edge), the widths kept per user with the other Workshop settings.
+- A severity column with an icon, so a warning and an error read apart at a glance.
+- Filter toggles for errors and warnings, each showing its count ("2 Errors", "5 Warnings"), and a search box.
+- Pairs with "IDE Error List: error codes" (Low), which adds the Code column and a filter by code.
 
 #### Investigate and benchmark contiguous Multi pool storage with a large stat modifier count
 
@@ -595,6 +797,25 @@ add their own merge layer for data files.
 Slot/equip-unequip mechanics -- move an `InventoryItemStackComponent` stack into a slot, no new storage
 primitive. Companion to the Game/Presentation equipment items below.
 
+#### Pop-out windows: a UI window in an OS window of its own
+
+Let a window of the IDE (first: the Workshop's Compare Previews; later the Debug tab's live views, a second inspector)
+leave the main window for an OS window of its own, so it can be dragged to another monitor. Investigated 2026-11-15, no
+code yet. Drawing is possible: SDL opens the second window and FNA can present into it (the `GraphicsDevice.Present`
+overload taking a window handle). Everything above drawing assumes one window, and that is the work:
+- **Input:** `UiInputController` reads one mouse and keyboard state and one screen space. A second window needs its own
+  pointer position, hover, hit-test, focus and text input, routed by which OS window has focus (SDL events carry a
+  window id).
+- **Layers and screen size:** `UiLayerStack` and `UiRenderService.ScreenSize` are one screen. Decide whether a pop-out
+  gets a stack of its own (likely: its own layers, render pass and size) or a slice of the main one.
+- **Shared popups:** tooltips, the right-click menu and dropdowns must open in the window that asked for them.
+- **Drawing:** the batch and render-state stack per window, a back buffer sized per window, and DPI per monitor.
+- **Lifetime:** closing the OS window closes the UI window (and the reverse), the main window closing closes every
+  pop-out, and a pop-out's position and monitor are kept per user (beside the Debug tab's launch options), never in content.
+- **What pops out:** an action on the window (a title button, or dragging it past the main window's edge), and back in.
+Checks: Compare Previews moved to a second monitor keeps following the selection and edits; hover, clicks, scrolling
+and tooltips work in it; closing either window behaves; it opens where it was last left.
+
 #### IDE bottom panel: an Output tab
 
 The IDE's bottom panel (`PLAN-ide-shell-and-actions-items-tab.md`) has an Error List and a Dependents tab. Visual Studio
@@ -618,9 +839,48 @@ The IDE's Error List shows severity, description, table, record, field and layer
 - The column, a filter by code, and a short description per code (shown in the row's tooltip).
 - Codes are never reused or renumbered once assigned, so a search or a note that names one stays true.
 
+#### Workshop Bugs tab
+
+A Workshop tab where whoever is using it keeps a list of bugs found while developing or playing, so they reach the
+developer and are tracked in one place.
+- A bug is an editable title and description, shown as an editable card; the cards scroll, a search box filters them by
+  title and description, and each card can be deleted.
+- Saved to a JSON file of its own (not content: no layer, codec or Error List entry), written as cards change.
+- Built on the editing tabs' controls (the multi-line text box, the search box), not a widget set of its own.
+
 ## Game
 
 ### High Priority
+
+#### TOP PRIORITY: Dodge targeting for a player larger than 1x1
+
+Reported 2026-11-13. Every other shape is laid out around the caster's whole footprint (a Huge 3x3 player's area is
+centred on the footprint's middle tile), but Dodge is laid out around the footprint's anchor tile
+(`TransformComponent.Position`) as if the player were 1x1: its targetable tiles, its WASD hints and what WASD aims at all
+sit around one corner of the player.
+- **What Dodge should target:** the caster's own footprint (dodge in place) and every tile touching it -- an Adjacent
+  shape at the `Caster` anchor plus Self -- the same layout every other caster-anchored shape already gets from
+  `TargetResolution`. Change Dodge's record in `Actions.jsonl` (its `TargetingSpec`) rather than special-casing it;
+  `TargetingContentValidation` keeps it `GroundOnly`.
+- **What an aimed tile means:** a step of the whole footprint one tile toward it: the offset of the aimed tile from the
+  footprint, each axis clamped to -1..1 (a tile beside a side is a cardinal step, a corner tile a diagonal one; a tile
+  inside the footprint is a dodge in place). Today `ActionTargetingController.DodgeStepDirection` and
+  `KeepDodgeStepTiles` both subtract the anchor tile, which is only right for 1x1. Both go through one footprint rule,
+  and `PlayerCommands.CanStepToward` still decides which steps are offered.
+- **WASD:** each key steps in its cardinal direction when that step is possible
+  (`ActionTargetingController.TryClaimDodgeDirectionalKey`), and its hint letter
+  (`MapGameOverlay.DrawDodgeDirectionalHints`) sits on a tile on that side of the footprint. For an odd size that is the
+  middle tile of the side. For an even size no tile is in the middle, so one of the two middle tiles is picked for the
+  hint and the aim; which one changes nothing about the step, since every tile on a side gives the same direction.
+  Decide the pick once (for example, the one nearer the cursor, or always the lower/left one) and use it for both the
+  hint and the key, so what is drawn is what the key does.
+- **NPCs:** check whether any NPC behavior aims Dodge from its anchor; if so it goes through the same rule.
+- Tests: a 1x1, 2x2 and 3x3 caster each offer exactly their footprint and its ring; an aimed side tile steps one
+  cardinal tile, a corner tile one diagonal, a footprint tile in place; each WASD key aims a tile on its side and steps in
+  its direction; a blocked side offers no tile and draws no hint.
+- In-game check: "Apply > Huge" (or whatever makes the player 3x3, then 2x2) and arm Dodge: expect the green area to ring
+  the whole player, W/A/S/D on the middle of each side (one of the two middles at 2x2), and each key to move the player
+  one tile that way; click a corner tile and expect a diagonal dodge.
 
 #### Remove gameplay limitations: Dodge cooldown, Inspect lock
 
@@ -1227,6 +1487,17 @@ harder to notice.
 - **To decide:** whether arms matter (crawling with disabled arms too), what it does to melee and Dodge, and how it is
   drawn.
 
+#### Container activator: containers opened from the inventory
+
+A new activator for items that hold an inventory of their own: activating one opens its own inventory window. The player
+can have several containers open at once, which opens up inventory management -- moving items between containers
+inside the player's inventory, or from a container on the hotbar.
+- Loot boxes don't get it (they are opened once, into their contents). Treasure chests do.
+- The player can pick up a treasure chest, and it keeps its contents in their inventory. Weight rules gate this later
+  ("Item weight and carry capacity scaling with Strength").
+- Opening, moving and dropping go through the existing rules: `ContainerAccess` for which window opens, the inventory
+  transfer for moving items, `ItemDrops` for putting a container down.
+
 #### Use items in item piles and on corpses without picking them up
 
 A context-menu option on a stack in a loot window (an item pile's, a corpse's, a container's) that uses it where it
@@ -1654,11 +1925,11 @@ After `PLAN-workshop-edit-items.md` (its "Code-held references" section). `Terra
 in C#, so the Workshop can't edit it and has to treat what it names as code-held.
 - A `Terrain.jsonl` table and codec, a Guid beside the key, `TerrainRegistry` filled from content, mods replacing by
   Guid as they do an aura.
-- Its aura and contact references become schema `Reference` fields, so terrain leaves `ICodeHeldReferences` and the
-  Workshop's Cascade can disable it.
-- A Terrain tab from a `ContentTableDescription`: the first new table on the editing machinery, so the first test of
-  the template beyond Actions and Auras.
-- Checks: `ContentManifestExporter` output loads to the same world fingerprint; change lava's burn in the Workshop and
+- Its aura and contact references become schema `Reference` fields, so terrain stops being "can't be disabled here
+  (code)" in the disable dialog and the Workshop's Cascade can disable it.
+- A Terrain tab on the editing machinery (IMPLEMENTATION-NOTES "Workshop content editing", "Adding an editing tab").
+- Checks: a master Terrain table written from today's C# definitions (`GameContent.WriteMaster`'s way) loads to the
+  same world fingerprint; change lava's burn in the Workshop and
   see it in the game; disabling the lava aura lists lava as a content dependent, not code.
 
 #### Blueprints as content
@@ -2703,6 +2974,30 @@ corpse/container split (`EntityInteractionView.IsContainer`).
 - Which label: a corpse is a dead creature (`DeadComponent` without a `ContainerComponent` of its own); decide whether a
   destroyed shop or chest reads as a container ("Take All") -- the window kind is `ContainerWindowKind.Loot` for all of them.
 
+#### Footprint borders for the selected target and the player
+
+Asked 2026-11-13. A large entity's bounds are hard to read: a 3x3 player's sprite doesn't show where its footprint ends,
+and the selection's ground mark (`MapGroundMark`, an ellipse `MapGroundRing` draws under what stands there) says where an
+entity is, not how much of the map it takes up. Draw a border around the whole footprint -- one rectangle around the
+square the entity occupies, never a border per tile -- for:
+- **the selected target** (the inspected or marked entity, what `MapGameOverlay` names as the selection's ground mark
+  today), and
+- **the player**, always, so growing or shrinking shows at once.
+How:
+- The footprint is the entity's position and size as the map draws it (`MapDrawOrder`'s footprint, the same rectangle
+  targeting resolves against), so the border can never disagree with what a shape or a Dodge treats as the entity.
+- Drawn where the ground mark is drawn -- after the terrain image, before the walls' tops and the row walk -- so what
+  stands in front covers it as it covers the ring; or in the tile overlay (`MapOverlayTexels`) if an edge-only outline
+  fits its per-tile washes and rings. Decide between the two on how it looks with a 1x1 entity, where the border must not
+  crowd the tile.
+- Colour and thickness from `CombatTargetPalette` (or the game's palette): the player's distinct from a selected
+  target's, and a selected hostile's distinct from a friendly's if the selection colours already differ. Decide whether
+  the ellipse stays (it reads as "standing here") or the border replaces it for a selection.
+- Tests: the border's rectangle for 1x1, 2x2 and 3x3 at positions around the map edge equals the footprint; the player's
+  border follows a size change the same frame.
+- In-game check: select a goblin and see a border around its one tile; make the player 3x3 and see the border around all
+  nine tiles, moving with them; select a Huge creature and see its whole footprint outlined.
+
 #### QuickCast mode
 
 A hotbar mode, chosen by the Activation Style setting ("Options menu", Global), where an action is aimed while its key
@@ -3216,6 +3511,20 @@ as if a key were pressed, a ready shape for "Replay by recording input" and "In-
 (Global).
 
 ### Medium Priority
+
+#### Tooltip indicators
+
+A small marker on an element that has a tooltip, for menus and panels where nothing else says one is there (the
+Workshop inspector's rows, settings and option lists, Item Details' lines with more behind them). Never on item grids,
+hotbars, the map or anything else the player hovers anyway: there it is only noise. One UIEngine marker drawn by the
+element that owns the tooltip, opted into per use, never added to every tooltip.
+
+#### Targeting preview: show the distance outside the area
+
+The shape preview (Item Details' Activation section, the Workshop's targeting preview) draws the area and the caster, but
+a shape aimed at a distance (a Line or Circle at the path's end, range 5) shows nothing between the caster and the
+area, so the range is hard to read. Draw a small white dot on each tile between the caster and the area along the aim,
+so the distance reads at a glance. Same drawing in both places, from the one preview.
 
 #### Shop cells greyed by the shop deal rule
 
@@ -3995,16 +4304,6 @@ name into one (dragging a slider). A shared primitive shaped like `UndoRedo` ans
 question: `TextBox` records its edits into it with its own coalescing rule, and later users (Admin Mode
 spawn/apply, inventory rearranging) record theirs.
 
-#### Selectable/copyable read-only text -- move selection out of TextBox into TextWindow
-
-`TextBox`'s selection machinery (hit-testing, double/triple-click, click-drag, Ctrl+A, Ctrl+C) is built
-against `TextWindow`'s wrap/display, not anything editing-specific -- none of it needs a caret or
-typing. Worth moving selection+copy up onto `TextWindow` itself (gated so a plain `TextWindow` never
-shows a caret/accepts input), leaving `TextBox` to extend it with just caret/editing. Investigated
-extending the same idea to `Window.TitleText`: no -- title text is a separate, simpler raw-string
-mechanism not built on `TextWindow` at all; rebuilding it on shared infra to support copying mostly-short
-static labels is a much bigger change for low value.
-
 #### Scroll buttons for narrow content
 
 For narrow scrollable content with no room for a scrollbar (see IMPLEMENTATION-NOTES.md "Scrollbars"), e.g.
@@ -4198,6 +4497,22 @@ would clutter the screen in play live in a UI edit mode, as FFXIV's HUD Layout d
 ## Global
 
 ### High Priority
+
+#### TOP PRIORITY: Investigate the tests that fail on some runs
+
+Seen 2026-11-14: three runs of `Workshop.Tests` with nothing rebuilt between them gave 6, 5 and 0 failures. The five
+named each time are the Debug tab's launch tests (`TheGamesOutput_IsCaptured_WithErrorsMarked`,
+`AGameThatExitsWithAnErrorCode_SaysSoInTheStatus`, `ExtraArguments_ComeAfterTheTargetsOwn_ForThatLaunchOnly`,
+`TheNextGame_AfterTheFirstEnded_GetsAFreshSession`, `AfterTheGameExits_IsGameRunningIsFalse_AndPlayStartsAnotherOne`);
+the sixth of the first run wasn't recorded.
+- Find what they wait on: each starts a real process and reads its output and exit, so a fixed wait, a race between the
+  exit and the last output line, or two tests sharing a port, log file or `Log/workshop-game-output-*.log` would fail
+  only sometimes. Check whether they run in parallel with each other or with other tests (`[DoNotParallelize]`).
+- Run the suite many times in a loop (and the five alone) to get a failure rate before and after, and record the
+  messages and stack traces of each failure.
+- Fix the cause, never a longer timeout or a retry; a test that can't be made deterministic waits on an event the code
+  raises, not on time.
+- Then do the same for `Tests` (none seen failing yet) so an unfiltered run is trusted again.
 
 #### Remove XNA from Game and Presentation, starting with a colour wrapper
 
@@ -4529,11 +4844,34 @@ filterable by component, with an editable component view.
 
 #### Localization
 
-All text is English string literals in code and in blueprint/item definitions (`DisplayText` formats
-it but doesn't look it up). Nothing to translate yet, but retrofitting is expensive once content grows,
-and mods will add text too.
+All text is English string literals in code and in content (`DisplayText` formats it but doesn't look
+it up). Nothing to translate yet, but retrofitting is expensive once content grows, and mods will add
+text too. This covers every player-facing string in the game, wherever it comes from -- not a feature
+of the Workshop's item editing.
 - Player-facing text goes through a key → string table per language, with English as the fallback.
   Blueprint names, descriptions, item text, UI labels and notifications refer to keys.
+- **Every source of text, one mechanism.** Content tables (actions, items, auras, area markers and
+  anything later made content: terrain, blueprints), code-held definitions until they become content,
+  text the game builds (`ActivationBlockerText`, `ToggleText`, `ActivationMenuLabels`, tooltips, Item
+  Details, cursor messages, the Error and refusal lines a player sees), notifications, achievements,
+  window titles and labels in Presentation. The mechanism (the text type, tables, lookup, formatting,
+  pseudolocalization) is the engine's, in `Cadence/` (Engine for tables and formatting, UIEngine for
+  drawing), so another game takes it unchanged; the game supplies only its strings.
+- **Content schemas say which text is player-facing**: a `ContentFieldKind` of its own (or a flag on
+  `Text`) for a localized field, so the codec, the schema validation and the Workshop know a name or
+  description from an internal string. A record's line keeps its English source; the key is derived
+  from the record's Guid and the field's path, so it never needs writing by hand and survives a rename.
+- **String tables are content layers**: master's per language, a mod's (adding its own keys and
+  overriding a built-in's), read through `ContentLayers` like any table, with failures carrying layer,
+  file and line. Decide whether a save layer may hold any (a crafted definition's name is generated and
+  likely stays untranslated, as crawler names do).
+- **The Workshop:** every localized field in every editing tab (not only Items) shows its English
+  source editable and each language's state (translated, missing, stale -- the source changed since
+  the translation); a language switch previews the tab in that language; missing and stale strings
+  go to the Error List as warnings. Decide whether the Workshop's own UI is localized (likely not:
+  it's a developer tool).
+- **Fonts:** the shipped fonts' glyph coverage per language (FontStashSharp falls back per glyph only
+  if given fallback fonts), and right-to-left layout if a language needs it.
 - Formatting with named arguments and plural rules ("1 goblin", "3 goblins", and languages with more
   than two forms), and number formatting per culture.
 - Mods ship their own tables and can override a built-in key.
