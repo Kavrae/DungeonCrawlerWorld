@@ -3,6 +3,7 @@ using SpriteFormat;
 using UIEngine.Bootstrap;
 using UIEngine.UI;
 using UIEngine.UI.ColorPalettes;
+using UIEngine.UI.Filtering;
 
 namespace Workshop.Sprites;
 
@@ -13,6 +14,12 @@ namespace Workshop.Sprites;
 /// top-level windows in the Base layer: the entries (a sortable ListView, a problem glyph on any entry with one) on the left, the
 /// sheet (SpriteSheetView, with a choice of sheet when an entry draws from several) in the middle, and the details on the right --
 /// a summary, the placement preview (SpritePlacementPreview, with its footprint) and the link preview (SpriteLinkPreview).
+/// </para>
+/// <para>
+/// The entries are narrowed as a browser's records are: a search box by name, the filter button beside it and its chips
+/// under it (SpriteEntryFilters: Show only Has problems, Kind any of Options, Linked set, Wall), kept for the user under the
+/// tab's title (WorkshopTabContext.BrowserFilters). The title counts what is listed while either narrows it; the selected
+/// entry stays in the sheet and details while the list hides it, and its row is selected again once listed.
 /// </para>
 /// <para>
 /// What is wrong with an entry (SpriteEntryView.Problems) goes into the Error List through Problems, which the host adds to its
@@ -41,12 +48,30 @@ public sealed class SpritesTab : IIdeTab
 
     private static readonly string[] FootprintOptions = ["1x1", "2x2", "3x3"];
 
+    private const float SearchBoxHeight = 26f;
+    private const float SearchGap = 4f;
+    private const float FilterButtonPadding = 14f;
+    private const float MaximumChipsHeight = 400f;
+    private const string FilterButtonTooltip = "Show only the entries that match: checked choices under one heading combine as the heading says, and every heading must hold";
+
+    private static readonly int SearchDebounceFrames = Engine.Utilities.GameTiming.FramesForSeconds(0.3f);
+
     private readonly UiEngineContext _uiEngine;
     private readonly IReadOnlyList<SpriteEntryView> _entries;
     private readonly SpriteCellDrawer _drawer;
+    private readonly Dictionary<SpriteEntryView, ListViewRow> _rowsByEntry;
+    private readonly DebouncedTextFilter _searchFilter = new(SearchDebounceFrames);
+    private List<SpriteEntryView> _searchedEntries = [];
+
+    /// <summary>The entries' filter, made the first time the tab opens (with the choices this user last had checked) and kept while the IDE runs.</summary>
+    private ListFilter<SpriteEntryView>? _filter;
 
     private WorkshopTabContext _context = null!;
     private Window _entriesWindow = null!;
+    private TextBox _searchBox = null!;
+    private ListFilterButton _filterButton = null!;
+    private ListFilterChips _filterChips = null!;
+    private float _filterButtonWidth;
     private ListView _entriesList = null!;
     private Window _sheetWindow = null!;
     private DropdownField _sheetChoice = null!;
@@ -64,6 +89,7 @@ public sealed class SpritesTab : IIdeTab
         _uiEngine = uiEngine;
         _entries = entries;
         _drawer = new SpriteCellDrawer(uiEngine.SpriteSheetService, sheetExists);
+        _rowsByEntry = entries.ToDictionary<SpriteEntryView, SpriteEntryView, ListViewRow>(entry => entry, RowOf, ReferenceEqualityComparer.Instance);
         Problems =
         [
             .. entries.SelectMany(entry => entry.Problems.Select(problem => new WorkshopProblem(problem.Severity, problem.Description, ManifestSource)
@@ -100,12 +126,22 @@ public sealed class SpritesTab : IIdeTab
     {
         _context = context;
         var (entriesBounds, sheetBounds, detailsBounds) = Columns(area);
+        var filter = _filter ??= CreateFilter(context);
 
         _entriesWindow = CreateWindow(entriesBounds, $"Sprites ({_entries.Count})");
-        _entriesList = CreateChild<ListView>(_entriesWindow, Vector2.Zero, _entriesWindow.ContentSize, showBorder: false);
+        BuildSearchRow(filter);
+        _entriesList = CreateChild<ListView>(_entriesWindow, new Vector2(0, ListTop()), ListSize(), showBorder: false);
         _entriesList.SetColumns([new ListViewColumn("Name", 180), new ListViewColumn("Kind", 75), new ListViewColumn("Cells", 45)], showIconColumn: true);
-        _entriesList.SetRows([.. _entries.Select(RowOf)]);
-        _entriesList.SelectionChanged += row => Select(row?.Tag as SpriteEntryView);
+        _entriesList.SelectionChanged += row =>
+        {
+            if (row?.Tag is SpriteEntryView entry)
+            {
+                Select(entry);
+            }
+        };
+        _filterChips.Resized += _ => LayOutList();
+        _isOpen = true;
+        RefreshRows();
 
         _sheetWindow = CreateWindow(sheetBounds, "Sheet");
         _sheetChoice = CreateChild<DropdownField>(_sheetWindow, Vector2.Zero, new Vector2(_sheetWindow.ContentSize.X, FieldHeight), showBorder: true);
@@ -130,17 +166,135 @@ public sealed class SpritesTab : IIdeTab
         _linkPreview = CreateChild<SpriteLinkPreview>(_detailsWindow, new Vector2(0, y), new Vector2(width, LinkPreviewHeight), showBorder: true);
         _linkPreview.Configure(_drawer);
 
-        _isOpen = true;
-        var toSelect = _selected ?? _entries.FirstOrDefault();
-        _entriesList.Select(_entriesList.RowsInDisplayOrder.FirstOrDefault(row => ReferenceEquals(row.Tag, toSelect)));
+        var toSelect = _selected ?? _entriesList.RowsInDisplayOrder.FirstOrDefault()?.Tag as SpriteEntryView ?? _entries.FirstOrDefault();
+        SelectListedRow(toSelect);
         Select(toSelect);
     }
+
+    public void Update(GameTime gameTime)
+    {
+        if (_isOpen && _searchFilter.Update(_searchBox.OriginalText))
+        {
+            RefreshRows();
+        }
+    }
+
+    /// <summary>The filter over SpriteEntryFilters.Groups, checking what this user last had checked here; every change is kept and lists the entries again.</summary>
+    private ListFilter<SpriteEntryView> CreateFilter(WorkshopTabContext context)
+    {
+        var filter = new ListFilter<SpriteEntryView>(SpriteEntryFilters.Groups);
+        var savedIds = context.BrowserFilters?.CheckedIdsFor(TabTitle) ?? [];
+        filter.Selection.SetCheckedIds(savedIds);
+        if (filter.Selection.CheckedCount != savedIds.Count)
+        {
+            context.BrowserFilters?.Save(TabTitle, filter.Selection.CheckedIds());
+        }
+
+        filter.Selection.Changed += selection =>
+        {
+            _context.BrowserFilters?.Save(TabTitle, selection.CheckedIds());
+            if (_isOpen)
+            {
+                RefreshRows();
+            }
+        };
+        var font = _uiEngine.FontService.GetFont(UIEngine.UI.Chrome.FontChrome.DefaultFontSize);
+        _filterButtonWidth = font.MeasureString($"{ListFilterButton.DefaultLabel} ({filter.Choices.Count})").X + FilterButtonPadding;
+        return filter;
+    }
+
+    /// <summary>The search box and the filter button over the entries, and the filter's chips under them.</summary>
+    private void BuildSearchRow(ListFilter<SpriteEntryView> filter)
+    {
+        var elementPool = _uiEngine.ElementPoolService;
+        _searchBox = elementPool.CreateElement<TextBox>(_entriesWindow, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = SearchBoxSize(), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = false },
+            Content = new ElementContentOptions { ContentColor = WindowPalette.EditableControlBackground },
+            Text = new TextOptions { TextColor = WindowPalette.BodyTextColor },
+        });
+        _searchBox.GhostText = "Search sprites";
+        _searchBox.GhostTextColor = WindowPalette.GhostTextOnLightColor;
+        _searchBox.SetText(_searchFilter.AppliedText);
+        _entriesWindow.AddChild(_searchBox);
+
+        _filterButton = elementPool.CreateElement<ListFilterButton>(_entriesWindow, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = FilterButtonPosition(), Size = new Vector2(_filterButtonWidth, SearchBoxHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = false },
+        });
+        _filterButton.Configure(new ListFilterMenuSource<SpriteEntryView>(filter, () => _searchedEntries));
+        _filterButton.TooltipText = FilterButtonTooltip;
+        _entriesWindow.AddChild(_filterButton);
+
+        var chipsWidth = _entriesWindow.ContentSize.X;
+        _filterChips = elementPool.CreateElement<ListFilterChips>(_entriesWindow, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, SearchBoxHeight + SearchGap), Size = new Vector2(chipsWidth, 0), MaximumSize = new Vector2(chipsWidth, MaximumChipsHeight), DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+        });
+        _filterChips.ContentPadding = Vector2.Zero;
+        _filterChips.Configure(new ListFilterMenuSource<SpriteEntryView>(filter, () => _searchedEntries), chipsWidth);
+        _entriesWindow.AddChild(_filterChips);
+    }
+
+    /// <summary>
+    /// The entries the search and the filter leave, the title counting them while either narrows the list. The selected
+    /// entry stays selected and shown in the details while the list hides it, and its row is selected again once listed.
+    /// </summary>
+    private void RefreshRows()
+    {
+        var filter = _filter!;
+        _searchedEntries = SpriteEntryFilters.Search(_entries, _searchFilter.AppliedText);
+        List<SpriteEntryView> listed = [.. _searchedEntries.Where(filter.Matches)];
+        _entriesList.SetRows([.. listed.Select(entry => _rowsByEntry[entry])]);
+        var isNarrowed = _searchFilter.AppliedText.Length > 0 || !filter.Selection.IsEmpty;
+        _entriesWindow.TitleText = isNarrowed ? $"Sprites ({listed.Count} of {_entries.Count})" : $"Sprites ({_entries.Count})";
+        SelectListedRow(_selected);
+        _filterButton.RefreshMenu();
+    }
+
+    /// <summary>Selects entry's row when the list holds it.</summary>
+    private void SelectListedRow(SpriteEntryView? entry)
+    {
+        if (entry is not null && _entriesList.RowsInDisplayOrder.Contains(_rowsByEntry[entry]))
+        {
+            _entriesList.Select(_rowsByEntry[entry]);
+        }
+    }
+
+    /// <summary>The entries under the search box, and under the chips while any show, taking the rest of the window's height.</summary>
+    private void LayOutList()
+    {
+        if (!_isOpen)
+        {
+            return;
+        }
+
+        _entriesList.SetMaximumSize(ListSize());
+        _entriesList.SetBounds(new Vector2(0, ListTop()), ListSize());
+    }
+
+    private float ListTop() => SearchBoxHeight + SearchGap + (_filterChips.IsVisible ? _filterChips.CurrentSize.Y + SearchGap : 0f);
+
+    private Vector2 ListSize() => new(_entriesWindow.ContentSize.X, Math.Max(SearchBoxHeight, _entriesWindow.ContentSize.Y - ListTop()));
+
+    private Vector2 SearchBoxSize() => new(_entriesWindow.ContentSize.X - _filterButtonWidth - SearchGap, SearchBoxHeight);
+
+    private Vector2 FilterButtonPosition() => new(_entriesWindow.ContentSize.X - _filterButtonWidth, 0);
 
     public void Resize(Rectangle area)
     {
         var (entriesBounds, sheetBounds, detailsBounds) = Columns(area);
         Place(_entriesWindow, entriesBounds);
-        _entriesList.SetSize(_entriesWindow.ContentSize);
+        _searchBox.SetMaximumSize(SearchBoxSize());
+        _searchBox.SetSize(SearchBoxSize());
+        _filterButton.SetRelativePosition(FilterButtonPosition());
+        _filterChips.SetMaximumSize(new Vector2(_entriesWindow.ContentSize.X, MaximumChipsHeight));
+        _filterChips.SetWidth(_entriesWindow.ContentSize.X);
+        LayOutList();
         Place(_sheetWindow, sheetBounds);
         _sheetChoice.SetSize(new Vector2(_sheetWindow.ContentSize.X, FieldHeight));
         _sheetView.SetSize(SheetViewSize(_sheetWindow));
@@ -168,7 +322,7 @@ public sealed class SpritesTab : IIdeTab
             return false;
         }
 
-        _entriesList.Select(_entriesList.RowsInDisplayOrder.FirstOrDefault(row => ReferenceEquals(row.Tag, entry)));
+        SelectListedRow(entry);
         Select(entry);
         return true;
     }

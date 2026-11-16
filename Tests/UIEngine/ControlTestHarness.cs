@@ -27,6 +27,8 @@ internal sealed class ControlTestHarness
         Pool.RegisterFactory(() => new ListEditor(TestElementServices.For(Pool, fontService)));
         Pool.RegisterFactory(() => new SplitPane(TestElementServices.For(Pool, fontService)));
         Pool.RegisterFactory(() => new ModalDialog(TestElementServices.For(Pool, fontService)));
+        Pool.RegisterFactory(() => new global::UIEngine.UI.Filtering.ListFilterButton(TestElementServices.For(Pool, fontService), Dropdowns));
+        Pool.RegisterFactory(() => new global::UIEngine.UI.Filtering.ListFilterChips(TestElementServices.For(Pool, fontService)));
         Input = new UiInputController(Layers, ScreenSize, new PointerState(), [], [], Dropdowns) { StartTextInput = static () => { }, StopTextInput = static () => { } };
     }
 

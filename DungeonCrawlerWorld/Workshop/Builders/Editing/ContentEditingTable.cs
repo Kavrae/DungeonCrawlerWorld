@@ -216,6 +216,37 @@ public sealed class ContentEditingTable<T> : IContentEditingTable
     /// <summary>Whether the deletion of a deleted record (IsDeleted) is unsaved: a save would still write it.</summary>
     public bool IsDeletionUnsaved(ContentRecordDocument<T> document) => _removed.ContainsKey(document.Id) && IsRemovalUnsaved(document);
 
+    /// <summary>
+    /// What is true of document now: the one rule its row's markers and the browser's filters both read. A deleted
+    /// record is Deleted, Unsaved while its deletion is, HasErrors while the last save kept the deletion back, and
+    /// DiffersFromMaster while master holds it; a mod's record is none of these.
+    /// </summary>
+    public ContentRecordState StateOf(ContentRecordDocument<T> document)
+    {
+        if (document.IsReadOnly)
+        {
+            return ContentRecordState.None;
+        }
+
+        if (IsDeleted(document.Id))
+        {
+            return ContentRecordState.Deleted
+                | (IsDeletionUnsaved(document) ? ContentRecordState.Unsaved : ContentRecordState.None)
+                | (document.SaveProblems.Count > 0 ? ContentRecordState.HasErrors : ContentRecordState.None)
+                | (document.IsInMaster ? ContentRecordState.DiffersFromMaster : ContentRecordState.None);
+        }
+
+        return (document.IsChanged ? ContentRecordState.Unsaved : ContentRecordState.None)
+            | (document.IsDraft || !document.IsInMaster ? ContentRecordState.Draft : ContentRecordState.None)
+            | (document.IsDisabled ? ContentRecordState.Disabled : ContentRecordState.None)
+            | (document.HasErrors || document.SaveProblems.Count > 0 ? ContentRecordState.HasErrors : ContentRecordState.None)
+            | (DiffersFromMaster(document) ? ContentRecordState.DiffersFromMaster : ContentRecordState.None);
+    }
+
+    /// <summary>Whether a publish would write document, held and not deleted: any value differing from master's line, or -- master not holding it -- anything saved or changed.</summary>
+    private bool DiffersFromMaster(ContentRecordDocument<T> document) =>
+        document.DifferencesFromMaster(_workspace.Types) is { } differences ? differences.Count > 0 : document.IsChanged || document.IsDraft;
+
     public string NameOf(Guid id) => (Find(id) ?? _removed.GetValueOrDefault(id)) is { } document ? _nameOf(document.LastGood) : ContentGuid.Format(id);
 
     public string JsonOf(Guid id) => _documentsById[id].Record.Json;
@@ -770,15 +801,15 @@ public sealed class ContentEditingTable<T> : IContentEditingTable
     {
         foreach (var document in _documents)
         {
-            if (document.IsReadOnly || PublishChangeOf(document) is not { } change)
+            if (!StateOf(document).HasFlag(ContentRecordState.DiffersFromMaster))
             {
                 continue;
             }
 
-            yield return new WorkshopPendingRecord(_nameOf(document.LastGood), TableName, change, PublishStateOf(document)) { TabTitle = TabTitle, RecordId = document.Id };
+            yield return new WorkshopPendingRecord(_nameOf(document.LastGood), TableName, PublishChangeOf(document), PublishStateOf(document)) { TabTitle = TabTitle, RecordId = document.Id };
         }
 
-        foreach (var document in _removed.Values.Where(document => document.IsInMaster))
+        foreach (var document in _removed.Values.Where(document => IsDeleted(document.Id) && StateOf(document).HasFlag(ContentRecordState.DiffersFromMaster)))
         {
             var state = !document.IsRemovalSaved ? "Unsaved"
                 : document.SaveProblems.Count > 0 ? $"Kept in drafts: {document.SaveProblems[0]}"
@@ -787,17 +818,12 @@ public sealed class ContentEditingTable<T> : IContentEditingTable
         }
     }
 
-    /// <summary>What publishing document would change in master: "New", "Disabled"/"Enabled" and the count of other changes; null when it is as master has it.</summary>
-    private string? PublishChangeOf(ContentRecordDocument<T> document)
+    /// <summary>What publishing document, which differs from master, would change there: "New", "Disabled"/"Enabled" and the count of other changes.</summary>
+    private string PublishChangeOf(ContentRecordDocument<T> document)
     {
         if (document.DifferencesFromMaster(_workspace.Types) is not { } differences)
         {
-            return document.IsChanged || document.IsDraft ? "New" : null;
-        }
-
-        if (differences.Count == 0)
-        {
-            return null;
+            return "New";
         }
 
         var parts = new List<string>(2);

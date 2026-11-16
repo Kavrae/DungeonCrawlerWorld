@@ -4,6 +4,7 @@ using Builders.References;
 using Game.Content;
 using Game.Modules.Actions;
 using Presentation.UI.Details;
+using UIEngine.UI.Filtering;
 using Workshop;
 
 namespace Builders.Actions;
@@ -38,6 +39,22 @@ public sealed class ActionsTab : RecordBrowserTab<ActionDefinition, ActionDetail
 
     protected override IReadOnlyList<RecordBrowserSection<ActionDefinition>> BuildSections(string search) =>
         ActionBrowserSections.Build(ActionCatalog.Definitions, search, _workspace.Session.Catalogs.GameplayTags);
+
+    /// <summary>Timing (FreeCast, Immediate, Delayed: any of), then Source.</summary>
+    protected override IReadOnlyList<ListFilterGroup<ActionDefinition>> FilterGroups =>
+    [
+        RecordFilterGroups.OneOf<ActionDefinition>("timing", "Timing", TimingsInOrder, static action => TimingOf(action)),
+        RecordFilterGroups.Source(ActionCatalog.Definitions, action => _workspace.Origins.ModOf(GameContent.ActionsTable, action.Id)),
+    ];
+
+    private static readonly IReadOnlyList<string> TimingsInOrder = ["FreeCast", "Immediate", "Delayed"];
+
+    private static string TimingOf(ActionDefinition action) => action.Activator.Timing.Category switch
+    {
+        ActionTimingCategory.FreeCast => "FreeCast",
+        ActionTimingCategory.Delayed => "Delayed",
+        _ => "Immediate",
+    };
 
     protected override RecordRowAppearance AppearanceOf(ActionDefinition action) => new(_workspace.Origins.Label(GameContent.ActionsTable, action.Id, action.Name), action.SpriteName, action.Glyph, action.GlyphColor);
 

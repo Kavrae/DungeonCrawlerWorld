@@ -3574,6 +3574,52 @@ users report). Every editing tab compares its records with master's line, at the
   (`ShowComparedDefinition`; Item Details' better/worse), master never. It refills on every selection and edit, and is
   reopened when the tab's windows are rebuilt.
 
+### Workshop browser filters (2026-11-15)
+
+`PLAN-workshop-browser-filters.md`, Phases 0-4 (its decisions and what other tools do are there). Every browser --
+Items, Actions, Auras, Map and Sprites -- narrows its list by a filter menu beside its search box.
+
+- **Engine-side, for the inventory too.** The model and both controls are UIEngine's (`Cadence/UIEngine/UI/Filtering`)
+  and name no IDE or game concept, so the game's inventory can host them under `GridControl` unchanged:
+  `ListFilter<TItem>` (groups, a `ListFilterSelection` -- a bit per choice, a version, a change event, its ids out and
+  in -- matching, and the count a flip of one choice would leave), `ListFilterButton` (opens the menu in the shared
+  `Dropdown`, a tab stop keyed like `MultiChoiceField`) and `ListFilterChips` (the checked choices as a wrapping row,
+  Clear last, no height while empty, its height through `SetSize` so the host hears `Resized`). The model holds no
+  items: the host passes its list whenever it asks (`ListFilterMenuSource<TItem>`), and matching one item allocates
+  nothing. Only `BrowserFilterStore` (`Cadence/Workshop/Browsing`) is the IDE's.
+- **Two kinds of group.** Show only is all-of: independent facts, each checked one must hold (Draft + Has errors is the
+  drafts with errors). A value group (Source, an item's Type, an action's Timing, a map record's Kind, a sprite's Kind)
+  is any-of: a record has one value, so any checked one matches. Across groups, and with the search, everything must
+  hold. The heading says which ("Show only", "Source: any of").
+- **One state rule for markers and filters.** `ContentEditingTable.StateOf` works out a record's `ContentRecordState`
+  (Unsaved, Draft, Disabled, Deleted, HasErrors, DiffersFromMaster) in one place; the row's markers
+  (`ContentRecordMarkers`), the Show only choices (`ContentRecordFilters`) and the To Publish list read it, so "the rows
+  marked [Draft]" and "the Draft filter" can never list different records. A mod's record is none of them.
+- **Counts, never per frame.** Each unchecked row shows how many records checking it would leave, over what the search
+  left; a checked row shows none, and a choice that would leave nothing is disabled unless checked. Counts are worked
+  out when the menu opens and after each change -- the open `Dropdown` takes the new rows on its next Update
+  (`ReplaceOptions`), keeping its place, scroll and highlight, so no row is rebuilt inside its own click.
+- **Never typed.** The checked choices are the one state; the menu and the chips are two views of it, and the search
+  box holds only what was typed. A choice's id (`show:draft`, `source:mod:ExampleMod`) is only its name in the saved
+  file.
+- **The browser** (`RecordBrowserTab`) lists what `BuildSections(search)` returns less what the filter removes,
+  dropping emptied headings, so no tab's sections builder changed; the title reads "Items (4 of 13)" while anything
+  narrows it, and a list narrowed to nothing says what narrowed it with Clear filters. A selected record the list
+  doesn't hold stays selected and is pinned above the list, "(not in the filtered list)" -- one rule for a filter, the
+  search, an edit, New and navigation. The Sprites tab's `ListView` keeps the hidden entry in its sheet and details and
+  reselects its row once listed instead.
+- **Kept per user, per game, per tab**: `%LOCALAPPDATA%/Cadence/Workshop/<game>/browser-filters.json`, the host's
+  `WorkshopHostOptions.BrowserFiltersPath` through the shell to each tab's `WorkshopTabContext.BrowserFilters`, written
+  on every change; a saved id the tab no longer offers (a mod removed) is dropped and the file rewritten as the tab first
+  opens. The search text isn't kept.
+- **Giving a tab a group.** Override `RecordBrowserTab.FilterGroups` (an editing tab: `TableFilterGroups`, between Show
+  only and Source). Value groups come from `RecordFilterGroups.OneOf` over the same rule the browser groups by
+  (`ItemBrowserSections.HeadingOf`), never a copy; Source from `RecordFilterGroups.Source` with the tab's own way of
+  naming a record's mod. A predicate is built once per group and must not allocate. A tab that lists its records some
+  other way hosts `ListFilterButton` and `ListFilterChips` itself, as the Sprites tab does (`SpriteEntryFilters`), and
+  listens to the chips' `Resized` only once whatever sits under them exists: checked choices lay the chips out as they
+  are added.
+
 ### Component writes: write scopes and struct updaters (2026-11-03, scopes 2026-11-06)
 
 - **Two forms, one notification.** Every in-place write is versioned and observed, whichever form makes it.

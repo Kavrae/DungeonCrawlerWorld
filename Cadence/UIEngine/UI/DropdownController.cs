@@ -85,6 +85,15 @@ public sealed class DropdownController(ElementPoolService elementPoolService, Ui
         Place(options, markedIndex);
     }
 
+    /// <summary>Replaces the options of the list opened under owner on the next Update, keeping its place, scroll and highlight; nothing when no list of owner's is open.</summary>
+    public void ReplaceOptions(Element owner, IReadOnlyList<DropdownOption> options)
+    {
+        if (IsOpen && ReferenceEquals(Owner, owner))
+        {
+            _menu.ReplaceOptions(options);
+        }
+    }
+
     private void Place(IReadOnlyList<DropdownOption> options, int markedIndex)
     {
         var menuSize = _menu.MeasureSize(options, _minimumWidth, _maximumHeight); // The exact size Show below will apply -- computed ahead of it so flip/clamp below sees the real footprint, not Vector2.Zero.

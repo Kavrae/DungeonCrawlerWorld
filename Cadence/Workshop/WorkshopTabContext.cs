@@ -22,6 +22,9 @@ public sealed class WorkshopTabContext(UiEngineContext uiEngine, UiLayerStack la
     /// <summary>Opens another tab with one of its records selected -- what a link to another table's record asks for.</summary>
     public TabNavigator Navigator { get; } = navigator;
 
+    /// <summary>Where the tab keeps its browser's checked filters for this user, under its title; null keeps them for the run only.</summary>
+    public Browsing.BrowserFilterStore? BrowserFilters { get; init; }
+
     /// <summary>Shows what names the record the tab has selected in the bottom panel's Used By, and what it names in Uses.</summary>
     public void ShowRelatedRecords(IReadOnlyList<WorkshopRelatedRecord> usedBy, IReadOnlyList<WorkshopRelatedRecord> uses) => bottomPanel.ShowRelatedRecords(usedBy, uses);
 

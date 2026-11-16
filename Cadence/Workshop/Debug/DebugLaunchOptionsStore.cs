@@ -18,14 +18,12 @@ public sealed class DebugLaunchOptionsStore(string filePath, string? legacyFileP
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, Converters = { new JsonStringEnumConverter() } };
 
     /// <summary>%LOCALAPPDATA%\Cadence\Workshop\debug-launch-options.json, for a game that names no file of its own.</summary>
-    public static string DefaultFilePath { get; } = Path.Combine(WorkshopSettingsDirectory, "debug-launch-options.json");
-
-    private static string WorkshopSettingsDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Cadence", "Workshop");
+    public static string DefaultFilePath { get; } = Path.Combine(WorkshopUserSettings.Folder, "debug-launch-options.json");
 
     public string FilePath { get; } = filePath;
 
     /// <summary>%LOCALAPPDATA%\Cadence\Workshop\gameName\launch-options.json: one game's options, apart from every other game's.</summary>
-    public static string FilePathForGame(string gameName) => Path.Combine(WorkshopSettingsDirectory, gameName, "launch-options.json");
+    public static string FilePathForGame(string gameName) => WorkshopUserSettings.FilePathForGame(gameName, "launch-options.json");
 
     public DebugLaunchOptions Load()
     {

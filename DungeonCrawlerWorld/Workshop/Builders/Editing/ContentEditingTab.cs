@@ -6,6 +6,7 @@ using Microsoft.Xna.Framework;
 using UIEngine.UI;
 using UIEngine.UI.ColorPalettes;
 using UIEngine.UI.Fields;
+using UIEngine.UI.Filtering;
 using Workshop;
 using Workshop.Editing;
 
@@ -38,11 +39,6 @@ public abstract class ContentEditingTab<T, TPreview> : RecordBrowserTab<ContentR
     where TPreview : Window
 {
     private const string LastGoodSuffix = " (last good)";
-    private const string ChangedMarker = " *";
-    private const string DraftMarker = " [Draft]";
-    private const string DisabledMarker = " [Disabled]";
-    private const string DeletedMarker = " [Deleted]";
-    private const string ErrorMarker = " (!)";
     private const string CopySuffix = " copy";
     private const float DisableDialogWidth = 560f;
     private const float DisableDialogHeight = 280f;
@@ -100,6 +96,17 @@ public abstract class ContentEditingTab<T, TPreview> : RecordBrowserTab<ContentR
     protected override string? NewRecordTooltip => $"Make a new {SingularName}: Ctrl+S saves it as a draft, Publish puts it in master";
 
     protected override IEnumerable<ContentRecordDocument<T>> AllRecords => [.. Table.Documents, .. Table.DeletedDocuments];
+
+    /// <summary>Show only, the table's own groups (TableFilterGroups), then Source: master and each mod that supplied a record of the table.</summary>
+    protected override IReadOnlyList<ListFilterGroup<ContentRecordDocument<T>>> FilterGroups =>
+    [
+        ContentRecordFilters.ShowOnly(Table),
+        .. TableFilterGroups,
+        RecordFilterGroups.Source(AllRecords, static document => document.ModName),
+    ];
+
+    /// <summary>The table's own filter groups, between Show only and Source -- none by default.</summary>
+    protected virtual IReadOnlyList<ListFilterGroup<ContentRecordDocument<T>>> TableFilterGroups => [];
 
     protected override Guid IdOf(ContentRecordDocument<T> document) => document.Id;
 
@@ -183,21 +190,15 @@ public abstract class ContentEditingTab<T, TPreview> : RecordBrowserTab<ContentR
     protected override RecordRowAppearance AppearanceOf(ContentRecordDocument<T> document)
     {
         var look = LookOf(document.LastGood);
-        if (Table.IsDeleted(document.Id))
+        var state = Table.StateOf(document);
+        var replacementName = document.Replacement is { } replacement ? Table.NameOf(replacement) : null;
+        return look with
         {
-            var deleted = LabelOf(document, look.Name)
-                + (Table.IsDeletionUnsaved(document) ? ChangedMarker : string.Empty)
-                + DeletedMarker
-                + (document.SaveProblems.Count > 0 ? ErrorMarker : string.Empty);
-            return look with { Name = deleted, IsDimmed = true };
-        }
-
-        var name = LabelOf(document, look.Name)
-            + (document.IsChanged ? ChangedMarker : string.Empty)
-            + (document.IsDisabled ? DisabledMarker + (document.Replacement is { } replacement ? $" -> {Table.NameOf(replacement)}" : string.Empty) : string.Empty)
-            + (document.IsDraft || !document.IsInMaster ? DraftMarker : string.Empty)
-            + (document.HasErrors || document.SaveProblems.Count > 0 ? ErrorMarker : string.Empty);
-        return look with { Name = name, IsDimmed = document.IsDisabled };
+            Name = LabelOf(document, look.Name),
+            Markers = ContentRecordMarkers.Of(state, replacementName),
+            MarkersMeaning = ContentRecordMarkers.MeaningOf(state, replacementName),
+            IsDimmed = ContentRecordMarkers.IsDimmed(state),
+        };
     }
 
     /// <summary>name, then the mod that supplied the record ("[ExampleMod]"), or the mod the game loads in its place ("[replaced by ExampleMod]").</summary>

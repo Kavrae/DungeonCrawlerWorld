@@ -7,6 +7,7 @@ using Game.Modules.Actions;
 using Game.Modules.Inventory;
 using Presentation.UI.Inventory;
 using UIEngine.UI;
+using UIEngine.UI.Filtering;
 using Workshop.Editing;
 
 namespace Builders.Items;
@@ -36,6 +37,10 @@ public sealed class ItemsTab(ContentEditingTable<ItemDefinition> table, ContentE
 
     protected override IReadOnlyList<RecordBrowserSection<ItemDefinition>> SectionsOf(IEnumerable<ItemDefinition> definitions, string search) =>
         ItemBrowserSections.Build(definitions, search, Workspace.Session.Catalogs.GameplayTags);
+
+    /// <summary>Type: the browser's own headings (ItemBrowserSections.HeadingOf), any of them.</summary>
+    protected override IReadOnlyList<ListFilterGroup<ContentRecordDocument<ItemDefinition>>> TableFilterGroups =>
+        [RecordFilterGroups.OneOf<ContentRecordDocument<ItemDefinition>>("type", "Type", ItemBrowserSections.HeadingsInOrder, static document => ItemBrowserSections.HeadingOf(document.LastGood))];
 
     protected override RecordRowAppearance LookOf(ItemDefinition item) => new(item.Name, item.SpriteName, item.Glyph, item.GlyphColor);
 

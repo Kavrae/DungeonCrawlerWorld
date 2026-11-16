@@ -49,6 +49,13 @@ public sealed class Dropdown(ElementServices services)
 
     private int _highlightedIndex = -1;
 
+    /// <summary>Options to replace the open list's with on the next Update (ReplaceOptions), so no row is rebuilt inside the click that asked.</summary>
+    private IReadOnlyList<DropdownOption>? _pendingOptions;
+
+    private float _shownMinimumWidth;
+    private float _shownMaximumHeight = float.MaxValue;
+    private int _shownMarkedIndex = -1;
+
     /// <summary>Shows a submenu the way the menu itself was opened (DropdownController), so it lands edge-aware at the same place. Set by the controller; while unset, a submenu opens at this menu's own top-left.</summary>
     public Action<IReadOnlyList<DropdownOption>>? OpenSubmenu { get; set; }
 
@@ -69,6 +76,36 @@ public sealed class Dropdown(ElementServices services)
     /// <param name="markedIndex">The option drawn with the marker and highlighted first, or -1 for none.</param>
     public void Show(Vector2 topLeft, IReadOnlyList<DropdownOption> options, float minimumWidth = 0f, float maximumHeight = float.MaxValue, int markedIndex = -1)
     {
+        BuildRows(topLeft, options, minimumWidth, maximumHeight, markedIndex);
+        ScrollTo(Vector2.Zero);
+        SetHighlight(IsChoosable(markedIndex) ? markedIndex : -1);
+        IsVisible = true;
+    }
+
+    /// <summary>Replaces the open list's options on the next Update, keeping its place, its scroll and its highlight -- options reread after one was chosen (a count beside each). Nothing while it is hidden.</summary>
+    public void ReplaceOptions(IReadOnlyList<DropdownOption> options)
+    {
+        if (IsVisible)
+        {
+            _pendingOptions = options;
+        }
+    }
+
+    private void ApplyReplacedOptions(IReadOnlyList<DropdownOption> options)
+    {
+        var scroll = ScrollOffset;
+        var highlightedIndex = _highlightedIndex;
+        BuildRows(AbsolutePosition, options, _shownMinimumWidth, _shownMaximumHeight, _shownMarkedIndex);
+        ScrollTo(scroll);
+        SetHighlight(IsChoosable(highlightedIndex) ? highlightedIndex : -1);
+    }
+
+    private void BuildRows(Vector2 topLeft, IReadOnlyList<DropdownOption> options, float minimumWidth, float maximumHeight, int markedIndex)
+    {
+        _pendingOptions = null;
+        _shownMinimumWidth = minimumWidth;
+        _shownMaximumHeight = maximumHeight;
+        _shownMarkedIndex = markedIndex;
         ElementPoolService.CloseAllChildren(this);
         _optionRows.Clear();
         _options.Clear();
@@ -103,10 +140,6 @@ public sealed class Dropdown(ElementServices services)
             _optionRows.Add(AddOptionRow(option, optionIndex, width, y, isMarked: optionIndex == markedIndex));
             y += RowHeight;
         }
-
-        ScrollTo(Vector2.Zero);
-        SetHighlight(IsChoosable(markedIndex) ? markedIndex : -1);
-        IsVisible = true;
     }
 
     private void AddHeaderRow(DropdownOption option, float width, float y)
@@ -238,11 +271,17 @@ public sealed class Dropdown(ElementServices services)
     {
         IsVisible = false;
         _pendingSubmenu = null;
+        _pendingOptions = null;
     }
 
     public override void Update(GameTime gameTime)
     {
         base.Update(gameTime);
+
+        if (_pendingOptions is { } replacedOptions)
+        {
+            ApplyReplacedOptions(replacedOptions);
+        }
 
         for (var rowIndex = 0; rowIndex < _optionRows.Count; rowIndex++)
         {

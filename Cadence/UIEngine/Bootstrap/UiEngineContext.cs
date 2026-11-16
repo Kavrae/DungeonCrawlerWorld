@@ -3,6 +3,8 @@ using UIEngine.Fonts;
 using UIEngine.Rendering;
 using UIEngine.UI;
 using UIEngine.UI.Content;
+using UIEngine.UI.Fields;
+using UIEngine.UI.Filtering;
 
 namespace UIEngine.Bootstrap;
 
@@ -66,9 +68,11 @@ public sealed class UiEngineContext(
         pool.RegisterFactory(() => new ToggleList(services));
         pool.RegisterFactory(() => new TextDivider(services));
         pool.RegisterFactory(() => new FractionBarElement(services));
-        pool.RegisterFactory(() => new UI.Fields.SearchableChoiceField(services, contextMenuController.Dropdowns, cursorTextContent, contextMenuController));
-        pool.RegisterFactory(() => new UI.Fields.MultiChoiceField(services, contextMenuController.Dropdowns));
-        pool.RegisterFactory(() => new UI.Fields.FieldRow(services));
-        pool.RegisterFactory(() => new UI.Fields.FieldSectionHeader(services));
+        pool.RegisterFactory(() => new SearchableChoiceField(services, contextMenuController.Dropdowns, cursorTextContent, contextMenuController));
+        pool.RegisterFactory(() => new MultiChoiceField(services, contextMenuController.Dropdowns));
+        pool.RegisterFactory(() => new ListFilterButton(services, contextMenuController.Dropdowns));
+        pool.RegisterFactory(() => new ListFilterChips(services));
+        pool.RegisterFactory(() => new FieldRow(services));
+        pool.RegisterFactory(() => new FieldSectionHeader(services));
     }
 }

@@ -7,6 +7,7 @@ using Microsoft.Xna.Framework;
 using UIEngine.Input;
 using UIEngine.UI;
 using UIEngine.UI.ColorPalettes;
+using UIEngine.UI.Filtering;
 using Workshop;
 
 namespace Builders.MapAreas;
@@ -77,6 +78,31 @@ public sealed class MapTab : RecordBrowserTab<MapContentRecord, MapPreviewWindow
 
     protected override IReadOnlyList<RecordBrowserSection<MapContentRecord>> BuildSections(string search) =>
         MapBrowserSections.Build(Records, Areas, search, _workspace.Session.Catalogs.GameplayTags);
+
+    /// <summary>Kind (Area, Palette, Placement: any of), then Source.</summary>
+    protected override IReadOnlyList<ListFilterGroup<MapContentRecord>> FilterGroups =>
+    [
+        RecordFilterGroups.OneOf<MapContentRecord>("kind", "Kind", KindsInOrder, static record => KindOf(record)),
+        RecordFilterGroups.Source(Records, record => Origins.ModOf(TableOf(record), record.Id)),
+    ];
+
+    private static readonly IReadOnlyList<string> KindsInOrder = ["Area", "Palette", "Placement"];
+
+    private static string KindOf(MapContentRecord record) => record.Kind switch
+    {
+        ContentRecordKind.Area => "Area",
+        ContentRecordKind.AreaPalette => "Palette",
+        _ => "Placement",
+    };
+
+    private static string TableOf(MapContentRecord record) => record.Kind switch
+    {
+        ContentRecordKind.Area => GameContent.AreasTable,
+        ContentRecordKind.AreaPalette => GameContent.AreaPalettesTable,
+        _ => GameContent.AreaPlacementsTable,
+    };
+
+    protected override string RecordsNoun => "map records";
 
     protected override RecordRowAppearance AppearanceOf(MapContentRecord record) => record.Kind switch
     {

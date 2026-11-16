@@ -4,6 +4,7 @@ using Builders.References;
 using Game.Content;
 using Game.Modules.Auras;
 using Presentation.UI.Details;
+using UIEngine.UI.Filtering;
 using Workshop;
 
 namespace Builders.Auras;
@@ -50,6 +51,9 @@ public sealed class AurasTab : RecordBrowserTab<AuraDefinition, AuraDetailsWindo
 
     protected override IReadOnlyList<RecordBrowserSection<AuraDefinition>> BuildSections(string search) =>
         AuraBrowserSections.Build(AllRecords, _workspace.References, search, _workspace.Session.Catalogs.GameplayTags);
+
+    protected override IReadOnlyList<ListFilterGroup<AuraDefinition>> FilterGroups =>
+        [RecordFilterGroups.Source(AllRecords, aura => _workspace.Origins.ModOf(GameContent.AurasTable, aura.Id))];
 
     protected override RecordRowAppearance AppearanceOf(AuraDefinition aura) => new(_workspace.Origins.Label(GameContent.AurasTable, aura.Id, aura.Name), null, GlowSwatchGlyph, aura.GlowColor);
 

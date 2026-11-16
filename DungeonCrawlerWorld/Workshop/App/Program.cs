@@ -49,6 +49,7 @@ var options = new WorkshopHostOptions(
 {
     GameOutputLogPath = gameOutputLogPath,
     DebugLaunchOptionsPath = DebugLaunchOptionsStore.FilePathForGame("DungeonCrawlerWorld"),
+    BrowserFiltersPath = Workshop.Browsing.BrowserFilterStore.FilePathForGame("DungeonCrawlerWorld"),
     DiagnosticsReportDirectories = [Path.Combine(RepositoryPaths.LogDirectory(), "diagnostics"), Path.Combine(RepositoryPaths.LogDirectory(), "phase-benchmarks")],
 };
 

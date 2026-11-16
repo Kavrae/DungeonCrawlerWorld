@@ -131,54 +131,6 @@ authored. This is the editing half of its plan's former Phases 5 and 6. The read
   the Items tab's icon without restarting; undo a fill-empty-slots in one step; quit with unsaved changes and be asked;
   build and run with the WinForms project gone.
 
-#### Workshop: filters on the editing tabs
-
-A browser (`RecordBrowserTab`) narrows its list only by the search box, which matches a name or a tag's display name
-(`RecordBrowserSections.Matches`). There is no way to see only the drafts, only what has errors, or only what differs
-from master. Add filters to every browser, in the 340-wide column it has.
-
-How other tools keep it compact (researched 2026-11-15):
-- **VS Code's settings editor:** a funnel button inside the right end of the search box opens a menu; a pick puts a
-  token in the search text (`@modified`), tokens combine, and typing one does the same. No extra row at all.
-- **Unity's Project window:** the same idea -- `t:` and `l:` tokens in the search text, with menu buttons beside the box
-  that write them.
-- **Unreal's Content Browser:** a Filters button in the search bar opens a menu; each enabled filter becomes a pill
-  that is clicked on and off without being removed; filters are kept per user; a custom filter is a saved search string.
-- **GitHub / GitLab issues:** typed `key:value` qualifiers with suggestions as you type, plus menus. Reported
-  problems: several kinds of control that apply and clear differently, and (GitLab 8.16) the mouse and the keyboard
-  doing different things to the same filter.
-- **Design-system guidance** (PatternFly, Ripple, Learning Equality): what is applied stays visible as chips with one
-  Clear; an option that would match nothing is hidden or dimmed.
-
-Proposed shape, to confirm when this is planned:
-- **A funnel button inside the search box**, showing the number of filters on. It opens the shared `Dropdown` with
-  checkbox rows under headings, each with the count it would leave: State (Unsaved, Draft, Differs from master, Has
-  errors, Disabled, Deleted), Source (master, each mod), and whatever the tab adds (an item's activator, an action's
-  timing). Tags are picked through "Workshop tag selection: a popup with checkboxes" (Medium).
-- **Applied filters are chips in one wrapping row under the search box**, each removed by its own x, with Clear at the
-  end. The row has no height while nothing is on.
-- Within a heading the choices are either-or; across headings, and with the search text, all must hold.
-- One path: decide whether a filter can also be typed (`is:draft`). If so the menu writes the token and the chip is
-  the token, never a second state beside it.
-- A list a filter empties says which filters hide everything and offers Clear. Decide what happens to a selected
-  record a filter hides (likely: it stays selected and shown in the inspector, and the browser says it is hidden).
-- Kept per user and per tab beside the Debug tab's launch options (`%LOCALAPPDATA%/Cadence/Workshop`), never in content.
-- Built in `Cadence/Workshop` over `RecordBrowserTab`, so read-only tabs (Map, Sprites) get it with their own choices.
-- "Differs from master" comes from `PLAN-workshop-draft-to-master-compare.md` (its `ContentRecordDiff`), which
-  deferred the filter to here. "Workshop testing selection" (Medium) adds its filter here; "Workshop bulk editing"'s
-  field-value queries (Medium) extend this bar rather than adding another; "Workshop Error List: columns, severity
-  and filters" (Medium) should reuse the same controls.
-Checks: Draft + Has errors lists exactly the drafts with errors; the count on the funnel and the chips agree; Clear
-restores the list; search text and filters combine; the filters are still on after restarting the Workshop.
-
-Sources: [VS Code settings filters](https://code.visualstudio.com/docs/configure/settings),
-[Unity classic search](https://docs.unity3d.com/6/Documentation/Manual/search-classic.html),
-[Unreal filters and collections](https://dev.epicgames.com/documentation/en-us/unreal-engine/filters-and-collections-in-unreal-engine),
-[GitHub issue filtering](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/filtering-and-searching-issues-and-pull-requests),
-[GitLab filter usability issue](https://gitlab.com/gitlab-org/gitlab-ce/issues/26749),
-[PatternFly filters](https://v4-archive.patternfly.org/v4/design-guidelines/usage-and-behavior/filters),
-[Learning Equality filters](https://design-system.learningequality.org/filters).
-
 #### Aura glow clarity: an FFXIV-style aura look, or a soft bleed with a highlight line; lights as their own effect
 
 Today the glow stops hard at the last tile an aura reaches: `SpriteUber.fx`'s `GlowAt` lights nothing whose own tile has no
@@ -247,6 +199,19 @@ change. Tests drive the real `Update` with synthetic `KeyboardState`s (dropdown 
 stale focused view, a hotkey letter while a ListView has focus, Escape with a context menu open over a menu window),
 then an in-game and in-Workshop check of every hotkey and the TextBox/DropdownField/ListView keys.
 
+#### Workshop: symbols for a browser row's markers
+
+A browser row (`RecordBrowserTab.CreateRecordRow`) reads its record's state as text after the name --
+`[Disabled][Replaced][Draft][Deleted]`, with " *" for unsaved and " (!)" for errors (`ContentRecordMarkers.Of`) -- and
+the name is cut short with "..." to keep them on the one line, so the markers spend most of the 340-wide column on a
+disabled, replaced draft. Draw each as a small symbol instead (a glyph or a sprite through `SpriteOrGlyphRenderer`,
+coloured by meaning, and still greyed with the row), each with its own text in a tooltip: Disabled, Draft, Deleted,
+Unsaved, Has errors, and Replaced naming the replacement ("Replaced by Scroll of Healing"). Today one tooltip over the
+whole row lists every marker's meaning (`ContentRecordMarkers.MeaningOf`); a symbol each needs a tooltip per symbol,
+so the row's markers become elements of their own (or one element hit-testing its symbols). The same symbols could
+stand beside the browser filter menu's Show only choices (`ContentRecordFilters`); the state they read stays
+`ContentRecordState`, the one rule the filters share.
+
 ### Medium Priority
 
 #### Workshop: plan editing mods, layer by layer
@@ -289,11 +254,17 @@ with one popup made for picking tags:
 - Each tag's declared description as its tooltip (`GameplayTagRegistry` holds them).
 - Look for other places that pick several things from a long list (sprite names, references, flags enums, the Debug
   tab's launch options) and, if any would use it, make it a generic UIEngine control rather than a tag picker.
+- **Update the browser filters to use it** (`Cadence/UIEngine/UI/Filtering`, IMPLEMENTATION-NOTES "Workshop browser filters", which left tags out until this popup
+  exists): add a Tags group to every tab whose records have tags, picked through this popup from the filter menu
+  rather than as rows in it, each chosen tag a chip like any other filter and kept per user with them. Parent-aware
+  (`GameplayTagSet.Has`): choosing `Damage` lists everything with any `Damage.*` tag. Decide whether several chosen
+  tags mean any of them or all of them (likely all, as the Show only choices do), and whether the search box stops
+  matching tag display names once tags can be filtered directly.
 
 #### Workshop testing selection: start the game with chosen items and actions
 
 Any item or action in the Workshop can be marked as part of the testing selection (a checkbox on its browser row, and
-a "Testing selection" filter to see them together). Starting the game from the Workshop (Play, Build and Play) gives the
+a "Testing selection" choice in the browser filter menu's Show only group, `ContentRecordFilters.ShowOnly`, to see them together). Starting the game from the Workshop (Play, Build and Play) gives the
 player every selected item -- in its inventory, one stack each -- and every selected action -- granted and bound to a
 free hotbar slot where there is one -- so a change can be tried at once without Admin Mode or finding the thing.
 - The selection is per user, kept with the Debug tab's launch options (`%LOCALAPPDATA%/Cadence/Workshop`), never in
@@ -322,11 +293,61 @@ and log so every edit is an ordinary one -- checked, previewed, undone, saved an
   selected records differ in shape (likely: only paths every selected record has are editable).
 - **Copy and paste** of a field, an object or a list entry (an effect entry) between records, checked against the
   target's schema at the path it lands on; a paste that doesn't fit is refused with the reason.
-- **Queries:** filter a tab by field values (a path, a comparison, a value -- "fire damage above 10 and no cooldown"),
-  combined, with saved queries per user; the browser and the table both show the result.
+- **Queries** are "Workshop filters: field-value queries" and "Workshop filters: saved filter sets" (below); the
+  table shows whatever the browser's filters leave.
 - Decide whether a table copies out as tab-separated text for a spreadsheet, and whether pasting one back is an edit.
 Checks: raise every potion's heal by 20% in one step and undo it; paste an effect entry from one item into another;
 a query finds exactly the items the shipped content says it should.
+
+#### Workshop filters: saved filter sets
+
+Builds on the browser filters (`Cadence/UIEngine/UI/Filtering`, IMPLEMENTATION-NOTES "Workshop browser filters"). A browser's filters are remembered per tab, but only the set that is on
+now: going from "drafts with errors" to "ExampleMod's potions" and back is re-checking each choice. Let a set be
+named and brought back in one pick.
+- **Save:** "Save filters as..." at the end of the filter menu names the checked choices as they are (and the search
+  text -- decide; Unreal's custom filter is a saved search string). Saving under a name already used asks before
+  replacing it.
+- **Use:** saved sets are listed under their own heading in the filter menu; picking one replaces what is checked
+  (never adds to it), as one step. Decide how the chips show it: likely the set's own choices as ordinary chips, so
+  what is applied is always visible and each can still be removed, with the set's name shown only while the checked
+  choices are exactly its own.
+- **Manage:** rename and delete from the menu; a set naming a choice the tab no longer offers (a mod that is gone)
+  says so and applies the rest.
+- Per user, per game and per tab, in the file the filters are already kept in (`BrowserFilterStore`), never in
+  content. Decide whether a set can be offered on every tab that has its choices (a "Needs attention" set of Draft +
+  Has errors).
+- The naming, listing and applying are UIEngine's with the rest of the filter controls (`Cadence/UIEngine/UI/Filtering`),
+  so a game's inventory could offer saved sets too; where they are stored stays the host's.
+Checks: save two sets and switch between them in one pick each; they are there after restarting the Workshop; a set
+whose mod was removed applies what is left and says what it dropped.
+
+#### Workshop filters: field-value queries
+
+Builds on the browser filters (`Cadence/UIEngine/UI/Filtering`), which filter by a fixed list of choices. Filter a tab by what its records
+hold: a field path, a comparison and a value -- "fire damage above 10 and no cooldown" -- combined with each other,
+with the fixed choices and with the search text. This is the query half of "Workshop bulk editing" (above); the
+table view there shows whatever these leave.
+- **Fields come from the schema** (`ContentSchema`, as the inspector's rows do): a path picked from the record type's
+  fields, nested and polymorphic ones included; comparisons by the field's kind (number: above, below, between;
+  text: contains; reference, enum, tag: is, is not; any: is set, is default). Decide what a path through a list
+  means (likely: any element matches) and through a polymorphic slot (only records holding that type).
+- **Read from the record's JSON as it is now**, unsaved edits included, a missing key reading as its default --
+  `ContentRecordDiff`'s rules -- so a query agrees with what the inspector shows. Evaluated when the query or a
+  record changes, never per frame.
+- **One state, however it is entered.** Decide between a builder (rows of path, comparison, value, in a popup from
+  the filter menu) and typed text (`damage.fire > 10`), or both. If typed, the text is the query and its chip is
+  that text -- never a second state beside it -- with suggestions as it is typed and a mistyped query refused with
+  where it went wrong, not silently matching nothing. The filters plan chose not to type its fixed choices
+  (Decision 2); revisit that here so there is one rule for both.
+- **The search box, if queries are typed:** it is one line about 220 px wide today. Decide whether it becomes a
+  multi-line `TextBox` that grows and shrinks with its text (the list below taking what is left, as it does for the
+  chip row), or whether a query is typed in a popup of its own and shown as a chip.
+- A query is a filter like any other: a chip, counted on the filter button, cleared by Clear, kept per user and tab,
+  and saved in a set by "Workshop filters: saved filter sets".
+- Engine side in `Cadence/UIEngine/UI/Filtering` as a choice whose predicate is built from a query; what a path
+  means (the content schema) is the Workshop's.
+Checks: a query finds exactly the items the shipped content says it should; it combines with Draft and with the
+search text; an edit that makes a record match adds it to the list at once; a mistyped query says what is wrong.
 
 #### Content inheritance: records derived from a parent
 
@@ -419,7 +440,7 @@ the Workshop inspector's read-only rows (the Id, a value of the wrong kind), whi
 Model it on Visual Studio's Error List:
 - Resizable columns (drag a header edge), the widths kept per user with the other Workshop settings.
 - A severity column with an icon, so a warning and an error read apart at a glance.
-- Filter toggles for errors and warnings, each showing its count ("2 Errors", "5 Warnings"), and a search box.
+- Filter toggles for errors and warnings, each showing its count ("2 Errors", "5 Warnings"), and a search box -- the browsers' own filter controls (`ListFilterButton`/`ListFilterChips` over a `ListFilter<WorkshopProblem>`, `Cadence/UIEngine/UI/Filtering`) rather than new ones.
 - Pairs with "IDE Error List: error codes" (Low), which adds the Code column and a filter by code.
 
 #### Investigate and benchmark contiguous Multi pool storage with a large stat modifier count
@@ -700,6 +721,36 @@ already updates. Investigate the pros and cons of adding events.
   would get simpler or cheaper. The outcome may be "keep polling".
 
 ### Low Priority
+
+#### Workshop: keys for a browser's list and its inspector
+
+A browser's list (`RecordBrowserTab`: Items, Actions, Auras, Map) is driven only by the mouse. While the list (or the
+browser window) has focus:
+- **Up and Down** select the previous or next listed record, skipping headings, the pinned row's place and the
+  empty-list row, bringing it into view (`Element.BringIntoView`) and showing it everywhere a click does
+  (`RecordBrowserTab.Select`); Page Up/Down move the same way a page at a time.
+- **Delete** deletes the selected record -- exactly what its Delete command does (`ContentEditingTab.CommandsFor`:
+  refused, with the command's own reason on the status line, where Delete is disabled; Restore is not Delete's key).
+- **Insert** makes a new record, exactly as the New button does (`CreateNewRecord`), in a tab that has one.
+
+While the selected record's inspector has focus:
+- **Home** focuses its first control that takes focus (`Element.IsTabStop`), **End** its last, each brought into view
+  -- the inspector's own order, the one Tab walks.
+
+None of these reaches the list while a text box, the filter menu or another dropdown has the key: a focused text box
+keeps Home, End, Delete and Insert for its caret, and the open `Dropdown` already takes Up/Down first. A key is a
+gesture for a command that already exists, so it goes through that command's own path and "can I" answer, never a
+copy ("Whenever several inputs can do one action, they share one path"). The Sprites tab's entry list and `ListView`
+should take Up/Down the same way, through one shared rule rather than a copy per list.
+
+#### Workshop: tidy the Controls tab
+
+`ControlGalleryTab` (`Cadence/Workshop`) grew one row per control as each was added, in no order, and is hard to read:
+captions and controls share colours that blend into the panel, and sizes vary row to row. Add every UIEngine control
+it is missing (`Toggle`, `ToggleList`, `TextBox`, `GridControl`, `Folder`, `FractionBarElement`, `TextDivider`,
+`Tooltip` on hover, the context menu, and the filter controls as each lands), sort them into headed groups (text
+entry, choice, lists, layout, feedback, filtering), give every caption and control readable colours from
+`WindowPalette` and one row height and caption width, and keep each wired to the status line.
 
 #### Partial module replacement
 

@@ -91,7 +91,8 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
     /// <param name="tabSet">The host's tabs, laid out from the strip's left; the shell adds the Debug tab, pinned at the right beside the commands.</param>
     /// <param name="debugLaunchOptionsPath">Where the Debug tab keeps this user's launch options.</param>
     /// <param name="diagnosticsReportDirectories">The folders the Debug tab's Reports section lists.</param>
-    public WorkshopShell(UiEngineContext uiEngine, WorkshopTabSet tabSet, GameLauncher gameLauncher, IReadOnlyList<WorkshopCommand> hostCommands, string? gameOutputLogPath, Vector2 screenSize, string debugLaunchOptionsPath, IReadOnlyList<string> diagnosticsReportDirectories)
+    /// <param name="browserFilters">Where every tab keeps its browser's checked filters; null keeps them for the run only.</param>
+    public WorkshopShell(UiEngineContext uiEngine, WorkshopTabSet tabSet, GameLauncher gameLauncher, IReadOnlyList<WorkshopCommand> hostCommands, string? gameOutputLogPath, Vector2 screenSize, string debugLaunchOptionsPath, IReadOnlyList<string> diagnosticsReportDirectories, Browsing.BrowserFilterStore? browserFilters = null)
     {
         _uiEngine = uiEngine;
         _gameLauncher = gameLauncher;
@@ -121,7 +122,7 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
         _tabNavigator = new TabNavigator(tabs, OpenTab, this);
         _loadProblems = tabSet.LoadProblems;
         _bottomPanel = BuildBottomPanel(tabSet.LoadProblems);
-        _tabContexts = [.. tabs.Select(_ => new WorkshopTabContext(uiEngine, _layers, _contextMenuController, this, _inputController, _tabNavigator, _bottomPanel))];
+        _tabContexts = [.. tabs.Select(_ => new WorkshopTabContext(uiEngine, _layers, _contextMenuController, this, _inputController, _tabNavigator, _bottomPanel) { BrowserFilters = browserFilters })];
 
         LayOutTabStrip();
         LayOutBottomPanel();

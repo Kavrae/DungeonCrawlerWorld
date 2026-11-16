@@ -28,6 +28,9 @@ public sealed record WorkshopHostOptions(
     /// <summary>Where the Debug tab keeps this user's launch options -- outside the repository.</summary>
     public string DebugLaunchOptionsPath { get; init; } = Debug.DebugLaunchOptionsStore.DefaultFilePath;
 
+    /// <summary>Where the browsers keep this user's checked filters, per tab -- outside the repository; null keeps them for the run only.</summary>
+    public string? BrowserFiltersPath { get; init; }
+
     /// <summary>The folders the Debug tab's Reports section lists diagnostics reports and saved benchmark runs from.</summary>
     public IReadOnlyList<string> DiagnosticsReportDirectories { get; init; } = [];
 }
@@ -114,7 +117,7 @@ public sealed class WorkshopHost : Microsoft.Xna.Framework.Game
     {
         _uiEngine = UiEngineBootstrapper.Build(GraphicsDevice, _options.FontsDirectory, _options.SpritesheetsDirectory, _options.SpriteManifestFileName, _options.EffectsDirectory);
         var tabSet = _options.CreateTabs(_uiEngine);
-        _shell = new WorkshopShell(_uiEngine, tabSet, new GameLauncher(_options.GameLaunchTarget), _options.Commands, _options.GameOutputLogPath, ClientSize(), _options.DebugLaunchOptionsPath, _options.DiagnosticsReportDirectories);
+        _shell = new WorkshopShell(_uiEngine, tabSet, new GameLauncher(_options.GameLaunchTarget), _options.Commands, _options.GameOutputLogPath, ClientSize(), _options.DebugLaunchOptionsPath, _options.DiagnosticsReportDirectories, _options.BrowserFiltersPath is { } browserFiltersPath ? new Browsing.BrowserFilterStore(browserFiltersPath) : null);
 
         Window.Title = _options.WindowTitle;
         Window.ClientSizeChanged += OnClientSizeChanged;

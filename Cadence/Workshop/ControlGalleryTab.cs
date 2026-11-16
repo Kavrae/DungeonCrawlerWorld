@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using UIEngine.UI;
 using UIEngine.UI.ColorPalettes;
 using UIEngine.UI.Fields;
+using UIEngine.UI.Filtering;
 
 namespace Workshop;
 
@@ -88,6 +89,8 @@ public sealed class ControlGalleryTab : IIdeTab
         var multi = Add<MultiChoiceField>(ref y, "Multi-choice", new Vector2(FieldWidth, RowHeight), field => field.Configure(Shapes, [1, 3]));
         multi.ChoicesChanged += indices => context.Status.Show($"Multi-choice: {string.Join(", ", indices.Select(index => Shapes[index]))}");
 
+        AddListFilter(ref y);
+
         var section = Add<FieldSectionHeader>(ref y, "Section header", new Vector2(FieldWidth + 80, RowHeight), header => header.Configure("Effects (2)", depth: 1, isCollapsible: true, isExpanded: true, ["Add", "^", "v", "X"], [true, false, true, true]));
         section.ExpandToggled += isExpanded => context.Status.Show($"Section header: {(isExpanded ? "open" : "closed")}");
         section.ButtonClicked += index => context.Status.Show($"Section header: button {index}");
@@ -98,6 +101,69 @@ public sealed class ControlGalleryTab : IIdeTab
         var problemRow = AddFieldRow(ref y, new FieldEditorDescription("Shape", FieldValueKind.Choice) { Depth = 2, Choices = Shapes }, FieldValue.OfChoice(0));
         problemRow.SetProblem("A problem with this value", isWarning: false);
     }
+
+    /// <summary>Room under the filter button for its chips, wrapped onto three lines at most.</summary>
+    private const float ChipsSpace = ListFilterChips.ChipHeight * 3 + ListFilterChips.ChipGap * 2;
+
+    /// <summary>A filter button over a plain list of fruit, the way a game's inventory would host one: the matching fruit listed beside it and the checked choices as chips under it.</summary>
+    private void AddListFilter(ref float y)
+    {
+        var filter = new ListFilter<GalleryFruit>(
+        [
+            new ListFilterGroup<GalleryFruit>("show", "Show only", ListFilterGroupMatch.AllOf,
+            [
+                new ListFilterChoice<GalleryFruit>("show:ripe", "Ripe", static fruit => fruit.IsRipe),
+                new ListFilterChoice<GalleryFruit>("show:bruised", "Bruised", static fruit => fruit.IsBruised),
+            ]),
+            new ListFilterGroup<GalleryFruit>("kind", "Kind: any of", ListFilterGroupMatch.AnyOf,
+            [
+                new ListFilterChoice<GalleryFruit>("kind:apple", "Apple", static fruit => fruit.Kind == "Apple"),
+                new ListFilterChoice<GalleryFruit>("kind:pear", "Pear", static fruit => fruit.Kind == "Pear"),
+                new ListFilterChoice<GalleryFruit>("kind:plum", "Plum", static fruit => fruit.Kind == "Plum"),
+            ]),
+        ]);
+
+        var button = Add<ListFilterButton>(ref y, "List filter", new Vector2(90, RowHeight), control => control.Configure(new ListFilterMenuSource<GalleryFruit>(filter, () => GalleryBasket)));
+        var listed = _context.UiEngine.ElementPoolService.CreateElement<TextWindow>(_window, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(LabelWidth + 100, button.RelativePosition.Y), Size = new Vector2(FieldWidth + 120, RowHeight), DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+            Text = new TextOptions { Text = ListedFruit(filter), TextColor = WindowPalette.BodyTextColor },
+        });
+        _window.AddChild(listed);
+
+        var chipsWidth = FieldWidth;
+        var chips = _context.UiEngine.ElementPoolService.CreateElement<ListFilterChips>(_window, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(LabelWidth, y), Size = new Vector2(chipsWidth, 0), MaximumSize = new Vector2(chipsWidth, ChipsSpace), DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+        });
+        chips.ContentPadding = Vector2.Zero;
+        chips.Configure(new ListFilterMenuSource<GalleryFruit>(filter, () => GalleryBasket), chipsWidth);
+        _window.AddChild(chips);
+        y += ChipsSpace + RowGap;
+
+        filter.Selection.Changed += selection =>
+        {
+            listed.UpdateText(ListedFruit(filter));
+            _context.Status.Show($"List filter: {string.Join(", ", selection.CheckedIds())}");
+        };
+    }
+
+    private static string ListedFruit(ListFilter<GalleryFruit> filter) =>
+        $"{filter.CountMatching(GalleryBasket)} of {GalleryBasket.Length}: {string.Join(", ", GalleryBasket.Where(filter.Matches).Select(fruit => fruit.Name))}";
+
+    private readonly record struct GalleryFruit(string Name, string Kind, bool IsRipe, bool IsBruised);
+
+    private static readonly GalleryFruit[] GalleryBasket =
+    [
+        new("Red apple", "Apple", IsRipe: true, IsBruised: false),
+        new("Dented apple", "Apple", IsRipe: true, IsBruised: true),
+        new("Green apple", "Apple", IsRipe: false, IsBruised: false),
+        new("Soft pear", "Pear", IsRipe: true, IsBruised: true),
+        new("Hard pear", "Pear", IsRipe: false, IsBruised: false),
+    ];
 
     private FieldRow AddFieldRow(ref float y, FieldEditorDescription description, FieldValue value)
     {

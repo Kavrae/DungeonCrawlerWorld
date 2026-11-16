@@ -4,14 +4,22 @@ using Presentation.UI.Content;
 using UIEngine.UI;
 using UIEngine.UI.ColorPalettes;
 using UIEngine.UI.Fields;
+using UIEngine.UI.Filtering;
 using Workshop;
 
 namespace Builders.Browsing;
 
-/// <summary>How a record's row reads in the browser: its icon and its name, greyed when the record is out of play (disabled).</summary>
+/// <summary>How a record's row reads in the browser: its icon, its name and the markers after it, greyed when the record is out of play (disabled).</summary>
+/// <remarks>The row is one line: a name too long for it is cut short with "...", never the markers.</remarks>
 public readonly record struct RecordRowAppearance(string Name, string? SpriteName, string Glyph, Color GlyphColor)
 {
     public bool IsDimmed { get; init; }
+
+    /// <summary>What follows the name, kept whole whatever the row's width (" * [Draft] (!)"); none by default.</summary>
+    public string Markers { get; init; } = string.Empty;
+
+    /// <summary>What the markers mean, shown in the row's tooltip; null for none.</summary>
+    public string? MarkersMeaning { get; init; }
 }
 
 /// <summary>Something a tab does to one record (Publish, Delete): a button over the inspector and an option on the record's right-click menu, both running Run; Tooltip says what it does, or why it can't.</summary>
@@ -29,6 +37,20 @@ public sealed record RecordViewOption(string Label, string Tooltip, Func<bool> I
 /// first time the tab opens; reopening keeps the selection, the search and the selected row in view; TrySelectRecord
 /// selects one by id, even one the search hides. A tab that makes records (NewRecordLabel) has a button for it right of
 /// the search box, which selects what it made.
+/// <para>
+/// A tab offering filters (FilterGroups) has a filter button at the search box's right end. The list is what the search
+/// left (BuildSections) less what the filters remove, a heading left empty dropped; while either narrows it the title
+/// reads "Items (4 of 13)", and a list narrowed to nothing says why, with Clear filters. The checked choices outlive the
+/// tab's windows: reopened (a session swapped) it keeps every one its groups still offer, and they are kept for the user
+/// between runs under the tab's title (WorkshopTabContext.BrowserFilters), a choice no longer offered (a mod removed)
+/// dropped as the tab first opens. They show as chips between the
+/// search box and the list, which takes whatever height the chips leave.
+/// </para>
+/// <para>
+/// A selected record the list doesn't hold -- a filter checked or the search typed while it is selected, an edit that
+/// stopped it matching, New or navigation to one the list hides -- stays selected and is pinned above the list, reading
+/// "(not in the filtered list)"; once the list holds it again, or another record is selected, the pinned row goes.
+/// </para>
 /// </remarks>
 public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
     where TRecord : class
@@ -41,6 +63,9 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
     private const float RowHeight = 24f;
     private const float RowIconSize = 20f;
     private const float RowTextIndent = 28f;
+
+    /// <summary>Room left beside a row's text so a line that just fits is never wrapped.</summary>
+    private const float RowTextSlack = 4f;
 
     /// <summary>The width every preview row is built to by default -- Item Details' own width beside the player's Inventory window.</summary>
     protected const float DefaultPreviewWidth = 460f;
@@ -64,6 +89,34 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
     private const string InspectorTitle = "Inspector";
 
     private const float NewRecordButtonWidth = 56f;
+
+    /// <summary>Room around the filter button's widest label ("Filter (9)").</summary>
+    private const float FilterButtonPadding = 14f;
+
+    private const string FilterButtonTooltip = "Show only the records that match: checked choices under one heading combine as the heading says, and every heading must hold";
+    private const float EmptyListMessageHeight = 44f;
+    private const float ClearFiltersButtonWidth = 96f;
+
+    private readonly List<TRecord> _searchedRecords = [];
+    private ListFilter<TRecord>? _filter;
+    private ListFilterButton? _filterButton;
+    private ListFilterChips? _filterChips;
+    private float _filterButtonWidth;
+
+    /// <summary>The records the list holds now, the pinned one not counted.</summary>
+    private readonly HashSet<TRecord> _listedRecords = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>The selected record shown above the list because the list doesn't hold it; null while it does.</summary>
+    private TRecord? _pinnedRecord;
+
+    /// <summary>The rows to be built again on the next Update -- a selection that pins or unpins a row, asked from inside a row's own click.</summary>
+    private bool _rowsRebuildRequested;
+
+    private const string PinnedNote = " (not in the filtered list)";
+
+    /// <summary>The tallest the chips may grow, wrapped, before the list under them.</summary>
+    private const float MaximumChipsHeight = 400f;
+    private bool _clearFiltersRequested;
     private const float CommandBarHeight = 26f;
     private const float CommandButtonPadding = 16f;
     private const float CommandButtonGap = 4f;
@@ -176,6 +229,12 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
 
     /// <summary>Makes a new record for the New button, returning it to be selected; null when none was made.</summary>
     protected virtual TRecord? CreateNewRecord() => null;
+
+    /// <summary>The filters the browser offers beside its search box, in menu order; none, the default, for no filter button.</summary>
+    protected virtual IReadOnlyList<ListFilterGroup<TRecord>> FilterGroups => [];
+
+    /// <summary>The tab's records in the plural, lower case, as a list narrowed to nothing names them ("No items match ...").</summary>
+    protected virtual string RecordsNoun => Title.ToLowerInvariant();
 
     /// <summary>What can be done to record: buttons over the inspector (a tab with HasInspector) and its row's right-click menu -- none by default.</summary>
     protected virtual IReadOnlyList<RecordCommand> CommandsFor(TRecord record) => [];
@@ -351,6 +410,7 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
             _selectedRecord = AllRecords.FirstOrDefault(record => IdOf(record) == selectedId);
         }
 
+        BuildFilter();
         BuildBrowser(area);
         BuildInspector(area);
         BuildPreview(area);
@@ -422,9 +482,11 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
         _browserWindow.SetSize(BrowserSize(area));
         _searchBox.SetMaximumSize(SearchBoxSize());
         _searchBox.SetSize(SearchBoxSize());
-        _newRecordButton?.SetRelativePosition(new Vector2(_browserWindow.ContentSize.X - NewRecordButtonWidth, 0));
+        _newRecordButton?.SetRelativePosition(NewRecordButtonPosition());
+        _filterButton?.SetRelativePosition(FilterButtonPosition());
+        _filterChips?.SetWidth(ControlRowsWidth);
         _listWindow.SetMaximumSize(ListSize());
-        _listWindow.SetSize(ListSize());
+        _listWindow.SetBounds(new Vector2(0, ListTop()), ListSize());
         _area = area;
         LayOutInspector(area);
         _previewWindow.SetRelativePosition(PreviewPosition(area));
@@ -445,8 +507,15 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
         OnClosing();
         _isOpen = false;
         _rows.Clear();
+        _searchedRecords.Clear();
         _newRecordButton = null;
         _newRecordRequested = false;
+        _filterButton = null;
+        _filterChips = null;
+        _clearFiltersRequested = false;
+        _rowsRebuildRequested = false;
+        _listedRecords.Clear();
+        _pinnedRecord = null;
         _context.Layers.Remove(UiLayer.Base, _browserWindow);
         _context.Layers.Remove(UiLayer.Base, _previewWindow);
         if (_detailsWindow is { } detailsWindow)
@@ -496,6 +565,12 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
             command();
         }
 
+        if (_clearFiltersRequested)
+        {
+            _clearFiltersRequested = false;
+            _filter?.Selection.Clear();
+        }
+
         if (_newRecordRequested)
         {
             _newRecordRequested = false;
@@ -505,6 +580,13 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
                 Select(created);
                 BringSelectedRowIntoView();
             }
+        }
+
+        if (_rowsRebuildRequested)
+        {
+            _rowsRebuildRequested = false;
+            RebuildRows();
+            BringSelectedRowIntoView();
         }
 
         ArrangeColumns();
@@ -526,7 +608,7 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
 
         _searchBox = elementPool.CreateElement<TextBox>(_browserWindow, new ElementOptions
         {
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = SearchBoxSize(), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(ControlRowsInset, 0), Size = SearchBoxSize(), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = false },
             Content = new ElementContentOptions { ContentColor = WindowPalette.EditableControlBackground },
             Text = new TextOptions { TextColor = WindowPalette.BodyTextColor },
@@ -536,11 +618,34 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
         _searchBox.SetText(_searchFilter.AppliedText);
         _browserWindow.AddChild(_searchBox);
 
+        if (_filter is { } filter)
+        {
+            _filterButton = elementPool.CreateElement<ListFilterButton>(_browserWindow, new ElementOptions
+            {
+                Layout = new ElementLayoutOptions { RelativePosition = FilterButtonPosition(), Size = new Vector2(_filterButtonWidth, SearchBoxHeight), DisplayMode = ElementDisplayMode.Fixed },
+                Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = false },
+            });
+            _filterButton.Configure(new ListFilterMenuSource<TRecord>(filter, () => _searchedRecords));
+            _filterButton.TooltipText = FilterButtonTooltip;
+            _browserWindow.AddChild(_filterButton);
+
+            var chipsWidth = ControlRowsWidth;
+            _filterChips = elementPool.CreateElement<ListFilterChips>(_browserWindow, new ElementOptions
+            {
+                Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+                Layout = new ElementLayoutOptions { RelativePosition = new Vector2(ControlRowsInset, SearchBoxHeight + SearchGap), Size = new Vector2(chipsWidth, 0), MaximumSize = new Vector2(chipsWidth, MaximumChipsHeight), DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
+                Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+            });
+            _filterChips.ContentPadding = Vector2.Zero;
+            _filterChips.Configure(new ListFilterMenuSource<TRecord>(filter, () => _searchedRecords), chipsWidth);
+            _browserWindow.AddChild(_filterChips);
+        }
+
         if (NewRecordLabel is { } newRecordLabel)
         {
             _newRecordButton = elementPool.CreateElement<Button>(_browserWindow, new ElementOptions
             {
-                Layout = new ElementLayoutOptions { RelativePosition = new Vector2(_browserWindow.ContentSize.X - NewRecordButtonWidth, 0), Size = new Vector2(NewRecordButtonWidth, SearchBoxHeight), DisplayMode = ElementDisplayMode.Fixed },
+                Layout = new ElementLayoutOptions { RelativePosition = NewRecordButtonPosition(), Size = new Vector2(NewRecordButtonWidth, SearchBoxHeight), DisplayMode = ElementDisplayMode.Fixed },
                 Text = new TextOptions { Text = newRecordLabel },
             });
             _newRecordButton.TooltipText = NewRecordTooltip;
@@ -551,11 +656,79 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
         _listWindow = elementPool.CreateElement<Window>(_browserWindow, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, SearchBoxHeight + SearchGap), Size = ListSize(), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, ListTop()), Size = ListSize(), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserScrollVertical = true, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
         });
         _browserWindow.AddChild(_listWindow);
+        if (_filterChips is { } chips)
+        {
+            chips.Resized += _ => LayOutList();
+        }
+    }
+
+    /// <summary>The list under the search box, and under the chips while any show, taking the rest of the browser's height.</summary>
+    /// <remarks>Followed only once the list exists: chips checked before the tab opened (saved, or kept through a session swap) lay themselves out as they are added, and the list is first placed under them.</remarks>
+    private void LayOutList()
+    {
+        if (!_isOpen)
+        {
+            return;
+        }
+
+        var position = new Vector2(0, ListTop());
+        if (_listWindow.RelativePosition == position && _listWindow.CurrentSize == ListSize())
+        {
+            return;
+        }
+
+        _listWindow.SetMaximumSize(ListSize());
+        _listWindow.SetBounds(position, ListSize());
+    }
+
+    /// <summary>Where the list starts: under the search box, and under the chips and a gap while any show.</summary>
+    private float ListTop() =>
+        SearchBoxHeight + SearchGap + (_filterChips is { IsVisible: true } chips ? chips.CurrentSize.Y + SearchGap : 0f);
+
+    /// <summary>
+    /// The filter over FilterGroups as the tab offers them now, keeping every choice still offered that was checked --
+    /// on the first open, the ones this user last had checked here (WorkshopTabContext.BrowserFilters); none for a tab
+    /// offering no group.
+    /// </summary>
+    private void BuildFilter()
+    {
+        var checkedIds = _filter?.Selection.CheckedIds() ?? _context.BrowserFilters?.CheckedIdsFor(Title) ?? [];
+        if (_filter is { } previous)
+        {
+            previous.Selection.Changed -= OnFilterChanged;
+        }
+
+        var groups = FilterGroups;
+        _filter = groups.Count == 0 ? null : new ListFilter<TRecord>(groups);
+        if (_filter is not { } filter)
+        {
+            return;
+        }
+
+        filter.Selection.SetCheckedIds(checkedIds);
+        if (filter.Selection.CheckedCount != checkedIds.Count)
+        {
+            _context.BrowserFilters?.Save(Title, filter.Selection.CheckedIds());
+        }
+
+        filter.Selection.Changed += OnFilterChanged;
+        var font = _context.UiEngine.FontService.GetFont(UIEngine.UI.Chrome.FontChrome.DefaultFontSize);
+        _filterButtonWidth = font.MeasureString($"{ListFilterButton.DefaultLabel} ({filter.Choices.Count})").X + FilterButtonPadding;
+    }
+
+    private void OnFilterChanged(ListFilterSelection selection)
+    {
+        _context.BrowserFilters?.Save(Title, selection.CheckedIds());
+        if (_isOpen)
+        {
+            RebuildRows();
+            BringSelectedRowIntoView();
+        }
     }
 
     private void BuildInspector(Rectangle area)
@@ -685,7 +858,22 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
         _rows.Clear();
 
         var rowWidth = _listWindow.ContentSize.X;
-        foreach (var section in BuildSections(_searchFilter.AppliedText))
+        var listedSections = ListedSections(BuildSections(_searchFilter.AppliedText));
+        ShowBrowserTitle();
+        _pinnedRecord = _selectedRecord is { } selected && !_listedRecords.Contains(selected) ? selected : null;
+        if (_pinnedRecord is { } pinned)
+        {
+            var pinnedRow = CreateRecordRow(rowWidth, pinned, isPinned: true);
+            _listWindow.AddChild(pinnedRow);
+            _rows.Add((pinned, pinnedRow));
+        }
+
+        if (_rowsListed == 0 && IsListNarrowed)
+        {
+            AddEmptyListRows(rowWidth);
+        }
+
+        foreach (var section in listedSections)
         {
             var headingSize = new Vector2(rowWidth, RowHeight);
             var headingRow = elementPool.CreateElement<TextWindow>(_listWindow, new ElementOptions
@@ -699,18 +887,118 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
 
             foreach (var record in section.Records)
             {
-                var row = CreateRecordRow(rowWidth, record);
+                var row = CreateRecordRow(rowWidth, record, isPinned: false);
                 _listWindow.AddChild(row);
                 _rows.Add((record, row));
             }
         }
+
+        _filterButton?.RefreshMenu();
     }
 
-    /// <summary>A row container holding the record's icon and its name; a click on any of them reaches the row, which selects the record.</summary>
-    private Window CreateRecordRow(float width, TRecord record)
+    /// <summary>How many records the list holds now.</summary>
+    private int _rowsListed;
+
+    /// <summary>Whether the search or a filter narrows the list.</summary>
+    private bool IsListNarrowed => _searchFilter.AppliedText.Length > 0 || _filter is { Selection.IsEmpty: false };
+
+    /// <summary>
+    /// The search's sections less what the filters remove, a heading left empty dropped; keeps every record the search
+    /// left (what the filter menu counts over) and how many are listed.
+    /// </summary>
+    private IReadOnlyList<RecordBrowserSection<TRecord>> ListedSections(IReadOnlyList<RecordBrowserSection<TRecord>> searchedSections)
+    {
+        _searchedRecords.Clear();
+        _listedRecords.Clear();
+        var searched = new HashSet<TRecord>(ReferenceEqualityComparer.Instance);
+        var listed = _listedRecords;
+        var listedSections = new List<RecordBrowserSection<TRecord>>(searchedSections.Count);
+        foreach (var section in searchedSections)
+        {
+            var records = new List<TRecord>(section.Records.Count);
+            foreach (var record in section.Records)
+            {
+                if (searched.Add(record))
+                {
+                    _searchedRecords.Add(record);
+                }
+
+                if (_filter is null || _filter.Matches(record))
+                {
+                    records.Add(record);
+                    listed.Add(record);
+                }
+            }
+
+            if (records.Count > 0)
+            {
+                listedSections.Add(records.Count == section.Records.Count ? section : section with { Records = records });
+            }
+        }
+
+        _rowsListed = listed.Count;
+        return listedSections;
+    }
+
+    /// <summary>The browser's own title while nothing narrows the list; "Items (4 of 13)" while anything does.</summary>
+    private void ShowBrowserTitle() =>
+        _browserWindow.TitleText = IsListNarrowed ? $"{Title} ({_rowsListed} of {AllRecords.Count()})" : BrowserTitle;
+
+    /// <summary>A list narrowed to nothing: what narrowed it -- the search text, quoted, then each checked filter -- and Clear filters while any is checked.</summary>
+    private void AddEmptyListRows(float rowWidth)
+    {
+        var elementPool = _context.UiEngine.ElementPoolService;
+        var reasons = new List<string>();
+        if (_searchFilter.AppliedText.Length > 0)
+        {
+            reasons.Add($"\"{_searchFilter.AppliedText}\"");
+        }
+
+        if (_filter is { } filter)
+        {
+            for (var choiceIndex = 0; choiceIndex < filter.Choices.Count; choiceIndex++)
+            {
+                if (filter.Selection.IsChecked(choiceIndex))
+                {
+                    reasons.Add(filter.Choices[choiceIndex].Label);
+                }
+            }
+        }
+
+        var messageSize = new Vector2(rowWidth, EmptyListMessageHeight);
+        var message = elementPool.CreateElement<TextWindow>(_listWindow, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { Size = messageSize, MinimumSize = messageSize, MaximumSize = messageSize, DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+            Text = new TextOptions { Text = $"No {RecordsNoun} match {string.Join(", ", reasons)}", TextColor = WindowPalette.TitleTextColor, Multiline = true },
+        });
+        _listWindow.AddChild(message);
+
+        if (_filter is not { Selection.IsEmpty: false })
+        {
+            return;
+        }
+
+        var buttonSize = new Vector2(ClearFiltersButtonWidth, RowHeight);
+        var clear = elementPool.CreateElement<Button>(_listWindow, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { Size = buttonSize, MinimumSize = buttonSize, MaximumSize = buttonSize, DisplayMode = ElementDisplayMode.Fixed },
+            Text = new TextOptions { Text = ListFilterButton.ClearFiltersLabel },
+        });
+        clear.Clicked += _ => _clearFiltersRequested = true;
+        _listWindow.AddChild(clear);
+    }
+
+    /// <summary>A row container holding the record's icon and its name; a click on any of them reaches the row, which selects the record. A pinned row (the selected record, which the list doesn't hold) says so after its markers.</summary>
+    private Window CreateRecordRow(float width, TRecord record, bool isPinned)
     {
         var elementPool = _context.UiEngine.ElementPoolService;
         var appearance = AppearanceOf(record);
+        if (isPinned)
+        {
+            appearance = appearance with { Markers = appearance.Markers + PinnedNote };
+        }
+
         var rowSize = new Vector2(width, RowHeight);
         var row = elementPool.CreateElement<Window>(_listWindow, new ElementOptions
         {
@@ -735,9 +1023,21 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
         {
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(RowTextIndent, 0), Size = nameSize, MinimumSize = nameSize, MaximumSize = nameSize, DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Text = new TextOptions { Text = appearance.Name, TextColor = appearance.IsDimmed ? DimmedRowTextColor : WindowPalette.BodyTextColor },
+            Text = new TextOptions { TextColor = appearance.IsDimmed ? DimmedRowTextColor : WindowPalette.BodyTextColor },
         });
+        var measurer = _context.UiEngine.FontService.GetTextMeasurer(name.ContentFont);
+        var nameWidth = nameSize.X - name.ContentPadding.X * 2 - RowTextSlack - measurer.MeasureWidth(appearance.Markers);
+        var drawnName = StringUtility.TruncateWithEllipsis(measurer, appearance.Name, Math.Max(nameWidth, 1f));
+        name.UpdateText(drawnName + appearance.Markers);
         row.AddChild(name);
+
+        var isCut = !ReferenceEquals(drawnName, appearance.Name);
+        row.TooltipText = name.TooltipText = (isCut, appearance.MarkersMeaning) switch
+        {
+            (true, { } meaning) => $"{appearance.Name}\n{meaning}",
+            (true, null) => appearance.Name,
+            (false, var meaning) => meaning,
+        };
 
         row.Clicked += _ => Select(record);
         row.OnRightClicked = position => OpenRecordMenu(record, position);
@@ -747,6 +1047,11 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
     private void Select(TRecord record)
     {
         _selectedRecord = record;
+        if (_isOpen && !ReferenceEquals(record, _pinnedRecord) && (_pinnedRecord is not null || !_listedRecords.Contains(record)))
+        {
+            _rowsRebuildRequested = true;
+        }
+
         foreach (var (rowRecord, row) in _rows)
         {
             row.SetContentColor(ReferenceEquals(rowRecord, record) ? SelectedRowColor : RowColor);
@@ -801,10 +1106,26 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
 
     private static Vector2 BrowserSize(Rectangle area) => new(BrowserWidth, area.Height - Margin * 2);
 
-    private Vector2 ListSize() => new(_browserWindow.ContentSize.X, _browserWindow.ContentSize.Y - SearchBoxHeight - SearchGap);
+    private Vector2 ListSize() => new(_browserWindow.ContentSize.X, System.Math.Max(RowHeight, _browserWindow.ContentSize.Y - ListTop()));
 
-    /// <summary>The search box's size: the browser's width, less the New button and a gap when the tab has one.</summary>
-    private Vector2 SearchBoxSize() => new(_browserWindow.ContentSize.X - (NewRecordLabel is null ? 0f : NewRecordButtonWidth + SearchGap), SearchBoxHeight);
+    /// <summary>How far the rows over the list (search, filter and New; the chips) sit in from the browser's sides -- the list's own padding, so they line up with its rows.</summary>
+    private static float ControlRowsInset => UIEngine.UI.Chrome.WindowChrome.Padding;
+
+    /// <summary>The width the rows over the list share: the browser's, less ControlRowsInset on each side.</summary>
+    private float ControlRowsWidth => _browserWindow.ContentSize.X - ControlRowsInset * 2;
+
+    /// <summary>The New button's place: the right end of the control rows.</summary>
+    private Vector2 NewRecordButtonPosition() => new(ControlRowsInset + ControlRowsWidth - NewRecordButtonWidth, 0);
+
+    /// <summary>The search box's size: the control rows' width, less the filter button and the New button, each with a gap, when the tab has them.</summary>
+    private Vector2 SearchBoxSize() => new(ControlRowsWidth - NewRecordButtonSpace - FilterButtonSpace, SearchBoxHeight);
+
+    /// <summary>The filter button's place: at the search box's right end, left of the New button.</summary>
+    private Vector2 FilterButtonPosition() => new(ControlRowsInset + ControlRowsWidth - NewRecordButtonSpace - _filterButtonWidth, 0);
+
+    private float NewRecordButtonSpace => NewRecordLabel is null ? 0f : NewRecordButtonWidth + SearchGap;
+
+    private float FilterButtonSpace => _filter is null ? 0f : _filterButtonWidth + SearchGap;
 
     private Vector2 PreviewPosition(Rectangle area) =>
         HasInspector

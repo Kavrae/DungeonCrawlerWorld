@@ -145,8 +145,8 @@ Confirmed 2026-11-15.
     - Not in this plan: marking the changed lines inside a preview. The field diff is the Changes tab's.
 
 Deferred (2026-11-15):
-- **A "differs from master" browser filter** waits for filters on the editing tabs as a whole: TODO.md "Workshop:
-  filters on the editing tabs" (Engine, High), which lists it among the filters to offer.
+- **A "differs from master" browser filter** -- built 2026-11-15 as the Show only choice "Differs from master"
+  (`PLAN-workshop-browser-filters.md`), reading the same state as the To Publish list (`ContentRecordState`).
 - **Areas** (one JSON file per record, rows of symbols) need a grid diff of their own. Deferred until "Workshop: edit
   map areas" makes that tab edit at all.
 
