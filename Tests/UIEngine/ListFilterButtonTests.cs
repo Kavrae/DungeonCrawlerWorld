@@ -193,4 +193,27 @@ public sealed class ListFilterButtonTests
         Assert.AreEqual(scroll, menu.ScrollOffset);
         Assert.AreEqual("Renamed 59", Row(harness, 59).LeftText);
     }
+
+    [TestMethod]
+    public void AChoicesIconAndTooltip_AreItsMenuRows()
+    {
+        var harness = new ControlTestHarness();
+        var ripeIcon = new GlyphIcon("o", Color.Green);
+        var filter = new ListFilter<Fruit>(
+        [
+            new ListFilterGroup<Fruit>("show", "Show only", ListFilterGroupMatch.AllOf,
+            [
+                new ListFilterChoice<Fruit>("show:ripe", "Ripe", static fruit => fruit.IsRipe) { Icon = ripeIcon, TooltipText = "Ready to eat" },
+                new ListFilterChoice<Fruit>("show:bruised", "Bruised", static fruit => fruit.IsBruised),
+            ]),
+        ]);
+        var button = AddButton(harness, filter);
+
+        harness.Click(button);
+
+        Assert.AreEqual(ripeIcon, Row(harness, RipeRow).LeadingIcon);
+        Assert.AreEqual("Ready to eat", Row(harness, RipeRow).TooltipText);
+        Assert.AreEqual(GlyphIcon.Blank, Row(harness, BruisedRow).LeadingIcon);
+        Assert.IsNull(Row(harness, BruisedRow).TooltipText);
+    }
 }

@@ -196,7 +196,6 @@ public abstract class ContentEditingTab<T, TPreview> : RecordBrowserTab<ContentR
         {
             Name = LabelOf(document, look.Name),
             Markers = ContentRecordMarkers.Of(state, replacementName),
-            MarkersMeaning = ContentRecordMarkers.MeaningOf(state, replacementName),
             IsDimmed = ContentRecordMarkers.IsDimmed(state),
         };
     }

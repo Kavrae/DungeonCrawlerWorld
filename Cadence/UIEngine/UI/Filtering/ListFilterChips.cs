@@ -7,7 +7,8 @@ namespace UIEngine.UI.Filtering;
 /// <summary>A filter's checked choices as a wrapping row of chips, Clear last: a click on a chip unchecks its choice, on Clear every one.</summary>
 /// <remarks>
 /// <para>
-/// A chip is one button, its label then an "x" at its end, tooltip "Remove filter"; there is no chip that stays shown
+/// A chip is one button, the choice's icon if it has one, its label, then an "X" at its end; its tooltip is the
+/// choice's, else "Remove filter". There is no chip that stays shown
 /// while switched off. The row follows the selection: rebuilt whenever it changes, and laid out within the width the
 /// host gives it (SetWidth), wrapping onto as many lines as it needs. With nothing checked it has no height and is
 /// hidden. Its height changes through SetSize, so the host hears of it through Resized (or, in a tiling parent, through
@@ -24,7 +25,7 @@ public sealed class ListFilterChips(ElementServices services)
 {
     public const float ChipHeight = 20f;
     public const float ChipGap = 4f;
-    public const string RemoveMarker = "x";
+    public const string RemoveMarker = "X";
     public const string ClearLabel = "Clear";
     public const string RemoveTooltip = "Remove filter";
     public const string ClearTooltip = "Remove every filter";
@@ -144,14 +145,14 @@ public sealed class ListFilterChips(ElementServices services)
         {
             if (selection.IsChecked(choiceIndex))
             {
-                position = AddChip(source.ChoiceLabel(choiceIndex), RemoveMarker, RemoveTooltip, choiceIndex, position);
+                position = AddChip(source.ChoiceLabel(choiceIndex), source.ChoiceIcon(choiceIndex), RemoveMarker, source.ChoiceTooltip(choiceIndex) ?? RemoveTooltip, choiceIndex, position);
                 ChipCount++;
             }
         }
 
         if (ChipCount > 0)
         {
-            AddChip(ClearLabel, null, ClearTooltip, ClearAll, position);
+            AddChip(ClearLabel, null, null, ClearTooltip, ClearAll, position);
         }
 
         var height = MeasureHeight(_width);
@@ -160,9 +161,9 @@ public sealed class ListFilterChips(ElementServices services)
     }
 
     /// <summary>A chip at position, or at the start of the next line when it doesn't fit what is left of this one; returns where the next chip starts.</summary>
-    private Vector2 AddChip(string label, string? marker, string tooltip, int removal, Vector2 position)
+    private Vector2 AddChip(string label, GlyphIcon? icon, string? marker, string tooltip, int removal, Vector2 position)
     {
-        var size = new Vector2(ChipWidth(label, marker), ChipHeight);
+        var size = new Vector2(ChipWidth(label, icon, marker), ChipHeight);
         if (position.X > 0f && position.X + size.X > _width)
         {
             position = new Vector2(0f, position.Y + ChipHeight + ChipGap);
@@ -176,14 +177,15 @@ public sealed class ListFilterChips(ElementServices services)
         chip.ContentFont = _font;
         chip.RightText = marker;
         chip.LeftAlign = marker is not null;
+        chip.LeadingIcon = icon;
         chip.TooltipText = tooltip;
         chip.Clicked += _ => _pendingRemoval = removal;
         AddChild(chip);
         return position + new Vector2(size.X + ChipGap, 0f);
     }
 
-    private float ChipWidth(string label, string? marker) =>
-        _font.MeasureString(label).X + (marker is null ? 0f : RemoveMarkerGap + _font.MeasureString(marker).X) + ChipTextPadding;
+    private float ChipWidth(string label, GlyphIcon? icon, string? marker) =>
+        (icon is null ? 0f : Button.LeadingIconWidth) + _font.MeasureString(label).X + (marker is null ? 0f : RemoveMarkerGap + _font.MeasureString(marker).X) + ChipTextPadding;
 
     private int LineCountWithin(IListFilterMenuSource source, float width)
     {
@@ -203,7 +205,7 @@ public sealed class ListFilterChips(ElementServices services)
                 continue;
             }
 
-            var chipWidth = isClear ? ChipWidth(ClearLabel, null) : ChipWidth(source.ChoiceLabel(choiceIndex), RemoveMarker);
+            var chipWidth = isClear ? ChipWidth(ClearLabel, null, null) : ChipWidth(source.ChoiceLabel(choiceIndex), source.ChoiceIcon(choiceIndex), RemoveMarker);
             if (x > 0f && x + chipWidth > width)
             {
                 lines++;

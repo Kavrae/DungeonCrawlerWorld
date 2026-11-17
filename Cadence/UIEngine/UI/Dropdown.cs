@@ -125,6 +125,7 @@ public sealed class Dropdown(ElementServices services)
         // every row below is itself sized to.
         SetBounds(topLeft, MeasureOuterSize(width, System.Math.Min(rowsHeight, maximumHeight), scrolls));
 
+        var hasIcons = HasIcons(options);
         var y = 0f;
         for (var optionIndex = 0; optionIndex < options.Count; optionIndex++)
         {
@@ -137,7 +138,7 @@ public sealed class Dropdown(ElementServices services)
                 continue;
             }
 
-            _optionRows.Add(AddOptionRow(option, optionIndex, width, y, isMarked: optionIndex == markedIndex));
+            _optionRows.Add(AddOptionRow(option, optionIndex, width, y, isMarked: optionIndex == markedIndex, hasIcons));
             y += RowHeight;
         }
     }
@@ -159,7 +160,7 @@ public sealed class Dropdown(ElementServices services)
         AddChild(header);
     }
 
-    private Button AddOptionRow(DropdownOption option, int optionIndex, float width, float y, bool isMarked)
+    private Button AddOptionRow(DropdownOption option, int optionIndex, float width, float y, bool isMarked, bool hasIcons)
     {
         var rowSize = new Vector2(width, RowHeight);
 
@@ -178,6 +179,8 @@ public sealed class Dropdown(ElementServices services)
         button.LeftAlign = true; // A menu row always reads left-aligned, even without a HotkeyText column -- not the ink-centered look Button otherwise defaults to.
         button.IsMarked = isMarked;
         button.CheckBoxState = option.IsChecked;
+        button.LeadingIcon = hasIcons ? option.Icon ?? GlyphIcon.Blank : null;
+        button.TooltipText = option.TooltipText;
         button.Clicked += _ => Choose(optionIndex);
 
         AddChild(button);
@@ -333,13 +336,17 @@ public sealed class Dropdown(ElementServices services)
     private float MeasureWidth(IReadOnlyList<DropdownOption> options)
     {
         var widest = 0f;
+        var iconWidth = HasIcons(options) ? Button.LeadingIconWidth : 0f;
         foreach (var option in options)
         {
-            var labelWidth = _font.MeasureString(option.Label).X + (option.IsChecked is null ? 0f : Button.CheckBoxWidth);
+            var labelWidth = _font.MeasureString(option.Label).X + (option.IsChecked is null ? 0f : Button.CheckBoxWidth) + (option.IsHeader ? 0f : iconWidth);
             var hotkeyWidth = option.HotkeyText is null ? 0f : HotkeyGap + _font.MeasureString(option.HotkeyText).X;
             widest = System.Math.Max(widest, labelWidth + hotkeyWidth);
         }
 
         return widest + Button.HorizontalTextInset * 2;
     }
+
+    /// <summary>Whether any row has an icon, so every row gives one its place.</summary>
+    private static bool HasIcons(IReadOnlyList<DropdownOption> options) => options.Any(option => option.Icon is not null);
 }

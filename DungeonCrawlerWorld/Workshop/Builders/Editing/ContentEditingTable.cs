@@ -239,6 +239,7 @@ public sealed class ContentEditingTable<T> : IContentEditingTable
         return (document.IsChanged ? ContentRecordState.Unsaved : ContentRecordState.None)
             | (document.IsDraft || !document.IsInMaster ? ContentRecordState.Draft : ContentRecordState.None)
             | (document.IsDisabled ? ContentRecordState.Disabled : ContentRecordState.None)
+            | (document.IsDisabled && document.Replacement is not null ? ContentRecordState.Replaced : ContentRecordState.None)
             | (document.HasErrors || document.SaveProblems.Count > 0 ? ContentRecordState.HasErrors : ContentRecordState.None)
             | (DiffersFromMaster(document) ? ContentRecordState.DiffersFromMaster : ContentRecordState.None);
     }

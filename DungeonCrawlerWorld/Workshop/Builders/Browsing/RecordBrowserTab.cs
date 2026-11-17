@@ -1,6 +1,5 @@
 using Engine.Utilities;
 using Microsoft.Xna.Framework;
-using Presentation.UI.Content;
 using UIEngine.UI;
 using UIEngine.UI.ColorPalettes;
 using UIEngine.UI.Fields;
@@ -9,17 +8,13 @@ using Workshop;
 
 namespace Builders.Browsing;
 
-/// <summary>How a record's row reads in the browser: its icon, its name and the markers after it, greyed when the record is out of play (disabled).</summary>
-/// <remarks>The row is one line: a name too long for it is cut short with "...", never the markers.</remarks>
+/// <summary>How a record's row reads in the browser: its icon, its name and the marker symbols after it, greyed when the record is out of play (disabled).</summary>
 public readonly record struct RecordRowAppearance(string Name, string? SpriteName, string Glyph, Color GlyphColor)
 {
     public bool IsDimmed { get; init; }
 
-    /// <summary>What follows the name, kept whole whatever the row's width (" * [Draft] (!)"); none by default.</summary>
-    public string Markers { get; init; } = string.Empty;
-
-    /// <summary>What the markers mean, shown in the row's tooltip; null for none.</summary>
-    public string? MarkersMeaning { get; init; }
+    /// <summary>The symbols after the name, in reading order, each with its own tooltip; none by default.</summary>
+    public IReadOnlyList<RecordRowMarker> Markers { get; init; } = [];
 }
 
 /// <summary>Something a tab does to one record (Publish, Delete): a button over the inspector and an option on the record's right-click menu, both running Run; Tooltip says what it does, or why it can't.</summary>
@@ -48,8 +43,8 @@ public sealed record RecordViewOption(string Label, string Tooltip, Func<bool> I
 /// </para>
 /// <para>
 /// A selected record the list doesn't hold -- a filter checked or the search typed while it is selected, an edit that
-/// stopped it matching, New or navigation to one the list hides -- stays selected and is pinned above the list, reading
-/// "(not in the filtered list)"; once the list holds it again, or another record is selected, the pinned row goes.
+/// stopped it matching, New or navigation to one the list hides -- stays selected and is pinned above the list, its last
+/// symbol a pin; once the list holds it again, or another record is selected, the pinned row goes.
 /// </para>
 /// </remarks>
 public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
@@ -60,12 +55,7 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
     private const float BrowserWidth = 340f;
     private const float SearchBoxHeight = 26f;
     private const float SearchGap = 4f;
-    private const float RowHeight = 24f;
-    private const float RowIconSize = 20f;
-    private const float RowTextIndent = 28f;
-
-    /// <summary>Room left beside a row's text so a line that just fits is never wrapped.</summary>
-    private const float RowTextSlack = 4f;
+    private const float RowHeight = RecordRow.Height;
 
     /// <summary>The width every preview row is built to by default -- Item Details' own width beside the player's Inventory window.</summary>
     protected const float DefaultPreviewWidth = 460f;
@@ -79,7 +69,6 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
     private static readonly Color RowColor = WindowPalette.PanelContentColor;
     private static readonly Color SelectedRowColor = WindowPalette.ListSelectionColor;
     private static readonly Color HeadingColor = WindowPalette.ControlBackground;
-    private static readonly Color DimmedRowTextColor = WindowPalette.DimmedRowTextColor;
 
     private readonly DebouncedTextFilter _searchFilter = new(SearchDebounceFrames);
     private readonly List<(TRecord Record, Window Row)> _rows = [];
@@ -112,7 +101,8 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
     /// <summary>The rows to be built again on the next Update -- a selection that pins or unpins a row, asked from inside a row's own click.</summary>
     private bool _rowsRebuildRequested;
 
-    private const string PinnedNote = " (not in the filtered list)";
+    /// <summary>The last symbol on a pinned row: the selected record, which the list doesn't hold.</summary>
+    private static readonly RecordRowMarker PinnedMarker = new("📌", null, WindowPalette.BodyTextColor, "Selected; not in the filtered list");
 
     /// <summary>The tallest the chips may grow, wrapped, before the list under them.</summary>
     private const float MaximumChipsHeight = 400f;
@@ -989,55 +979,17 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
         _listWindow.AddChild(clear);
     }
 
-    /// <summary>A row container holding the record's icon and its name; a click on any of them reaches the row, which selects the record. A pinned row (the selected record, which the list doesn't hold) says so after its markers.</summary>
+    /// <summary>The record's row (RecordRow); a click on any of it selects the record. A pinned row (the selected record, which the list doesn't hold) says so with a last symbol.</summary>
     private Window CreateRecordRow(float width, TRecord record, bool isPinned)
     {
-        var elementPool = _context.UiEngine.ElementPoolService;
         var appearance = AppearanceOf(record);
         if (isPinned)
         {
-            appearance = appearance with { Markers = appearance.Markers + PinnedNote };
+            appearance = appearance with { Markers = [.. appearance.Markers, PinnedMarker] };
         }
 
-        var rowSize = new Vector2(width, RowHeight);
-        var row = elementPool.CreateElement<Window>(_listWindow, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { Size = rowSize, MinimumSize = rowSize, MaximumSize = rowSize, DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = ReferenceEquals(record, _selectedRecord) ? SelectedRowColor : RowColor },
-        });
-        row.ContentPadding = Vector2.Zero;
-
-        var iconSize = new Vector2(RowIconSize, RowIconSize);
-        var icon = elementPool.CreateElement<ItemIconElement>(row, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(4, (RowHeight - RowIconSize) / 2), Size = iconSize, DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-        });
-        icon.Configure(appearance.SpriteName, appearance.Glyph, appearance.GlyphColor, iconSize);
-        row.AddChild(icon);
-
-        var nameSize = new Vector2(width - RowTextIndent, RowHeight);
-        var name = elementPool.CreateElement<TextWindow>(row, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(RowTextIndent, 0), Size = nameSize, MinimumSize = nameSize, MaximumSize = nameSize, DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Text = new TextOptions { TextColor = appearance.IsDimmed ? DimmedRowTextColor : WindowPalette.BodyTextColor },
-        });
-        var measurer = _context.UiEngine.FontService.GetTextMeasurer(name.ContentFont);
-        var nameWidth = nameSize.X - name.ContentPadding.X * 2 - RowTextSlack - measurer.MeasureWidth(appearance.Markers);
-        var drawnName = StringUtility.TruncateWithEllipsis(measurer, appearance.Name, Math.Max(nameWidth, 1f));
-        name.UpdateText(drawnName + appearance.Markers);
-        row.AddChild(name);
-
-        var isCut = !ReferenceEquals(drawnName, appearance.Name);
-        row.TooltipText = name.TooltipText = (isCut, appearance.MarkersMeaning) switch
-        {
-            (true, { } meaning) => $"{appearance.Name}\n{meaning}",
-            (true, null) => appearance.Name,
-            (false, var meaning) => meaning,
-        };
+        var rowColor = ReferenceEquals(record, _selectedRecord) ? SelectedRowColor : RowColor;
+        var row = RecordRow.Create(_context.UiEngine.ElementPoolService, _context.UiEngine.FontService, _listWindow, width, appearance, rowColor);
 
         row.Clicked += _ => Select(record);
         row.OnRightClicked = position => OpenRecordMenu(record, position);

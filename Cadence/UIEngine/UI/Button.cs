@@ -83,6 +83,14 @@ public sealed class Button(ElementServices services, SpriteSheetService? spriteS
     /// <summary>How much of a left-aligned label's width a checkbox takes: its side and the gap after it.</summary>
     public const float CheckBoxWidth = CheckBoxSide + 6f;
 
+    /// <summary>A glyph drawn left of a left-aligned label, after the checkbox if there is one; null (the default) for none.</summary>
+    public GlyphIcon? LeadingIcon { get; set; }
+
+    /// <summary>How much of a left-aligned label's width a leading icon takes: its box and the gap after it.</summary>
+    public const float LeadingIconWidth = LeadingIconSide + 4f;
+
+    private const float LeadingIconSide = 16f;
+
     private const float CheckMarkInset = 2f;
     private const float CheckMarkThickness = 2f;
 
@@ -128,6 +136,7 @@ public sealed class Button(ElementServices services, SpriteSheetService? spriteS
         IsHighlighted = false;
         IsMarked = false;
         CheckBoxState = null;
+        LeadingIcon = null;
         IsPressed = false;
         LeftAlign = false;
         _sprite = spriteSheetService?.Sprites.FirstOrNull(options.Button?.SpriteName);
@@ -253,6 +262,18 @@ public sealed class Button(ElementServices services, SpriteSheetService? spriteS
                 DrawCheckBox(spriteBatch, isChecked);
                 textFootprintPosition.X += CheckBoxWidth;
                 textFootprintSize.X -= CheckBoxWidth;
+            }
+
+            if (LeadingIcon is { } icon)
+            {
+                if (icon.Glyph.Length > 0)
+                {
+                    var iconColor = Enabled ? icon.Color : Color.Gray;
+                    LabelRenderer.DrawCentered(spriteBatch, ContentTextMeasurer, icon.Glyph, new Vector2(textFootprintPosition.X, 0), new Vector2(LeadingIconSide, ContentSize.Y), iconColor);
+                }
+
+                textFootprintPosition.X += LeadingIconWidth;
+                textFootprintSize.X -= LeadingIconWidth;
             }
 
             if (!string.IsNullOrEmpty(LeftText))

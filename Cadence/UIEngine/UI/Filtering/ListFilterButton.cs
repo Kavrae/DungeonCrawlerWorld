@@ -149,7 +149,7 @@ public sealed class ListFilterButton(ElementServices services, DropdownControlle
             var choiceIndex = row.ChoiceIndex;
             var isChecked = selection.IsChecked(choiceIndex);
             var countText = isChecked ? null : row.CountIfFlipped.ToString(CultureInfo.InvariantCulture);
-            options.Add(new DropdownOption(row.Label, countText, Enabled: isChecked || row.CountIfFlipped > 0, () => selection.Flip(choiceIndex)) { IsChecked = isChecked });
+            options.Add(new DropdownOption(row.Label, countText, Enabled: isChecked || row.CountIfFlipped > 0, () => selection.Flip(choiceIndex)) { IsChecked = isChecked, Icon = row.Icon, TooltipText = row.TooltipText });
         }
 
         options.Add(new DropdownOption(ClearFiltersLabel, null, Enabled: !selection.IsEmpty, selection.Clear));

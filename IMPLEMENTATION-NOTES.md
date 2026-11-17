@@ -3592,9 +3592,10 @@ Items, Actions, Auras, Map and Sprites -- narrows its list by a filter menu besi
   is any-of: a record has one value, so any checked one matches. Across groups, and with the search, everything must
   hold. The heading says which ("Show only", "Source: any of").
 - **One state rule for markers and filters.** `ContentEditingTable.StateOf` works out a record's `ContentRecordState`
-  (Unsaved, Draft, Disabled, Deleted, HasErrors, DiffersFromMaster) in one place; the row's markers
-  (`ContentRecordMarkers`), the Show only choices (`ContentRecordFilters`) and the To Publish list read it, so "the rows
-  marked [Draft]" and "the Draft filter" can never list different records. A mod's record is none of them.
+  (Unsaved, Draft, Disabled, Replaced, Deleted, HasErrors, DiffersFromMaster) in one place; the row's markers
+  (`ContentRecordMarkers`), the Show only choices (`ContentRecordFilters`) and the To Publish list read it, so a marked
+  row and its filter can never disagree (see "Workshop browser row symbols" for the two markers a row leaves out). A
+  mod's record is none of them.
 - **Counts, never per frame.** Each unchecked row shows how many records checking it would leave, over what the search
   left; a checked row shows none, and a choice that would leave nothing is disabled unless checked. Counts are worked
   out when the menu opens and after each change -- the open `Dropdown` takes the new rows on its next Update
@@ -3605,7 +3606,7 @@ Items, Actions, Auras, Map and Sprites -- narrows its list by a filter menu besi
 - **The browser** (`RecordBrowserTab`) lists what `BuildSections(search)` returns less what the filter removes,
   dropping emptied headings, so no tab's sections builder changed; the title reads "Items (4 of 13)" while anything
   narrows it, and a list narrowed to nothing says what narrowed it with Clear filters. A selected record the list
-  doesn't hold stays selected and is pinned above the list, "(not in the filtered list)" -- one rule for a filter, the
+  doesn't hold stays selected and is pinned above the list, its last symbol a 📌 -- one rule for a filter, the
   search, an edit, New and navigation. The Sprites tab's `ListView` keeps the hidden entry in its sheet and details and
   reselects its row once listed instead.
 - **Kept per user, per game, per tab**: `%LOCALAPPDATA%/Cadence/Workshop/<game>/browser-filters.json`, the host's
@@ -3619,6 +3620,33 @@ Items, Actions, Auras, Map and Sprites -- narrows its list by a filter menu besi
   other way hosts `ListFilterButton` and `ListFilterChips` itself, as the Sprites tab does (`SpriteEntryFilters`), and
   listens to the chips' `Resized` only once whatever sits under them exists: checked choices lay the chips out as they
   are added.
+
+### Workshop browser row symbols (2026-11-17)
+
+`PLAN-workshop-browser-row-symbols.md`, Phases 1-2. A browser row shows its record's state as small coloured symbols
+instead of bracketed text, and the filter menu's Show only rows and their chips show the same ones.
+
+- **One table.** `ContentRecordMarkers.SymbolOf` is the one place a marker's glyph, colour, tooltip and filter label
+  live (`ContentRecordMarker`: Unsaved ✎ dark green, Disabled 🚫, Replaced ↪, Deleted ✕ and Has errors ⚠ red, Draft 📄
+  black). The row (`ContentRecordMarkers.Of`) and the Show only choices (`ContentRecordFilters.ShowOnly`: label, icon,
+  tooltip) both read it. Each symbol has a sprite name, null for now, for art to replace the glyph.
+- **The glyphs are Symbola's.** DroidSans has none of them; `FontService` loads Symbola-Emoji as the fallback, which has
+  every one but ⊘ and ⦸ (why Disabled is 🚫). Check a new glyph against Symbola's character map before using it.
+- **A marker another one says is left out of the row**: Replaced says Disabled, and Unsaved stands for Draft. The filters
+  still read the state, so Show only > Draft lists an unsaved draft whose row shows only ✎, and Disabled lists the
+  replaced records too. `Replaced` is a state of its own (disabled with a replacement, in `StateOf`), so its filter and
+  its marker read one rule.
+- **Tooltips.** Each row symbol is its own element (`RecordRow`: an `ItemIconElement` per symbol, packed against the
+  row's right end) with its own tooltip, Replaced's naming the replacement; the row and the name say only the full name,
+  and only when it is cut. A chip and a menu row carry the choice's tooltip -- the same text, Replaced's naming no
+  record -- and a choice without one keeps "Remove filter".
+- **The row** is `Builders/Browsing/RecordRow`, out of `RecordBrowserTab`: icon, the name cut with "..." to what the
+  symbols leave, the symbols, greyed with a dimmed row (their colours blended toward `DimmedRowTextColor`). The pinned
+  row's last symbol is 📌, the browser's own, not a content marker.
+- **UIEngine pieces**: `GlyphIcon` (a glyph and colour; `Blank` keeps a column); `DropdownOption.Icon`/`TooltipText`,
+  where any row with an icon makes every row keep its place; `ListFilterChoice.Icon` and its `TooltipText`, shown on the
+  menu row and the chip. They draw through `Button.LeadingIcon` for now, which `PLAN-control-content.md` replaces with
+  child elements.
 
 ### Component writes: write scopes and struct updaters (2026-11-03, scopes 2026-11-06)
 

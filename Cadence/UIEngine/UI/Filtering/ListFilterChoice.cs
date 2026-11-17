@@ -13,6 +13,9 @@ public sealed class ListFilterChoice<TItem>(string id, string label, Func<TItem,
 
     public Func<TItem, bool> Matches { get; } = matches;
 
-    /// <summary>What the host shows when the choice is hovered; none by default.</summary>
+    /// <summary>What the menu row and the chip say when hovered; none by default.</summary>
     public string? TooltipText { get; init; }
+
+    /// <summary>A glyph before the label on the menu row and the chip; none by default.</summary>
+    public GlyphIcon? Icon { get; init; }
 }

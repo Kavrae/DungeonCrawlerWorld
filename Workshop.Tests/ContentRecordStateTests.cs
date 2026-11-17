@@ -38,29 +38,41 @@ public sealed class ContentRecordStateTests
         items.Apply(document, new ContentInspectorEdit("Change Gold value", record => record.SetField(ContentPath.Root, ItemSchema, "gv", value), "gv", ChangesShape: false));
 
     [TestMethod]
-    [DataRow(ContentRecordState.None, null, "")]
-    [DataRow(ContentRecordState.Unsaved, null, " *")]
-    [DataRow(ContentRecordState.Draft, null, " [Draft]")]
-    [DataRow(ContentRecordState.Disabled, null, " [Disabled]")]
-    [DataRow(ContentRecordState.Disabled, "Scroll of Healing", " [Disabled][Replaced]")]
-    [DataRow(ContentRecordState.Draft, "Scroll of Healing", " [Draft]")]
-    [DataRow(ContentRecordState.Deleted, null, " [Deleted]")]
-    [DataRow(ContentRecordState.HasErrors, null, " (!)")]
-    [DataRow(ContentRecordState.DiffersFromMaster, null, "")]
-    [DataRow(ContentRecordState.Unsaved | ContentRecordState.Disabled | ContentRecordState.Draft | ContentRecordState.HasErrors | ContentRecordState.DiffersFromMaster, "Scroll of Healing", " * [Disabled][Replaced][Draft] (!)")]
-    [DataRow(ContentRecordState.Unsaved | ContentRecordState.Deleted | ContentRecordState.HasErrors | ContentRecordState.DiffersFromMaster, null, " * [Deleted] (!)")]
-    public void EachState_ReadsAsItsMarkers(ContentRecordState state, string? replacementName, string markers)
+    [DataRow(ContentRecordState.None, "")]
+    [DataRow(ContentRecordState.Unsaved, "Unsaved")]
+    [DataRow(ContentRecordState.Draft, "Draft")]
+    [DataRow(ContentRecordState.Disabled, "Disabled")]
+    [DataRow(ContentRecordState.Disabled | ContentRecordState.Replaced, "Replaced")]
+    [DataRow(ContentRecordState.Unsaved | ContentRecordState.Draft, "Unsaved")]
+    [DataRow(ContentRecordState.Deleted, "Deleted")]
+    [DataRow(ContentRecordState.HasErrors, "HasErrors")]
+    [DataRow(ContentRecordState.DiffersFromMaster, "")]
+    [DataRow(ContentRecordState.Disabled | ContentRecordState.Replaced | ContentRecordState.Draft | ContentRecordState.HasErrors | ContentRecordState.DiffersFromMaster, "Replaced,Draft,HasErrors")]
+    [DataRow(ContentRecordState.Unsaved | ContentRecordState.Disabled | ContentRecordState.Replaced | ContentRecordState.Draft | ContentRecordState.HasErrors | ContentRecordState.DiffersFromMaster, "Unsaved,Replaced,HasErrors")]
+    [DataRow(ContentRecordState.Unsaved | ContentRecordState.Deleted | ContentRecordState.HasErrors | ContentRecordState.DiffersFromMaster, "Unsaved,Deleted,HasErrors")]
+    public void EachState_ReadsAsItsMarkers_InReadingOrder_LeavingOutWhatAnotherSays(ContentRecordState state, string markers)
     {
-        Assert.AreEqual(markers, ContentRecordMarkers.Of(state, replacementName));
+        Assert.AreEqual(markers, string.Join(",", ContentRecordMarkers.MarkersOf(state)));
     }
 
     [TestMethod]
-    public void TheMarkersMeaning_NamesTheReplacement_AndIsNoneForNoMarker()
+    public void EachRowSymbol_IsItsMarkersSymbol_AndReplacedNamesTheReplacement()
     {
-        var meaning = ContentRecordMarkers.MeaningOf(ContentRecordState.Disabled | ContentRecordState.Draft, "Scroll of Healing");
+        var symbols = ContentRecordMarkers.Of(ContentRecordState.Disabled | ContentRecordState.Replaced | ContentRecordState.Draft, "Scroll of Healing");
 
-        CollectionAssert.AreEqual(new[] { "Disabled: kept in master, never loaded", "Replaced by Scroll of Healing", "Draft: not published to master" }, meaning!.Split('\n'));
-        Assert.IsNull(ContentRecordMarkers.MeaningOf(ContentRecordState.DiffersFromMaster, null));
+        CollectionAssert.AreEqual(new[] { "Replaced by Scroll of Healing", "Draft: not published to master" }, symbols.Select(symbol => symbol.Tooltip).ToArray());
+        CollectionAssert.AreEqual(
+            new[] { ContentRecordMarker.Replaced, ContentRecordMarker.Draft }.Select(marker => ContentRecordMarkers.SymbolOf(marker).Glyph).ToArray(),
+            symbols.Select(symbol => symbol.Glyph).ToArray());
+        Assert.IsEmpty(ContentRecordMarkers.Of(ContentRecordState.DiffersFromMaster, null));
+    }
+
+    [TestMethod]
+    public void EveryMarker_HasItsOwnGlyph()
+    {
+        var glyphs = Enum.GetValues<ContentRecordMarker>().Select(marker => ContentRecordMarkers.SymbolOf(marker).Glyph).ToList();
+
+        Assert.HasCount(glyphs.Count, glyphs.Distinct().ToList());
     }
 
     [TestMethod]
@@ -150,16 +162,18 @@ public sealed class ContentRecordStateTests
     }
 
     [TestMethod]
-    [DataRow("show:unsaved", " *")]
-    [DataRow("show:draft", "[Draft]")]
-    [DataRow("show:errors", " (!)")]
-    [DataRow("show:disabled", "[Disabled]")]
-    [DataRow("show:deleted", "[Deleted]")]
-    public void EachShowOnlyChoice_ListsExactlyTheRowsMarkedWithIt(string choiceId, string marker)
+    [DataRow("show:unsaved", ContentRecordState.Unsaved, ContentRecordMarker.Unsaved)]
+    [DataRow("show:draft", ContentRecordState.Draft, ContentRecordMarker.Draft)]
+    [DataRow("show:errors", ContentRecordState.HasErrors, ContentRecordMarker.HasErrors)]
+    [DataRow("show:disabled", ContentRecordState.Disabled, ContentRecordMarker.Disabled)]
+    [DataRow("show:replaced", ContentRecordState.Replaced, ContentRecordMarker.Replaced)]
+    [DataRow("show:deleted", ContentRecordState.Deleted, ContentRecordMarker.Deleted)]
+    public void EachShowOnlyChoice_ListsExactlyTheRecordsHoldingItsState_AndEveryRowMarkedWithIt(string choiceId, ContentRecordState state, ContentRecordMarker marker)
     {
         var items = Open();
         SetGoldValue(items, Named(items, "Cure Poison Potion"), JsonValue.Create("lots"));
         Assert.IsNull(_workspace.Disable(items, Named(items, "Health Potion").Id, replacement: null));
+        Assert.IsNull(_workspace.Disable(items, Named(items, "Toxic Flask").Id, replacement: Named(items, "Scroll of Healing").Id));
         items.Delete(Named(items, "Wand of Fireball").Id, "Delete");
         var copy = JsonNode.Parse(Named(items, "Scroll of Healing").Record.Json)!.AsObject();
         copy[ContentTable.IdKey] = ContentGuid.Format(Guid.NewGuid());
@@ -169,9 +183,47 @@ public sealed class ContentRecordStateTests
 
         filter.Selection.SetCheckedIds([choiceId]);
 
-        var marked = rows.Where(document => ContentRecordMarkers.Of(items.StateOf(document), null).Contains(marker, StringComparison.Ordinal)).ToList();
-        CollectionAssert.AreEquivalent(marked, rows.Where(filter.Matches).ToList());
-        Assert.IsNotEmpty(marked, choiceId);
+        var listed = rows.Where(filter.Matches).ToList();
+        var marked = rows.Where(document => ContentRecordMarkers.MarkersOf(items.StateOf(document)).Contains(marker)).ToList();
+        CollectionAssert.AreEquivalent(rows.Where(document => items.StateOf(document).HasFlag(state)).ToList(), listed);
+        CollectionAssert.IsSubsetOf(marked, listed);
+        Assert.IsNotEmpty(listed, choiceId);
+    }
+
+    [TestMethod]
+    public void ADisabledRecordSomethingReplaces_IsReplaced_AndOneNothingReplaces_IsNot()
+    {
+        var items = Open();
+        var replaced = Named(items, "Toxic Flask");
+        var disabled = Named(items, "Health Potion");
+
+        Assert.IsNull(_workspace.Disable(items, replaced.Id, replacement: Named(items, "Scroll of Healing").Id));
+        Assert.IsNull(_workspace.Disable(items, disabled.Id, replacement: null));
+
+        Assert.IsTrue(items.StateOf(replaced).HasFlag(ContentRecordState.Disabled | ContentRecordState.Replaced));
+        Assert.IsFalse(items.StateOf(disabled).HasFlag(ContentRecordState.Replaced));
+    }
+
+    [TestMethod]
+    public void EachMarkedShowOnlyChoice_ReadsItsMarkersLabel_Icon_AndTooltip()
+    {
+        var items = Open();
+        var choices = ContentRecordFilters.ShowOnly(items).Choices.ToDictionary(choice => choice.Id);
+
+        foreach (var (choiceId, marker) in new[]
+        {
+            ("show:unsaved", ContentRecordMarker.Unsaved), ("show:draft", ContentRecordMarker.Draft), ("show:errors", ContentRecordMarker.HasErrors),
+            ("show:disabled", ContentRecordMarker.Disabled), ("show:replaced", ContentRecordMarker.Replaced), ("show:deleted", ContentRecordMarker.Deleted),
+        })
+        {
+            var symbol = ContentRecordMarkers.SymbolOf(marker);
+            Assert.AreEqual(symbol.Label, choices[choiceId].Label);
+            Assert.AreEqual(symbol.Icon, choices[choiceId].Icon);
+            Assert.AreEqual(symbol.Tooltip, choices[choiceId].TooltipText);
+        }
+
+        Assert.IsNull(choices["show:differs"].Icon);
+        Assert.DoesNotContain("Scroll", choices["show:replaced"].TooltipText!);
     }
 
     [TestMethod]

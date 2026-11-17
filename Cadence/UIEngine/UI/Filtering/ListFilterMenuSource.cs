@@ -8,6 +8,10 @@ public sealed class ListFilterMenuSource<TItem>(ListFilter<TItem> filter, Func<I
 
     public string ChoiceLabel(int choiceIndex) => filter.Choices[choiceIndex].Label;
 
+    public GlyphIcon? ChoiceIcon(int choiceIndex) => filter.Choices[choiceIndex].Icon;
+
+    public string? ChoiceTooltip(int choiceIndex) => filter.Choices[choiceIndex].TooltipText;
+
     public IReadOnlyList<ListFilterMenuRow> MenuRows()
     {
         var items = itemsToFilter();
@@ -20,7 +24,8 @@ public sealed class ListFilterMenuSource<TItem>(ListFilter<TItem> filter, Func<I
             for (var offset = 0; offset < group.Choices.Count; offset++)
             {
                 var choiceIndex = firstChoiceIndex + offset;
-                rows.Add(new ListFilterMenuRow(group.Choices[offset].Label, choiceIndex, filter.CountMatchingIfFlipped(choiceIndex, items)));
+                var choice = group.Choices[offset];
+                rows.Add(new ListFilterMenuRow(choice.Label, choiceIndex, filter.CountMatchingIfFlipped(choiceIndex, items)) { Icon = choice.Icon, TooltipText = choice.TooltipText });
             }
         }
 

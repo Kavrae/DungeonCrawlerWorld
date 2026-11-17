@@ -126,4 +126,30 @@ public sealed class ListFilterChipsTests
         Assert.AreEqual(0, chips.ChipCount);
         Assert.IsEmpty(chips.ChildElements);
     }
+
+    [TestMethod]
+    public void AChoiceWithAnIconAndTooltip_IsAChipShowingBoth_WiderByTheIcon()
+    {
+        var harness = new ControlTestHarness();
+        var ripeIcon = new GlyphIcon("o", Color.Green);
+        var filter = new ListFilter<Fruit>(
+        [
+            new ListFilterGroup<Fruit>("show", "Show only", ListFilterGroupMatch.AllOf,
+            [
+                new ListFilterChoice<Fruit>("show:ripe", "Ripe", static fruit => fruit.IsRipe) { Icon = ripeIcon, TooltipText = "Ready to eat" },
+            ]),
+        ]);
+        var plainFilter = NewFilter();
+        var plainChips = AddChips(harness, plainFilter);
+        var chips = AddChips(harness, filter);
+
+        filter.Selection.SetCheckedIds(["show:ripe"]);
+        plainFilter.Selection.SetCheckedIds(["show:ripe"]);
+
+        Assert.AreEqual(Chip(plainChips, "Ripe").Rectangle.Width + (int)Button.LeadingIconWidth, Chip(chips, "Ripe").Rectangle.Width);
+        Assert.AreEqual(ListFilterChips.RemoveTooltip, Chip(plainChips, "Ripe").TooltipText);
+        Assert.AreEqual(ripeIcon, Chip(chips, "Ripe").LeadingIcon);
+        Assert.AreEqual("Ready to eat", Chip(chips, "Ripe").TooltipText);
+        Assert.IsNull(Chip(chips, ListFilterChips.ClearLabel).LeadingIcon);
+    }
 }

@@ -21,6 +21,12 @@ public sealed record DropdownOption(string Label, string? HotkeyText, bool Enabl
     /// <summary>A checkbox row, checked or not -- one of a list where several can be chosen (MultiChoiceField); null for an ordinary option. Choosing one turns it and keeps the list open.</summary>
     public bool? IsChecked { get; init; }
 
+    /// <summary>A glyph before the label; null for none. When any row of a list has one, every row keeps its place, so the labels line up.</summary>
+    public GlyphIcon? Icon { get; init; }
+
+    /// <summary>What the row says when hovered; null for nothing.</summary>
+    public string? TooltipText { get; init; }
+
     /// <summary>The options choosing this one replaces the menu with, in place of running OnSelect -- a submenu. Null for an ordinary option.</summary>
     public IReadOnlyList<DropdownOption>? Submenu { get; init; }
 

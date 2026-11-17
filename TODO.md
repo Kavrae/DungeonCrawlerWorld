@@ -199,19 +199,6 @@ change. Tests drive the real `Update` with synthetic `KeyboardState`s (dropdown 
 stale focused view, a hotkey letter while a ListView has focus, Escape with a context menu open over a menu window),
 then an in-game and in-Workshop check of every hotkey and the TextBox/DropdownField/ListView keys.
 
-#### Workshop: symbols for a browser row's markers
-
-A browser row (`RecordBrowserTab.CreateRecordRow`) reads its record's state as text after the name --
-`[Disabled][Replaced][Draft][Deleted]`, with " *" for unsaved and " (!)" for errors (`ContentRecordMarkers.Of`) -- and
-the name is cut short with "..." to keep them on the one line, so the markers spend most of the 340-wide column on a
-disabled, replaced draft. Draw each as a small symbol instead (a glyph or a sprite through `SpriteOrGlyphRenderer`,
-coloured by meaning, and still greyed with the row), each with its own text in a tooltip: Disabled, Draft, Deleted,
-Unsaved, Has errors, and Replaced naming the replacement ("Replaced by Scroll of Healing"). Today one tooltip over the
-whole row lists every marker's meaning (`ContentRecordMarkers.MeaningOf`); a symbol each needs a tooltip per symbol,
-so the row's markers become elements of their own (or one element hit-testing its symbols). The same symbols could
-stand beside the browser filter menu's Show only choices (`ContentRecordFilters`); the state they read stays
-`ContentRecordState`, the one rule the filters share.
-
 ### Medium Priority
 
 #### Workshop: plan editing mods, layer by layer

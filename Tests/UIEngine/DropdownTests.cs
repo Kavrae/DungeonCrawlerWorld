@@ -189,4 +189,24 @@ public sealed class DropdownTests
         Assert.IsFalse(Row(harness, 0).IsMarked);
         Assert.AreEqual(-1, harness.Dropdowns.Menu.HighlightedIndex);
     }
+
+    [TestMethod]
+    public void AnyRowWithAnIcon_GivesEveryRowItsPlace_WidensTheList_AndEachRowKeepsItsTooltip()
+    {
+        var harness = new ControlTestHarness();
+        var contextMenus = new ContextMenuController(harness.Dropdowns);
+        var star = new GlyphIcon("*", Color.Red);
+        DropdownOption[] plain = [new("Copy", null, Enabled: true, static () => { }), new("Paste", null, Enabled: true, static () => { })];
+        contextMenus.Open(new Vector2(300, 200), plain);
+        var plainWidth = harness.Dropdowns.Menu.Rectangle.Width;
+        Assert.IsNull(Row(harness, 0).LeadingIcon);
+
+        contextMenus.Open(new Vector2(300, 200), [plain[0] with { Icon = star, TooltipText = "Copies it" }, plain[1]]);
+
+        Assert.AreEqual(star, Row(harness, 0).LeadingIcon);
+        Assert.AreEqual(GlyphIcon.Blank, Row(harness, 1).LeadingIcon);
+        Assert.AreEqual("Copies it", Row(harness, 0).TooltipText);
+        Assert.IsNull(Row(harness, 1).TooltipText);
+        Assert.AreEqual(plainWidth + (int)Button.LeadingIconWidth, harness.Dropdowns.Menu.Rectangle.Width);
+    }
 }

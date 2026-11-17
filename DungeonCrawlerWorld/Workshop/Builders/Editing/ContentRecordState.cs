@@ -27,4 +27,7 @@ public enum ContentRecordState
 
     /// <summary>A publish would write it: master doesn't hold it as it is, or a deletion would take master's line away -- what the To Publish list lists.</summary>
     DiffersFromMaster = 1 << 5,
+
+    /// <summary>Disabled, and another record loads in its place.</summary>
+    Replaced = 1 << 6,
 }
