@@ -151,6 +151,25 @@ public class Element(ElementServices services)
     protected ChildElementTileMode _childrenTileMode;
     public ChildElementTileMode ChildElementTileMode => _childrenTileMode;
 
+    private float _childGap;
+
+    /// <summary>The space between each pair of tiled children, on top of each one's own SpacingAfter.</summary>
+    public float ChildGap => _childGap;
+
+    private ChildCrossAlignment _childCrossAlignment;
+
+    /// <summary>Whether a child marked FillsRemaining was ever added since Build, so a parent without one never looks for it.</summary>
+    private bool _hasAddedFillsRemainingChild;
+
+    /// <summary>Where tiled children sit across the tiling axis.</summary>
+    public ChildCrossAlignment ChildCrossAlignment => _childCrossAlignment;
+
+    /// <summary>Whether this element takes the main-axis space its tiled parent's other children leave.</summary>
+    public bool FillsRemaining => _geometry.FillsRemaining;
+
+    /// <summary>Space at the start of the tiling axis this element keeps for what it draws itself before its tiled children (a toggle's checkbox); none by default.</summary>
+    protected virtual float LeadingTileInset => 0f;
+
     protected List<Element> _children = [];
     public IReadOnlyList<Element> ChildElements => _children;
 
@@ -292,7 +311,7 @@ public class Element(ElementServices services)
 
     private static void MarkTreeChanged() => Interlocked.Increment(ref _treeVersion);
 
-    /// <summary>Whether this element can be found by hit-testing (FindTopmostHit/TryHitTestInteraction) as itself -- defaults to just IsVisible; Button, Toggle and TextBox override this to also require Enabled, so a disabled one is never hovered or pressed as itself.</summary>
+    /// <summary>Whether this element can be found by hit-testing (FindTopmostHit/TryHitTestInteraction) as itself -- defaults to just IsVisible; PressableElement (Button, Toggle) and TextBox override this to also require Enabled, so a disabled one is never hovered or pressed as itself.</summary>
     /// <remarks>A visible, disabled element is still what a press on it lands on: it takes the press and does nothing with it, so the press never reaches what is under it (a heading behind a disabled button).</remarks>
     protected virtual bool IsHitTestable => _isVisible;
 
@@ -566,6 +585,9 @@ public class Element(ElementServices services)
         _parent = parent;
         _canContainChildren = hierarchy?.CanContainChildren ?? false;
         _childrenTileMode = hierarchy?.ChildrenTileMode ?? ChildElementTileMode.Floating;
+        _childGap = hierarchy?.ChildGap ?? 0f;
+        _childCrossAlignment = hierarchy?.ChildCrossAlignment ?? ChildCrossAlignment.Start;
+        _hasAddedFillsRemainingChild = false;
         _children = [];
 
         // Pooled elements must not inherit a stale Tag reference from whatever they were last
@@ -587,6 +609,7 @@ public class Element(ElementServices services)
         _geometry.OriginalSize = layout?.Size ?? new Vector2(0, 0);
         _geometry.CurrentSize = _geometry.OriginalSize;
         _geometry.SpacingAfter = layout?.SpacingAfter ?? 0f;
+        _geometry.FillsRemaining = layout?.FillsRemaining ?? false;
 
         _isVisible = layout?.IsVisible ?? true;
         IsPointerOver = false;
@@ -1321,7 +1344,7 @@ public class Element(ElementServices services)
         var button = FindHeaderButtonAt(position);
         if (button is not null)
         {
-            return ElementInteraction.ButtonClick(this, button);
+            return ElementInteraction.PressableClick(this, button);
         }
 
         if (CanUserMove && HasFreePosition && _headerState.ShowHeader && _headerState.Rectangle.Contains(position))
@@ -1377,18 +1400,20 @@ public class Element(ElementServices services)
             var childInteraction = _children[index].TryHitTestInteraction(position);
             if (childInteraction.Element is not null)
             {
-                return childInteraction;
+                return OwnedByNearestPressable(childInteraction);
             }
         }
 
-        // A content-area Button is reached here (as a leaf, via the children loop just above
-        // recursing into its own TryHitTestInteraction) rather than through FindHeaderButtonAt --
-        // still needs the same ButtonClick shape a header button gets, so UiInputController's
-        // PressedButton/HoveredButton tracking covers a button anywhere, not just the title bar.
-        return this is Button self
-            ? ElementInteraction.ButtonClick(this, self)
+        return this is PressableElement self
+            ? ElementInteraction.PressableClick(this, self)
             : ElementInteraction.Click(this);
     }
+
+    /// <summary>A child's interaction as this element's: when this is a pressable control and the child was simply clicked (no drag, no pressable of its own), the control is what is hovered and pressed, while the child stays what was hit.</summary>
+    private ElementInteraction OwnedByNearestPressable(ElementInteraction childInteraction) =>
+        this is PressableElement self && childInteraction is { Kind: ElementDragInteractionKind.None, Pressable: null, ScrollbarPart: ScrollbarPart.None, Element: { } hitElement }
+            ? ElementInteraction.PressableClick(hitElement, self)
+            : childInteraction;
 
     /// <summary>
     /// Moves this window to the end of its parent's child list, so it draws last (on top) and
@@ -1479,6 +1504,7 @@ public class Element(ElementServices services)
         var clampedInsertIndex = System.Math.Clamp(insertIndex ?? maximumIndex, 0, maximumIndex);
 
         _children.Insert(clampedInsertIndex, newChild);
+        _hasAddedFillsRemainingChild |= newChild._geometry.FillsRemaining;
         MarkTreeChanged();
 
         // Measures newChild, which then reports itself to this element as a layout change
@@ -1625,7 +1651,7 @@ public class Element(ElementServices services)
     private Vector2 ChildrenExtent()
     {
         var extent = Vector2.Zero;
-        var nextTileOffset = 0f;
+        var nextTileOffset = _childrenTileMode == ChildElementTileMode.Floating ? 0f : LeadingTileInset;
         foreach (var childElement in _children)
         {
             if (!childElement.IsVisible)
@@ -1640,7 +1666,7 @@ public class Element(ElementServices services)
                 ChildElementTileMode.Vertical => new Vector2(0, nextTileOffset),
                 _ => childElement._geometry.RelativePosition,
             };
-            nextTileOffset += (_childrenTileMode == ChildElementTileMode.Horizontal ? childSize.X : childSize.Y) + childElement._geometry.SpacingAfter;
+            nextTileOffset += (_childrenTileMode == ChildElementTileMode.Horizontal ? childSize.X : childSize.Y) + childElement._geometry.SpacingAfter + _childGap;
             extent = Vector2.Max(extent, childPosition + childSize);
         }
 
@@ -1676,6 +1702,11 @@ public class Element(ElementServices services)
 
         if (tilesChildren)
         {
+            if (FindRemainingSpaceFiller() is { } filler)
+            {
+                filler.Measure(ComputeChildAvailableSize(this, filler, _contentState.Size));
+            }
+
             Arrange();
         }
 
@@ -1762,10 +1793,139 @@ public class Element(ElementServices services)
         // it.
         var effectiveParentContentSize = parentContentSize + new Vector2(0, parent.FooterHeight);
         var rawAvailableSize = effectiveParentContentSize - child._geometry.RelativePosition;
+        if (parent._childrenTileMode == ChildElementTileMode.Horizontal)
+        {
+            rawAvailableSize.Y = effectiveParentContentSize.Y;
+            rawAvailableSize.X = parent.TakesRemainingSpace(child)
+                ? parent.RemainingMainAxisSpace(child, effectiveParentContentSize.X)
+                : rawAvailableSize.X + parent.FillerSpaceBefore(child);
+        }
+        else if (parent._childrenTileMode == ChildElementTileMode.Vertical)
+        {
+            rawAvailableSize.X = effectiveParentContentSize.X;
+            rawAvailableSize.Y = parent.TakesRemainingSpace(child)
+                ? parent.RemainingMainAxisSpace(child, effectiveParentContentSize.Y)
+                : rawAvailableSize.Y + parent.FillerSpaceBefore(child);
+        }
+
         var childMaximumSize = child.MaximumSize;
         return new Vector2(
             parent.CanUserScrollHorizontal ? childMaximumSize.X : rawAvailableSize.X,
             parent.CanUserScrollVertical ? childMaximumSize.Y : rawAvailableSize.Y);
+    }
+
+    /// <summary>Whether child, marked FillsRemaining, is given the main-axis space its siblings leave: this element tiles its children, isn't WrapContent and doesn't scroll along its tiling axis, so it has a bounded space to leave.</summary>
+    /// <remarks>Only the first visible child marked FillsRemaining takes it; any other keeps its own size.</remarks>
+    private bool TakesRemainingSpace(Element child) =>
+        child._geometry.FillsRemaining && FindRemainingSpaceFiller() == child;
+
+    /// <summary>The first visible child marked FillsRemaining when this element has bounded space along its tiling axis to leave it, else null.</summary>
+    private Element? FindRemainingSpaceFiller()
+    {
+        var leavesSpace = _hasAddedFillsRemainingChild
+            && _geometry.DisplayMode != ElementDisplayMode.WrapContent
+            && _childrenTileMode switch
+            {
+                ChildElementTileMode.Horizontal => !CanUserScrollHorizontal,
+                ChildElementTileMode.Vertical => !CanUserScrollVertical,
+                _ => false,
+            };
+        if (!leavesSpace)
+        {
+            return null;
+        }
+
+        foreach (var childElement in _children)
+        {
+            if (childElement.IsVisible && childElement._geometry.FillsRemaining)
+            {
+                return childElement;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The main-axis size of the filler tiled before child, or zero when none is: space child's position counts that is the filler's to give back, so a child after it may grow into it.</summary>
+    private float FillerSpaceBefore(Element child)
+    {
+        if (FindRemainingSpaceFiller() is not { } filler || filler == child)
+        {
+            return 0f;
+        }
+
+        foreach (var childElement in _children)
+        {
+            if (childElement == child)
+            {
+                return 0f;
+            }
+
+            if (childElement == filler)
+            {
+                return _childrenTileMode == ChildElementTileMode.Horizontal ? filler._geometry.CurrentSize.X : filler._geometry.CurrentSize.Y;
+            }
+        }
+
+        return 0f;
+    }
+
+    /// <summary>What mainAxisContentSize leaves for filler after every other visible child's size, the SpacingAfter of each child but the last, and the gaps between them; never negative.</summary>
+    private float RemainingMainAxisSpace(Element filler, float mainAxisContentSize)
+    {
+        var isHorizontal = _childrenTileMode == ChildElementTileMode.Horizontal;
+        var usedSpace = LeadingTileInset;
+        Element? previousVisibleChild = null;
+        foreach (var childElement in _children)
+        {
+            if (!childElement.IsVisible)
+            {
+                continue;
+            }
+
+            if (previousVisibleChild is not null)
+            {
+                usedSpace += previousVisibleChild._geometry.SpacingAfter + _childGap;
+            }
+
+            if (childElement != filler)
+            {
+                usedSpace += isHorizontal ? childElement._geometry.CurrentSize.X : childElement._geometry.CurrentSize.Y;
+            }
+
+            previousVisibleChild = childElement;
+        }
+
+        return System.Math.Max(0f, mainAxisContentSize - usedSpace);
+    }
+
+    /// <summary>Grows a filler (TakesRemainingSpace) along its parent's tiling axis to all the space it was offered, within its minimum and maximum; anything else is left as measured.</summary>
+    /// <remarks>Run right after the element's own size is computed, so a Fixed or Fill filler's children are measured against the stretched content.</remarks>
+    private void StretchToRemainingSpace()
+    {
+        if (_parent is null || !_parent.TakesRemainingSpace(this))
+        {
+            return;
+        }
+
+        var isHorizontal = _parent._childrenTileMode == ChildElementTileMode.Horizontal;
+        var offeredSize = isHorizontal ? EffectiveMaximumSize.X : EffectiveMaximumSize.Y;
+        var minimumSize = isHorizontal ? _geometry.MinimumSize.X : _geometry.MinimumSize.Y;
+        var currentSize = isHorizontal ? _geometry.CurrentSize.X : _geometry.CurrentSize.Y;
+        var growth = System.Math.Max(offeredSize, minimumSize) - currentSize;
+        if (growth <= 0f)
+        {
+            return;
+        }
+
+        var growthVector = isHorizontal ? new Vector2(growth, 0) : new Vector2(0, growth);
+        _geometry.CurrentSize += growthVector;
+        _contentState.Size += growthVector;
+        _contentState.BackgroundSize += growthVector;
+        if (isHorizontal)
+        {
+            _headerState.Size.X += growth;
+        }
     }
 
     /// <summary>
@@ -1845,13 +2005,16 @@ public class Element(ElementServices services)
             case ElementDisplayMode.WrapContent:
                 MeasureChildren(ContentSizeOfferedToChildren());
                 RecalculateWrapContentSize();
+                StretchToRemainingSpace();
                 break;
             case ElementDisplayMode.Fixed:
                 RecalculateFixedSize();
+                StretchToRemainingSpace();
                 MeasureChildren(_contentState.Size);
                 break;
             case ElementDisplayMode.Fill:
                 RecalculateFillSize();
+                StretchToRemainingSpace();
                 MeasureChildren(_contentState.Size);
                 break;
             default:
@@ -1876,8 +2039,10 @@ public class Element(ElementServices services)
         }
     }
 
+    /// <remarks>A child taking the space the others leave (FillsRemaining) is measured last, once the space is known.</remarks>
     private void MeasureChildren(Vector2 availableContentSize)
     {
+        Element? filler = null;
         foreach (var childElement in _children)
         {
             // An invisible child is excluded from measurement entirely -- the same
@@ -1890,7 +2055,29 @@ public class Element(ElementServices services)
                 continue;
             }
 
+            if (filler is null && TakesRemainingSpace(childElement))
+            {
+                filler = childElement;
+                continue;
+            }
+
             childElement.Measure(ComputeChildAvailableSize(this, childElement, availableContentSize));
+        }
+
+        filler?.Measure(ComputeChildAvailableSize(this, filler, availableContentSize));
+    }
+
+    /// <summary>Measures and arranges this element's children against its content as it stands, for an element its parent's layout pass never reaches (a title button, placed by Button.PositionInHeader).</summary>
+    protected void LayOutChildrenInPlace()
+    {
+        MeasureChildren(_contentState.Size);
+        RetileChildren();
+        foreach (var childElement in _children)
+        {
+            if (childElement.IsVisible)
+            {
+                childElement.Arrange();
+            }
         }
     }
 
@@ -1951,7 +2138,13 @@ public class Element(ElementServices services)
         // later siblings -- the same "collapsed elements are skipped by layout" semantics WPF's
         // Visibility.Collapsed and Android's View.GONE use, chained off the last VISIBLE sibling
         // instead of strictly the previous index.
-        Element? previousVisibleChild = null;
+        // Relative to this element's own (already ContentPadding-inset) ContentAbsolutePosition
+        // -- see RecalculateAbsolutePositions -- so the padding itself is applied exactly once,
+        // uniformly for every child regardless of tile mode; the first child starts at (0,0), not
+        // ContentPadding, to avoid double-applying it here too.
+        var isHorizontal = _childrenTileMode == ChildElementTileMode.Horizontal;
+        var crossAxisContentSize = isHorizontal ? _contentState.Size.Y : _contentState.Size.X;
+        var nextTileOffset = LeadingTileInset;
 
         foreach (var childElement in _children)
         {
@@ -1960,22 +2153,31 @@ public class Element(ElementServices services)
                 continue;
             }
 
-            // Relative to this element's own (already ContentPadding-inset) ContentAbsolutePosition
-            // -- see RecalculateAbsolutePositions -- so the padding itself is applied exactly once,
-            // uniformly for every child regardless of tile mode; this stays (0,0), not
-            // ContentPadding, to avoid double-applying it here too.
-            childElement._geometry.RelativePosition = previousVisibleChild is null
-                ? new Vector2(0, 0)
-                : _childrenTileMode == ChildElementTileMode.Horizontal
-                    ? new Vector2(
-                        previousVisibleChild._geometry.RelativePosition.X + previousVisibleChild._geometry.CurrentSize.X + previousVisibleChild._geometry.SpacingAfter,
-                        previousVisibleChild._geometry.RelativePosition.Y)
-                    : new Vector2(
-                        previousVisibleChild._geometry.RelativePosition.X,
-                        previousVisibleChild._geometry.RelativePosition.Y + previousVisibleChild._geometry.CurrentSize.Y + previousVisibleChild._geometry.SpacingAfter);
+            var childSize = childElement._geometry.CurrentSize;
+            var crossAxisOffset = CrossAxisOffset(crossAxisContentSize, isHorizontal ? childSize.Y : childSize.X);
+            childElement._geometry.RelativePosition = isHorizontal
+                ? new Vector2(nextTileOffset, crossAxisOffset)
+                : new Vector2(crossAxisOffset, nextTileOffset);
 
-            previousVisibleChild = childElement;
+            nextTileOffset += (isHorizontal ? childSize.X : childSize.Y) + childElement._geometry.SpacingAfter + _childGap;
         }
+    }
+
+    /// <summary>Where ChildCrossAlignment places a child crossAxisChildSize across in crossAxisContentSize, to the whole pixel; at the start when it doesn't fit.</summary>
+    private float CrossAxisOffset(float crossAxisContentSize, float crossAxisChildSize)
+    {
+        var spareSpace = crossAxisContentSize - crossAxisChildSize;
+        if (spareSpace <= 0f)
+        {
+            return 0f;
+        }
+
+        return _childCrossAlignment switch
+        {
+            ChildCrossAlignment.Center => MathF.Floor(spareSpace / 2f),
+            ChildCrossAlignment.End => spareSpace,
+            _ => 0f,
+        };
     }
 
     private void RecalculateAbsolutePositions()
@@ -2287,6 +2489,20 @@ public class Element(ElementServices services)
     {
         _geometry.OriginalSize = size;
         MeasureAndArrange();
+    }
+
+    /// <summary>Makes this element Fixed at size, in one layout pass whatever its display mode was.</summary>
+    /// <remarks>For an element built WrapContent to learn the width its content needs (a menu row, a chip), then fixed at a width and height its owner chooses.</remarks>
+    public void SetFixedSize(Vector2 size)
+    {
+        _geometry.OriginalSize = size;
+        if (_geometry.DisplayMode == ElementDisplayMode.Fixed)
+        {
+            MeasureAndArrange();
+            return;
+        }
+
+        SetDisplayMode(ElementDisplayMode.Fixed);
     }
 
     /// <summary>

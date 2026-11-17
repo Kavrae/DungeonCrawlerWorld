@@ -220,7 +220,7 @@ public sealed class UiInputControllerTests
     }
 
     [TestMethod]
-    public void PressingOverATitleButton_SetsPressedButton()
+    public void PressingOverATitleButton_SetsPressedPressable()
     {
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
@@ -231,11 +231,11 @@ public sealed class UiInputControllerTests
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
 
-        Assert.AreSame(closeButton, controller.PressedButton);
+        Assert.AreSame(closeButton, controller.PressedPressable);
     }
 
     [TestMethod]
-    public void ReleasingTheMouse_ClearsPressedButton()
+    public void ReleasingTheMouse_ClearsPressedPressable()
     {
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
@@ -245,11 +245,11 @@ public sealed class UiInputControllerTests
         var pressPoint = closeButton.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
-        Assert.AreSame(closeButton, controller.PressedButton);
+        Assert.AreSame(closeButton, controller.PressedPressable);
 
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
 
-        Assert.IsNull(controller.PressedButton);
+        Assert.IsNull(controller.PressedPressable);
     }
 
     /// <summary>Window Chrome Phase B: the pressed visual (Draw() swapping Outset to Inset) is driven by Button.IsPressed, set true on press and unconditionally false on release.</summary>
@@ -287,7 +287,7 @@ public sealed class UiInputControllerTests
     }
 
     [TestMethod]
-    public void PressingAwayFromAnyButton_LeavesPressedButtonNull()
+    public void PressingAwayFromAnyButton_LeavesPressedPressableNull()
     {
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
@@ -298,7 +298,7 @@ public sealed class UiInputControllerTests
         controller.Update(NoKeys, MouseAt(contentPoint.X, contentPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(contentPoint.X, contentPoint.Y, ButtonState.Pressed));
 
-        Assert.IsNull(controller.PressedButton);
+        Assert.IsNull(controller.PressedPressable);
     }
 
     /// <summary>
@@ -510,7 +510,7 @@ public sealed class UiInputControllerTests
         Assert.AreNotEqual(ElementDragInteractionKind.Move, controller.ActiveInteraction.Kind);
     }
 
-    /// <summary>Releasing the mouse ends the interaction entirely, not just PressedButton -- ActiveInteraction must go back to NotHit for the next press to start clean.</summary>
+    /// <summary>Releasing the mouse ends the interaction entirely, not just PressedPressable -- ActiveInteraction must go back to NotHit for the next press to start clean.</summary>
     [TestMethod]
     public void ReleasingAfterAMove_ClearsActiveInteraction()
     {
@@ -3577,7 +3577,6 @@ public sealed class UiInputControllerTests
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(TestElementServices.For(windowService, fontService), spriteSheetService));
         windowService.RegisterFactory<GridControl>(() => new GridControl(TestElementServices.For(windowService, fontService)));
-        windowService.RegisterFactory<Toggle>(() => new Toggle(TestElementServices.For(windowService, fontService)));
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(TestElementServices.For(windowService, fontService)));
         windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(TestElementServices.For(windowService, fontService), spriteSheetService));
 

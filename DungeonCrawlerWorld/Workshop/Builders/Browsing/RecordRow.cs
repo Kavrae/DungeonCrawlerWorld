@@ -1,7 +1,4 @@
-using Engine.Utilities;
 using Microsoft.Xna.Framework;
-using Presentation.UI.Content;
-using UIEngine.Fonts;
 using UIEngine.UI;
 using UIEngine.UI.ColorPalettes;
 
@@ -12,89 +9,73 @@ public readonly record struct RecordRowMarker(string Glyph, string? SpriteName, 
 
 /// <summary>A browser row: the record's icon, its name, and its marker symbols packed against the row's right end.</summary>
 /// <remarks>
-/// The row is one line: a name too long for what the symbols leave is cut short with "...", never a symbol. Each symbol is
-/// an element of its own carrying its tooltip; the row and the name carry the full name only when it is cut. A dimmed
-/// row greys its name and blends its symbols toward the same grey, so they still tell apart. A click on any child reaches
-/// the row.
+/// The row is one line laid out by its own tiling: the icon, the name taking what the symbols leave, then the symbols. A
+/// name too long for that is cut short with "...", never a symbol, and carries the full name as its tooltip only while it
+/// is cut. Each symbol is an element of its own carrying its tooltip. A dimmed row greys its name and blends its symbols
+/// toward the same grey, so they still tell apart. A click on any child reaches the row.
 /// </remarks>
 public static class RecordRow
 {
     public const float Height = 24f;
 
     private const float IconSize = 20f;
-    private const float IconLeft = 4f;
-    private const float TextIndent = 28f;
 
-    /// <summary>Room left beside a row's text so a line that just fits is never wrapped.</summary>
-    private const float TextSlack = 4f;
+    /// <summary>Room at either end of the row.</summary>
+    private const float SideInset = 4f;
+
+    /// <summary>Between the icon and the name.</summary>
+    private const float NameGap = 7f;
 
     private const float MarkerSize = 18f;
     private const float MarkerGap = 2f;
-
-    /// <summary>Room between the last symbol and the row's right end.</summary>
-    private const float MarkersRightMargin = 4f;
 
     /// <summary>How far a dimmed row's symbol colours move toward the dimmed text colour.</summary>
     private const float DimmedMarkerBlend = 0.6f;
 
     /// <summary>A row width wide, holding appearance, drawn over rowColor; added to parent by the caller.</summary>
-    public static Window Create(ElementPoolService elementPool, FontService fontService, Element parent, float width, RecordRowAppearance appearance, Color rowColor)
+    public static Window Create(ElementPoolService elementPool, Element parent, float width, RecordRowAppearance appearance, Color rowColor)
     {
         var rowSize = new Vector2(width, Height);
         var row = elementPool.CreateElement<Window>(parent, new ElementOptions
         {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Horizontal, ChildCrossAlignment = ChildCrossAlignment.Center },
             Layout = new ElementLayoutOptions { Size = rowSize, MinimumSize = rowSize, MaximumSize = rowSize, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = rowColor },
         });
-        row.ContentPadding = Vector2.Zero;
+        row.ContentPadding = new Vector2(SideInset, 0);
 
-        var iconSize = new Vector2(IconSize, IconSize);
-        var icon = elementPool.CreateElement<ItemIconElement>(row, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(IconLeft, (Height - IconSize) / 2), Size = iconSize, DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-        });
-        icon.Configure(appearance.SpriteName, appearance.Glyph, appearance.GlyphColor, iconSize);
-        row.AddChild(icon);
+        AddIcon(elementPool, row, appearance.SpriteName, appearance.Glyph, appearance.GlyphColor, IconSize, NameGap, tooltip: null);
 
-        var markersWidth = MarkersWidth(appearance.Markers.Count);
-        var nameSize = new Vector2(Math.Max(width - TextIndent - markersWidth, 1f), Height);
-        var name = elementPool.CreateElement<TextWindow>(row, new ElementOptions
+        var name = elementPool.CreateElement<Label>(row, new ElementOptions
         {
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(TextIndent, 0), Size = nameSize, MinimumSize = nameSize, MaximumSize = nameSize, DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Text = new TextOptions { TextColor = appearance.IsDimmed ? WindowPalette.DimmedRowTextColor : WindowPalette.BodyTextColor },
+            Layout = new ElementLayoutOptions { FillsRemaining = true, SpacingAfter = appearance.Markers.Count == 0 ? 0f : MarkerGap },
+            Text = new TextOptions { Text = appearance.Name, TextColor = appearance.IsDimmed ? WindowPalette.DimmedRowTextColor : WindowPalette.BodyTextColor },
         });
-        var measurer = fontService.GetTextMeasurer(name.ContentFont);
-        var nameWidth = nameSize.X - name.ContentPadding.X * 2 - TextSlack;
-        var drawnName = StringUtility.TruncateWithEllipsis(measurer, appearance.Name, Math.Max(nameWidth, 1f));
-        name.UpdateText(drawnName);
+        name.ShowsFullTextWhenCut = true;
         row.AddChild(name);
 
-        var isCut = !ReferenceEquals(drawnName, appearance.Name);
-        row.TooltipText = name.TooltipText = isCut ? appearance.Name : null;
-
-        var markerSize = new Vector2(MarkerSize, MarkerSize);
-        var markerLeft = width - markersWidth + MarkerGap;
-        foreach (var marker in appearance.Markers)
+        for (var index = 0; index < appearance.Markers.Count; index++)
         {
-            var symbol = elementPool.CreateElement<ItemIconElement>(row, new ElementOptions
-            {
-                Layout = new ElementLayoutOptions { RelativePosition = new Vector2(markerLeft, (Height - MarkerSize) / 2), Size = markerSize, DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
-                Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            });
+            var marker = appearance.Markers[index];
             var color = appearance.IsDimmed ? Color.Lerp(marker.Color, WindowPalette.DimmedRowTextColor, DimmedMarkerBlend) : marker.Color;
-            symbol.Configure(marker.SpriteName, marker.Glyph, color, markerSize);
-            symbol.TooltipText = marker.Tooltip;
-            row.AddChild(symbol);
-            markerLeft += MarkerSize + MarkerGap;
+            var isLast = index == appearance.Markers.Count - 1;
+            AddIcon(elementPool, row, marker.SpriteName, marker.Glyph, color, MarkerSize, isLast ? 0f : MarkerGap, marker.Tooltip);
         }
 
         return row;
     }
 
-    /// <summary>The width count symbols take at the row's right end, the margin after them included; none for none.</summary>
-    private static float MarkersWidth(int count) => count == 0 ? 0f : count * (MarkerSize + MarkerGap) + MarkersRightMargin;
+    private static void AddIcon(ElementPoolService elementPool, Window row, string? spriteName, string glyph, Color color, float size, float spacingAfter, string? tooltip)
+    {
+        var iconSize = new Vector2(size, size);
+        var icon = elementPool.CreateElement<IconElement>(row, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { Size = iconSize, DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true, SpacingAfter = spacingAfter },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+        });
+        icon.Configure(spriteName, glyph, color, iconSize);
+        icon.TooltipText = tooltip;
+        row.AddChild(icon);
+    }
 }

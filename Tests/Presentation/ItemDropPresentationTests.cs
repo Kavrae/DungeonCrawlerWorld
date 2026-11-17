@@ -229,8 +229,8 @@ public sealed class ItemDropPresentationTests
         var fixture = BuildGrid(PlayerEntityId);
         var buttons = OpenMenu(fixture);
 
-        ClickButton(buttons.Single(button => button.LeftText == "Drop"));
-        ClickButton(OpenMenu(fixture).Single(button => button.LeftText == "Drop All"));
+        ClickButton(buttons.Single(button => MenuRows.LabelOf(button) == "Drop"));
+        ClickButton(OpenMenu(fixture).Single(button => MenuRows.LabelOf(button) == "Drop All"));
 
         CollectionAssert.AreEqual(
             new[] { ItemDrop.OneUnitOf(fixture.StackInstanceId), ItemDrop.WholeStackOf(fixture.StackInstanceId) },
@@ -242,7 +242,7 @@ public sealed class ItemDropPresentationTests
     {
         var fixture = BuildGrid(gridEntityId: 7);
 
-        Assert.IsFalse(OpenMenu(fixture).Any(button => button.LeftText.StartsWith("Drop")));
+        Assert.IsFalse(OpenMenu(fixture).Any(button => MenuRows.LabelOf(button).StartsWith("Drop")));
     }
 
     [TestMethod]
@@ -250,6 +250,6 @@ public sealed class ItemDropPresentationTests
     {
         var fixture = BuildGrid(PlayerEntityId, canTrade: false);
 
-        Assert.IsFalse(OpenMenu(fixture).Any(button => button.LeftText.StartsWith("Drop")));
+        Assert.IsFalse(OpenMenu(fixture).Any(button => MenuRows.LabelOf(button).StartsWith("Drop")));
     }
 }

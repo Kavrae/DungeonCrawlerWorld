@@ -115,6 +115,20 @@ public sealed class ElementTooltipTests
         Assert.AreEqual("Restore", _tooltip.OriginalText);
     }
 
+    [TestMethod]
+    public void AChildInsideAButton_ShowsItsOwnTooltip_AndTheRestOfTheButtonShowsTheButtons()
+    {
+        var button = AddButton("Inventory");
+        var keyLabel = button.ShowKeyLabel("I");
+        keyLabel.TooltipText = "Key: I";
+
+        Hover(keyLabel.Rectangle.Center, PopupChrome.HoverTooltipDelayFrames);
+        Assert.AreEqual("Key: I", _tooltip.OriginalText);
+
+        Hover(new Point(button.Rectangle.Right - 3, button.Rectangle.Bottom - 3), PopupChrome.HoverTooltipDelayFrames + 1);
+        Assert.AreEqual("Inventory", _tooltip.OriginalText);
+    }
+
     private Button AddButton(string? tooltipText)
     {
         var button = _pool.CreateElement<Button>(null, new ElementOptions

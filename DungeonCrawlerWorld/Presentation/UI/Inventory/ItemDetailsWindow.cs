@@ -314,8 +314,9 @@ public sealed class ItemDetailsWindow(
                 Layout = new ElementLayoutOptions { RelativePosition = new Vector2(buttonX, 0), Size = new Vector2(buttonWidths[index], ButtonHeight), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = true },
                 Content = new ElementContentOptions { ContentColor = WindowPalette.ControlBackground },
-                Text = new TextOptions { Text = label, TextColor = WindowPalette.ControlLabelTextColor },
+                Text = new TextOptions { TextColor = WindowPalette.ControlLabelTextColor },
             });
+            button.SetText(label);
             button.Clicked += _ => onClicked();
             row.AddChild(button);
             buttonX -= ButtonGap;

@@ -409,6 +409,18 @@ line, the executable's displayed product name if shown anywhere -- reads "The Al
 folders, assemblies, namespaces, types (`WorkshopShell`, `Cadence/Workshop`, `DungeonCrawlerWorld.Workshop.exe`) and
 CLAUDE.md's references stay "Workshop". Put the name in one constant the shell reads, so it changes in one place.
 
+#### Context menu cleanup: submenus beside their menu, options indented under headings
+
+Menus (`Dropdown`, opened through `DropdownController`) built from controls since `PLAN-control-content.md`; these
+change how they read:
+- A submenu opens beside its parent menu, the parent staying open, instead of replacing it (today choosing a submenu
+  option rebuilds the one shared `Dropdown` with the submenu's options). Placed edge-aware next to the row that opened
+  it, flipping to the other side when the screen has no room; closing the submenu returns to the parent, and a light
+  dismiss outside both closes both. Needs more than one menu instance (the controller holds one today).
+- Options under a heading (`DropdownOption.IsHeader`) are indented, so which heading an option belongs to reads from
+  its place.
+- Headings are no longer bold (`Label.IsBold` in `Dropdown.AddHeaderRow`): the indentation now tells them apart.
+
 #### Selectable read-only text
 
 Read-only limits editing, never copying: read-only text can be selected and copied like any text box's. First user:

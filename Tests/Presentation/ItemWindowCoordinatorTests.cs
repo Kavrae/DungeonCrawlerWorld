@@ -99,14 +99,12 @@ public sealed class ItemWindowCoordinatorTests
 
         elementPool.RegisterFactory<Tooltip>(() => new Tooltip(TestElementServices.For(elementPool, fontService)));
         elementPool.RegisterFactory<GridControl>(() => new GridControl(TestElementServices.For(elementPool, fontService)));
-        elementPool.RegisterFactory<Toggle>(() => new Toggle(TestElementServices.For(elementPool, fontService)));
         elementPool.RegisterFactory<TextDivider>(() => new TextDivider(TestElementServices.For(elementPool, fontService)));
         elementPool.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(TestElementServices.For(elementPool, fontService), spriteSheetService));
         elementPool.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(TestElementServices.For(elementPool, fontService), spriteSheetService));
         elementPool.RegisterFactory<TradeItemStackCell>(() => new TradeItemStackCell(TestElementServices.For(elementPool, fontService), spriteSheetService));
         elementPool.RegisterFactory<EmptyTradeSlotCell>(() => new EmptyTradeSlotCell(TestElementServices.For(elementPool, fontService)));
         elementPool.RegisterFactory<CurrencyElement>(() => new CurrencyElement(TestElementServices.For(elementPool, fontService), spriteSheetService));
-        elementPool.RegisterFactory<ItemIconElement>(() => new ItemIconElement(TestElementServices.For(elementPool, fontService), spriteSheetService));
         elementPool.RegisterFactory<TargetShapePreviewElement>(() => new TargetShapePreviewElement(TestElementServices.For(elementPool, fontService)));
         elementPool.RegisterFactory<EntityIconElement>(() => new EntityIconElement(TestElementServices.For(elementPool, fontService), spriteSheetService, mapView));
         elementPool.RegisterFactory<ItemDetailsWindow>(() => new ItemDetailsWindow(TestElementServices.For(elementPool, fontService), new ActionCatalog(), TestGameplayTags.BuiltIn, inventoryServices.ActionStateView, world));
@@ -577,7 +575,7 @@ public sealed class ItemWindowCoordinatorTests
     }
 
     private static IEnumerable<string> ButtonLabels(ItemDetailsWindow window) =>
-        DescendantsOf(window).OfType<Button>().Select(button => button.LeftText);
+        DescendantsOf(window).OfType<Button>().Select(ButtonContent.TextOf);
 
     [TestMethod]
     public void ItemDetails_ForAComparableStack_HasCompareAndNoStopComparison()
@@ -598,7 +596,7 @@ public sealed class ItemWindowCoordinatorTests
         window.Update(new GameTime());
 
         var buttons = DescendantsOf(window).OfType<Button>().ToList();
-        CollectionAssert.AreEqual(new[] { "Stop Comparison" }, buttons.Select(button => button.LeftText).ToArray());
+        CollectionAssert.AreEqual(new[] { "Stop Comparison" }, buttons.Select(ButtonContent.TextOf).ToArray());
 
         buttons[0].HandleClick(buttons[0].Rectangle.Center);
 

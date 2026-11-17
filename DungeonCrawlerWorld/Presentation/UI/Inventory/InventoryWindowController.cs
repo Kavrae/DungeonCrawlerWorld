@@ -71,9 +71,9 @@ public sealed class InventoryWindowController(
         {
             Layout = new ElementLayoutOptions { RelativePosition = InventoryChrome.ButtonPosition, Size = InventoryChrome.ButtonSize, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
-            Text = new TextOptions { Text = "I" },
-            Button = new ButtonOptions { SpriteName = "Inventory", HotkeyLabel = "I" },
         });
+        _button.SetIcon("Inventory", "I");
+        _button.ShowKeyLabel("I");
         _button.Initialize();
         _button.TooltipText = "Inventory";
         _button.Clicked += _ => _windowLifecycle.Toggle();
@@ -85,7 +85,7 @@ public sealed class InventoryWindowController(
         layers.MarkMenuModeExempt(_button);
     }
 
-    /// <summary>Reflects InventoryDisabledComponent on the button itself -- Enabled false both grays the icon (see Button.DrawContent) and excludes it from hit-testing (see Button.IsHitTestable), so a disabled inventory reads as genuinely unclickable rather than clickable-but-silently-refused the way WindowLifecycle's own isDisabled check alone would leave it.</summary>
+    /// <summary>Reflects InventoryDisabledComponent on the button itself -- Enabled false both grays the icon (IconElement inside a disabled control) and excludes it from hit-testing (PressableElement.IsHitTestable), so a disabled inventory reads as genuinely unclickable rather than clickable-but-silently-refused the way WindowLifecycle's own isDisabled check alone would leave it.</summary>
     public void Update() =>
         _button.Enabled = !IsInventoryDisabled();
 

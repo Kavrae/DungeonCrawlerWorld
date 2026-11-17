@@ -70,7 +70,7 @@ public sealed class InventoryGridContentActivateTests
     private static Button ArmOption(Fixture fixture)
     {
         fixture.HostWindow.ChildElements.OfType<InventoryItemStackCell>().Single().OnRightClicked!.Invoke(Point.Zero);
-        return fixture.ContextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == "Arm");
+        return fixture.ContextMenuController.Menu.ChildElements.OfType<Button>().Single(button => MenuRows.LabelOf(button) == "Arm");
     }
 
     private static void DoubleClickCell(Fixture fixture)

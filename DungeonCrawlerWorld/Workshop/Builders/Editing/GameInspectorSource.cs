@@ -4,19 +4,16 @@ using Game.Content;
 using Game.Effects.Entries;
 using Game.Modules.Actions;
 using Microsoft.Xna.Framework;
-using Presentation.UI;
-using Presentation.UI.Content;
 using UIEngine.Rendering;
 using UIEngine.UI;
-using UIEngine.UI.ColorPalettes;
 using Workshop.Editing;
 
 namespace Builders.Editing;
 
 /// <summary>
 /// What the game adds to the Workshop's generated inspectors: records to pick by name, sprite names and terrain keys to
-/// pick from, the tags an activator implies under the declared ones, and two previews drawn among the rows -- a targeting
-/// shape beside its spec, and an icon over a definition's appearance (sprite, glyph and colour).
+/// pick from, the tags an activator implies under the declared ones, and an icon drawn among the rows over a definition's
+/// appearance (sprite, glyph and colour).
 /// </summary>
 public sealed class GameInspectorSource(ContentWorkspace workspace, ElementPoolService elementPool, SpriteManifestResolver sprites) : IContentInspectorSource
 {
@@ -26,8 +23,6 @@ public sealed class GameInspectorSource(ContentWorkspace workspace, ElementPoolS
     private const string TagsKey = ActivatableContent.TagsKey;
     private const string TerrainKey = TerrainChangeContent.TerrainKey;
     private const string ActivatorKey = ActivatableContent.ActivatorKey;
-    private const float ShapePreviewHeight = 110f;
-    private const float ShapePreviewMaximumWidth = 220f;
     private const float IconSize = 32f;
 
     private static readonly HashSet<string> ActivatableTypeNames = new(StringComparer.Ordinal) { nameof(ActionDefinition), nameof(Game.Modules.Inventory.ItemDefinition) };
@@ -143,45 +138,10 @@ public sealed class GameInspectorSource(ContentWorkspace workspace, ElementPoolS
             ? "Changing the activator changes how this is used. Settings the new activator has no field for are dropped (targeting and timing are kept where it has them). Undo puts them back. Change it?"
             : null;
 
-    public ContentInspectorDecoration? DecorationFor(ContentSchema schema)
-    {
-        if (schema.TypeName == nameof(TargetingSpec))
-        {
-            return new ContentInspectorDecoration("Shape", BeforeKey: null, ShapePreviewHeight, FillShapePreview);
-        }
-
-        return ActivatableTypeNames.Contains(schema.TypeName)
+    public ContentInspectorDecoration? DecorationFor(ContentSchema schema) =>
+        ActivatableTypeNames.Contains(schema.TypeName)
             ? new ContentInspectorDecoration("Appearance", SpriteNameKey, IconSize, FillAppearancePreview)
             : null;
-    }
-
-    /// <summary>The shape the spec lays out, decoded through its codec; the reason, when it doesn't decode.</summary>
-    private void FillShapePreview(Window host, JsonElement json, float width)
-    {
-        TargetingSpec spec;
-        try
-        {
-            spec = ContentObject.Read<TargetingSpec>(json, workspace.Types, NoContentReferences.Instance);
-        }
-        catch (ContentFormatException exception)
-        {
-            AddText(host, $"No preview: {exception.Message}", width);
-            return;
-        }
-
-        var offsets = TargetShapePreviewGeometry.ComputeOffsets(spec);
-        var (minX, minY, columns, rows) = TargetShapePreviewGeometry.ComputeBounds(offsets);
-        var cellSize = TargetShapePreviewGeometry.ComputeCellSize(columns, rows, System.Math.Min(width, ShapePreviewMaximumWidth), ShapePreviewHeight);
-        var size = new Vector2(columns * cellSize, rows * cellSize);
-        var preview = elementPool.CreateElement<TargetShapePreviewElement>(host, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = size, DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-        });
-        preview.Configure(offsets, minX, minY, cellSize);
-        host.AddChild(preview);
-    }
 
     /// <summary>The icon the record's sprite name, glyph and glyph colour draw.</summary>
     private void FillAppearancePreview(Window host, JsonElement json, float width)
@@ -190,23 +150,12 @@ public sealed class GameInspectorSource(ContentWorkspace workspace, ElementPoolS
         var glyph = json.TryGetProperty(GlyphKey, out var glyphJson) && glyphJson.ValueKind == JsonValueKind.String ? glyphJson.GetString()! : string.Empty;
         var color = json.TryGetProperty(GlyphColorKey, out var colorJson) && colorJson.TryGetUInt32(out var packed) ? ContentColors.Unpack(packed) : Color.White;
         var iconSize = new Vector2(IconSize, IconSize);
-        var icon = elementPool.CreateElement<ItemIconElement>(host, new ElementOptions
+        var icon = elementPool.CreateElement<IconElement>(host, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = iconSize, DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
         });
         icon.Configure(spriteName, glyph, color, iconSize);
         host.AddChild(icon);
-    }
-
-    private void AddText(Window host, string text, float width)
-    {
-        var line = elementPool.CreateElement<TextWindow>(host, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = new Vector2(width, 22), DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Text = new TextOptions { Text = text, TextColor = WindowPalette.GhostText },
-        });
-        host.AddChild(line);
     }
 }

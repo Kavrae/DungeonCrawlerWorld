@@ -47,9 +47,9 @@ public sealed class AbilityScoreWindowController(
         {
             Layout = new ElementLayoutOptions { RelativePosition = AbilityScoreChrome.ButtonPosition, Size = AbilityScoreChrome.ButtonSize, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
-            Text = new TextOptions { Text = "S" },
-            Button = new ButtonOptions { SpriteName = "AbilityScore", HotkeyLabel = "O" },
         });
+        _button.SetIcon("AbilityScore", "S");
+        _button.ShowKeyLabel("O");
         _button.Initialize();
         _button.TooltipText = "Ability Scores";
         _button.Clicked += _ => _slot.Toggle();

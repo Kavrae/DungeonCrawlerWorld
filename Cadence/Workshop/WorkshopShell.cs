@@ -53,9 +53,9 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
     private readonly UiInputController _inputController;
     private readonly UiLayerHost _layerHost;
     private readonly SpriteFontBase _tabFont;
-    private readonly List<TextWindow> _tabTiles = [];
+    private readonly List<Button> _tabTiles = [];
     private readonly List<float> _tabTileWidths = [];
-    private readonly List<(WorkshopCommand Command, TextWindow Tile, float Width)> _commandTiles = [];
+    private readonly List<(WorkshopCommand Command, Button Tile, float Width)> _commandTiles = [];
     private readonly WorkshopTabContext[] _tabContexts;
     private readonly TabNavigator _tabNavigator;
     private readonly List<GameOutputLine> _drainedOutput = [];
@@ -70,7 +70,7 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
     private float _pinnedTabTileWidth;
 
     private Window _tabStrip = null!;
-    private TextWindow _overflowTile = null!;
+    private Button _overflowTile = null!;
     private TextWindow _statusText = null!;
     private Vector2 _screenSize;
     private int _openTabIndex = -1;
@@ -371,7 +371,7 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
         {
             if (_tabs[tabIndex] is IWorkshopEditingTab editingTab)
             {
-                _tabTiles[tabIndex].UpdateText(editingTab.HasUnsavedChanges ? editingTab.Title + UnsavedMarker : editingTab.Title);
+                _tabTiles[tabIndex].SetText(editingTab.HasUnsavedChanges ? editingTab.Title + UnsavedMarker : editingTab.Title);
             }
         }
     }
@@ -486,17 +486,18 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
 
     private float TileWidthFor(string label) => _tabFont.MeasureString(label).X + TabHorizontalPadding * 2;
 
-    private TextWindow CreateStripTile(float width, string label)
+    private Button CreateStripTile(float width, string label)
     {
         var size = new Vector2(width, TabStripHeight);
-        var tile = _uiEngine.ElementPoolService.CreateElement<TextWindow>(_tabStrip, new ElementOptions
+        var tile = _uiEngine.ElementPoolService.CreateElement<Button>(_tabStrip, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = size, MinimumSize = size, MaximumSize = size, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Inset, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelContentColor },
-            Text = new TextOptions { Text = label, TextColor = WindowPalette.BodyTextColor },
+            Text = new TextOptions { TextColor = WindowPalette.BodyTextColor },
         });
         tile.ContentFont = _tabFont;
+        tile.SetText(label);
         _tabStrip.AddChild(tile);
         return tile;
     }
@@ -617,9 +618,9 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
         StyleTile(_overflowTile, isSelected: _openTabIndex >= _visibleTabCount && _openTabIndex < _hostTabCount);
     }
 
-    private static void StyleTile(TextWindow tile, bool isSelected)
+    private static void StyleTile(Button tile, bool isSelected)
     {
-        tile.BorderStyle = isSelected ? BorderStyle.Outset : BorderStyle.Inset;
+        tile.RestingBorderStyle = isSelected ? BorderStyle.Outset : BorderStyle.Inset;
         tile.SetContentColor(isSelected ? SelectedTabColor : WindowPalette.PanelContentColor);
         tile.TextColor = isSelected ? SelectedTabTextColor : WindowPalette.BodyTextColor;
     }

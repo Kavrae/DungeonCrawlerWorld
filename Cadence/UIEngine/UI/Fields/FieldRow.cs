@@ -230,8 +230,8 @@ public sealed class FieldRow(ElementServices services)
         _revertButton = ElementPoolService.CreateElement<Button>(this, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = new Vector2(FieldSectionHeader.ButtonWidth, FieldSectionHeader.ButtonHeight), DisplayMode = ElementDisplayMode.Fixed },
-            Text = new TextOptions { Text = RevertLabel },
         });
+        _revertButton.SetText(RevertLabel);
         _revertButton.Clicked += _ => _revertRequested = true;
         AddChild(_revertButton);
         _revertButton.IsVisible = false;
@@ -356,7 +356,7 @@ public sealed class FieldRow(ElementServices services)
     private Toggle CreateToggle()
     {
         var toggle = ElementPoolService.CreateElement<Toggle>(this, EditorOptions(showBorder: false, isTransparent: true));
-        toggle.Configure(string.Empty, LabelPosition.East, _value.Boolean, ToggleOnColor, WindowPalette.EditableControlBackground, WindowPalette.BodyTextColor, _font, isOn => Committed?.Invoke(FieldValue.OfBoolean(isOn)));
+        toggle.Configure(_value.Boolean, ToggleOnColor, WindowPalette.EditableControlBackground, isOn => Committed?.Invoke(FieldValue.OfBoolean(isOn)));
         return toggle;
     }
 

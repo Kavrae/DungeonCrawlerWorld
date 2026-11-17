@@ -55,7 +55,6 @@ public sealed class InventoryManagementWindowTests
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(TestElementServices.For(windowService, fontService), spriteSheetService));
         windowService.RegisterFactory<GridControl>(() => new GridControl(TestElementServices.For(windowService, fontService)));
-        windowService.RegisterFactory<Toggle>(() => new Toggle(TestElementServices.For(windowService, fontService)));
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(TestElementServices.For(windowService, fontService)));
         windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(TestElementServices.For(windowService, fontService), spriteSheetService));
 
@@ -123,10 +122,10 @@ public sealed class InventoryManagementWindowTests
     private static List<InventoryItemStackCell> GetOrderedCells(Element root) =>
         FindActiveGridWindow(root)!.ChildElements.OfType<InventoryItemStackCell>().ToList();
 
-    /// <summary>Depth-first search for a tab header tile (TextWindow) with the given label.</summary>
-    private static TextWindow? FindTabTile(Element element, string label)
+    /// <summary>Depth-first search for a tab header tile (a Button) with the given label.</summary>
+    private static Button? FindTabTile(Element element, string label)
     {
-        if (element is TextWindow { OriginalText: var text } tile && text == label)
+        if (element is Button { Text: var text } tile && text == label)
         {
             return tile;
         }

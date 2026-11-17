@@ -111,7 +111,8 @@ public sealed class ToggleList(ElementServices services)
             Chrome = new ElementChromeOptions { ShowBorder = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
-        toggle.Configure(label, LabelPosition.East, isOn, _onColor, _offColor, _labelColor, font, onToggled);
+        toggle.Configure(isOn, _onColor, _offColor, onToggled);
+        toggle.SetLabel(label, font, _labelColor);
         AddChild(toggle);
         return toggle;
     }

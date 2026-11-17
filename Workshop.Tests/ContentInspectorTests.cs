@@ -47,6 +47,8 @@ public sealed class ContentInspectorTests
             Pool.RegisterFactory(() => new Window(services));
             Pool.RegisterFactory(() => new TextWindow(services));
             Pool.RegisterFactory(() => new Button(services));
+            Pool.RegisterFactory(() => new Label(services));
+            Pool.RegisterFactory(() => new IconElement(services, new SpriteSheetService(null, "Spritesheets", SpriteManifestResolver.Load(Path.Combine(AppContext.BaseDirectory, "SpriteManifest.json")))));
             Pool.RegisterFactory(() => new Dropdown(services));
             Pool.RegisterFactory(() => new Toggle(services));
             Pool.RegisterFactory(() => new TextBox(services));
@@ -336,10 +338,10 @@ public sealed class ContentInspectorTests
         harness.Host.AddChild(field);
 
         harness.Click(field.Rectangle.Center);
-        var rows = harness.Layers[UiLayer.ContextMenu].OfType<Dropdown>().Single(dropdown => dropdown.IsVisible).ChildElements.OfType<Button>().ToList();
+        var rows = harness.Layers[UiLayer.ContextMenu].OfType<Dropdown>().Single(dropdown => dropdown.IsVisible).ChildElements.OfType<Toggle>().ToList();
 
-        CollectionAssert.AreEqual(new bool?[] { false, true }, rows.Select(row => row.CheckBoxState).ToArray());
-        CollectionAssert.AreEqual(new[] { "Adjacent", "Self" }, rows.Select(row => row.LeftText).ToArray());
+        CollectionAssert.AreEqual(new[] { false, true }, rows.Select(row => row.IsOn).ToArray());
+        CollectionAssert.AreEqual(new[] { "Adjacent", "Self" }, rows.Select(row => row.ChildElements.OfType<Label>().Single().Text).ToArray());
     }
 
     [TestMethod]
@@ -415,17 +417,17 @@ public sealed class ContentInspectorTests
         });
 
         harness.Click(field.Rectangle.Center);
-        var adjacent = OpenList(harness).ChildElements.OfType<Button>().First();
+        var adjacent = OpenList(harness).ChildElements.OfType<Toggle>().First();
         harness.Click(adjacent.Rectangle.Center);
 
         Assert.IsTrue(field.IsListOpen);
-        Assert.IsTrue(adjacent.CheckBoxState);
+        Assert.IsTrue(adjacent.IsOn);
         CollectionAssert.AreEqual(new[] { 0, 1 }, chosen.Single().ToArray());
 
         harness.Click(adjacent.Rectangle.Center);
 
         Assert.IsTrue(field.IsListOpen);
-        Assert.IsFalse(adjacent.CheckBoxState);
+        Assert.IsFalse(adjacent.IsOn);
         CollectionAssert.AreEqual(new[] { 1 }, field.ChosenIndices.ToArray());
     }
 

@@ -15,6 +15,6 @@ public static class AbilityScoreChrome
 
     public static Vector2 ButtonPosition = InventoryChrome.ButtonPosition + new Vector2(0, InventoryChrome.ButtonSize.Y) + ButtonGap;
 
-    /// <summary>Same shape as InventoryChrome/HealthWindowChrome's own button (HotbarContent.SlotSize) -- the three HUD-trigger buttons read as one consistent vertical stack, sized like the hotbar since each now also carries its own hotbar-style HotkeyLabel overlay.</summary>
+    /// <summary>Same shape as InventoryChrome/HealthWindowChrome's own button (HotbarContent.SlotSize) -- the three HUD-trigger buttons read as one consistent vertical stack, sized like the hotbar since each also carries a hotbar-style key label in its corner (Button.ShowKeyLabel).</summary>
     public static Vector2 ButtonSize = HotbarContent.SlotSize;
 }

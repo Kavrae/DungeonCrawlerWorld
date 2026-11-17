@@ -15,7 +15,7 @@ public enum DebugSection
 /// <remarks>Every section is built when the tab opens; the switch shows one and hides the rest, so the Live section keeps its selection and freeze while another is shown. The section shown is kept across the tab closing and opening.</remarks>
 public sealed class DebugTabView(DebugTabServices services, WorkshopDebugging debugging)
 {
-    private readonly List<(DebugSection Section, TextWindow Tile)> _tiles = [];
+    private readonly List<(DebugSection Section, Button Tile)> _tiles = [];
     private Window _switch = null!;
 
     public DebugSection Section { get; private set; } = DebugSection.Launch;
@@ -27,7 +27,7 @@ public sealed class DebugTabView(DebugTabServices services, WorkshopDebugging de
     public DebugReportsSection Reports { get; } = new(services, debugging);
 
     /// <summary>section's tile on the switch.</summary>
-    public TextWindow TileFor(DebugSection section) => _tiles.First(entry => entry.Section == section).Tile;
+    public Button TileFor(DebugSection section) => _tiles.First(entry => entry.Section == section).Tile;
 
     public void Open(Rectangle area)
     {
@@ -121,7 +121,7 @@ public sealed class DebugTabView(DebugTabServices services, WorkshopDebugging de
         Reports.Close();
     }
 
-    private TextWindow CreateTile(DebugSection section, float x) =>
+    private Button CreateTile(DebugSection section, float x) =>
         DebugTabElements.CreateTile(services, _switch, new Vector2(x, 0), DebugTabChrome.SectionTileWidth, LabelOf(section), () => ShowSection(section));
 
     /// <summary>section's name on its tile -- the title of its window.</summary>

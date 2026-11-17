@@ -1,6 +1,7 @@
 using FontStashSharp;
 using Microsoft.Xna.Framework;
 using UIEngine.Fonts;
+using UIEngine.Rendering;
 using UIEngine.UI.Chrome;
 using UIEngine.UI.ColorPalettes;
 
@@ -13,15 +14,20 @@ namespace UIEngine.UI;
 /// content area, fine for content meant to stay inside its parent but
 /// wrong for a popup meant to float outside it. One persistent, pooled instance shared across
 /// every caller (see DropdownController, the only thing that ever calls Show/Hide) -- each
-/// Show rebuilds its row Buttons fresh from whatever option list this call was given, the same
+/// Show rebuilds its rows fresh from whatever option list this call was given, the same
 /// "shared mechanics, distributed content" split Tooltip's own ShowNear already uses (positioning/
 /// layering mechanics live here; what the options actually are is entirely the caller's business).
 /// </summary>
 /// <remarks>
-/// A list taller than the height Show is given scrolls. One row at a time is highlighted -- the hovered one, or the one
-/// Up/Down moved to (see MoveHighlight) -- and Enter chooses it. Choosing a checkbox row (DropdownOption.IsChecked)
-/// turns it and leaves the list open. A marked row (a DropdownField's current value) draws an
-/// accent at its left edge.
+/// Each option is an ordinary control: a Button, or for a checkbox option (DropdownOption.IsChecked) a Toggle with a
+/// flat checkbox, holding the option's icon (when any option has one), its label taking the row's width, and its
+/// hotkey or count at the right end. A row is as wide as its content needs, and every row is then fixed at the widest.
+/// The rows draw no hover of their own: which row is current is the menu's to know, so it draws the row fills, the
+/// highlight and the mark behind them. A list taller than the height Show is given scrolls. At most one row at a time is
+/// highlighted -- the hovered one, gone again once the pointer is over no option, or the one Up/Down moved to (see
+/// MoveHighlight), which stays -- and Enter chooses it. Choosing a
+/// checkbox row turns it and leaves the list open. A marked row (a DropdownField's current value) draws an accent at
+/// its left edge.
 /// </remarks>
 public sealed class Dropdown(ElementServices services)
     : Window(services)
@@ -31,8 +37,19 @@ public sealed class Dropdown(ElementServices services)
     /// <summary>Shorter than an ordinary option row -- a header is a label, not a target the player aims a click at, so it doesn't need the same tap-friendly height.</summary>
     private const float HeaderRowHeight = 18f;
 
-    /// <summary>Gap between an option's Label and its HotkeyText column, when present -- e.g. "Copy" and "Ctrl+C" need visible daylight between them, not just whatever's left over once both are right/left-aligned within the same row.</summary>
+    /// <summary>Gap between an option's Label and its HotkeyText column, when present -- e.g. "Copy" and "Ctrl+C" need visible daylight between them.</summary>
     private const float HotkeyGap = 24f;
+
+    /// <summary>Room either side of a row's content, so neither column sits against the row's edges.</summary>
+    private const float RowTextInset = 4f;
+
+    /// <summary>An option icon's box, and the gap after it.</summary>
+    private const float LeadingIconSide = 16f;
+
+    private const float LeadingIconGap = 4f;
+
+    /// <summary>How wide the marked row's accent is -- inside RowTextInset, so it never reaches the text.</summary>
+    private const int MarkerWidth = 3;
 
     /// <summary>What an option that opens a submenu shows in its HotkeyText column.</summary>
     public const string SubmenuMarker = ">";
@@ -42,8 +59,8 @@ public sealed class Dropdown(ElementServices services)
     /// <summary>A submenu chosen this frame, shown on the next Update rather than from inside the click that chose it -- showing rebuilds every row, including the one whose click is still being handled.</summary>
     private IReadOnlyList<DropdownOption>? _pendingSubmenu;
 
-    /// <summary>The row Button per option, null for a header -- indexed like the options Show was given.</summary>
-    private readonly List<Button?> _optionRows = [];
+    /// <summary>The row control per option, null for a header -- indexed like the options Show was given.</summary>
+    private readonly List<PressableElement?> _optionRows = [];
 
     private readonly List<DropdownOption> _options = [];
 
@@ -62,16 +79,19 @@ public sealed class Dropdown(ElementServices services)
     /// <summary>The option Up/Down or the pointer last moved to, or -1 for none.</summary>
     public int HighlightedIndex => _highlightedIndex;
 
+    /// <summary>The option drawn with the marker, or -1 for none.</summary>
+    public int MarkedIndex => _shownMarkedIndex;
+
+    /// <summary>The row control per option shown, null for a header -- indexed like the options.</summary>
+    public IReadOnlyList<PressableElement?> OptionRows => _optionRows;
+
     /// <summary>
-    /// Repositions, rebuilds, and shows this menu with the given options at topLeft --
-    /// called fresh every open, never incrementally updated (an option list is
-    /// small and short-lived, so "just rebuild it" is simpler than an add/remove API). Closes
-    /// (pool-returns) whatever rows a previous Show left behind first, the same defensive
-    /// clear Window.SetContent already does before attaching new content. Row height varies by
-    /// kind (see RowHeight/HeaderRowHeight), so total height is an explicit sum, not a flat
-    /// RowHeight * options.Count.
+    /// Rebuilds and shows this menu with the given options at topLeft -- called fresh every open, never incrementally
+    /// updated (an option list is small and short-lived, so "just rebuild it" is simpler than an add/remove API). Closes
+    /// (pool-returns) whatever rows a previous Show left behind first. Its size comes from the rows it builds, so a
+    /// caller placing it edge-aware shows it first and then moves it (DropdownController).
     /// </summary>
-    /// <param name="minimumWidth">The narrowest the rows may be -- a DropdownField's own width, so its list is never narrower than the field.</param>
+    /// <param name="minimumWidth">The narrowest the menu may be -- a DropdownField's own width, so its list is never narrower than the field.</param>
     /// <param name="maximumHeight">The tallest the list may be before it scrolls.</param>
     /// <param name="markedIndex">The option drawn with the marker and highlighted first, or -1 for none.</param>
     public void Show(Vector2 topLeft, IReadOnlyList<DropdownOption> options, float minimumWidth = 0f, float maximumHeight = float.MaxValue, int markedIndex = -1)
@@ -114,17 +134,11 @@ public sealed class Dropdown(ElementServices services)
         var rowsHeight = MeasureRowsHeight(options);
         var scrolls = rowsHeight > maximumHeight;
         CanUserScrollVertical = scrolls;
-        var width = System.Math.Max(MeasureWidth(options), minimumWidth - BorderInsetDoubled.X - ChildContentPaddingDoubled.X - (scrolls ? WindowChrome.ScrollbarThickness : 0f));
 
-        // The outer window's own border AND ContentPadding (this Window has children) both eat
-        // into its ContentSize (see RecalculateFixedSize) -- sizing the window to exactly width
-        // by totalHeight would leave a content area shorter/narrower than that, which then clamps
-        // the first row's own Fixed size down below its MinimumSize during Measure (a child is
-        // measured within its parent's content area). Adding both insets back here is
-        // what makes the *content* area actually come out to width by totalHeight, matching what
-        // every row below is itself sized to.
-        SetBounds(topLeft, MeasureOuterSize(width, System.Math.Min(rowsHeight, maximumHeight), scrolls));
-
+        // Each row is first built as wide as its content needs, inside the widest this menu may be, then every row is
+        // fixed at the widest (or what minimumWidth leaves), so the hotkey column lines up.
+        SetBounds(topLeft, MaximumSize);
+        var rows = new List<Element>(options.Count);
         var hasIcons = HasIcons(options);
         var y = 0f;
         for (var optionIndex = 0; optionIndex < options.Count; optionIndex++)
@@ -132,59 +146,115 @@ public sealed class Dropdown(ElementServices services)
             var option = options[optionIndex];
             if (option.IsHeader)
             {
-                AddHeaderRow(option, width, y);
+                rows.Add(AddHeaderRow(option, y));
                 _optionRows.Add(null);
                 y += HeaderRowHeight;
                 continue;
             }
 
-            _optionRows.Add(AddOptionRow(option, optionIndex, width, y, isMarked: optionIndex == markedIndex, hasIcons));
+            var row = AddOptionRow(option, optionIndex, y, hasIcons);
+            rows.Add(row);
+            _optionRows.Add(row);
             y += RowHeight;
         }
+
+        var widestRow = 0f;
+        foreach (var row in rows)
+        {
+            widestRow = System.Math.Max(widestRow, row.CurrentSize.X);
+        }
+
+        var width = System.Math.Max(widestRow, minimumWidth - BorderInsetDoubled.X - ChildContentPaddingDoubled.X - (scrolls ? WindowChrome.ScrollbarThickness : 0f));
+        for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+        {
+            rows[rowIndex].SetFixedSize(new Vector2(width, options[rowIndex].IsHeader ? HeaderRowHeight : RowHeight));
+        }
+
+        // The outer window's own border AND ContentPadding (this Window has children) both eat into its ContentSize
+        // (see RecalculateFixedSize), so both are added back here to make the content area come out to exactly the
+        // rows' width by their height.
+        SetBounds(topLeft, MeasureOuterSize(width, System.Math.Min(rowsHeight, maximumHeight), scrolls));
     }
 
-    private void AddHeaderRow(DropdownOption option, float width, float y)
+    /// <summary>A heading: its label in bold, inset like an option's, on the panel colour.</summary>
+    private Window AddHeaderRow(DropdownOption option, float y)
     {
-        var rowSize = new Vector2(width, HeaderRowHeight);
-
-        var header = ElementPoolService.CreateElement<TextWindow>(this, new ElementOptions
+        var header = ElementPoolService.CreateElement<Window>(this, new ElementOptions
         {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, y), Size = rowSize, MinimumSize = rowSize, MaximumSize = rowSize, DisplayMode = ElementDisplayMode.Fixed },
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Horizontal, ChildCrossAlignment = ChildCrossAlignment.Center },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, y), DisplayMode = ElementDisplayMode.WrapContent },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelContentColor },
-            Text = new TextOptions { Text = option.Label, TextColor = WindowPalette.BodyTextColor, Bold = true },
         });
-        header.ContentFont = _font; // Must match the font MeasureWidth used, or labels can clip against the row's own fixed width.
-
+        header.ContentPadding = new Vector2(RowTextInset, 0);
         AddChild(header);
+
+        var label = AddRowLabel(header, option.Label, fillsRemaining: false, spacingAfter: 0f);
+        label.IsBold = true;
+        return header;
     }
 
-    private Button AddOptionRow(DropdownOption option, int optionIndex, float width, float y, bool isMarked, bool hasIcons)
+    /// <summary>An option's row: a Button, or a Toggle with a flat checkbox for a checkbox option, holding its icon (when any option has one), its label taking the row's width, and its hotkey or count at the right end.</summary>
+    private PressableElement AddOptionRow(DropdownOption option, int optionIndex, float y, bool hasIcons)
     {
-        var rowSize = new Vector2(width, RowHeight);
-
-        var button = ElementPoolService.CreateElement<Button>(this, new ElementOptions
+        var rowOptions = new ElementOptions
         {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, y), Size = rowSize, MinimumSize = rowSize, MaximumSize = rowSize, DisplayMode = ElementDisplayMode.Fixed },
-            // Flat, borderless rows -- a native context menu's look, not a toolbar of beveled
-            // buttons. The hover highlight alone (see Button.DrawContent) is enough feedback.
-            Chrome = new ElementChromeOptions { ShowBorder = false },
-            Text = new TextOptions { Text = option.Label },
-        });
-        button.ContentFont = _font; // Must match the font MeasureWidth used, or labels can clip against the row's own fixed width.
-        button.RightText = option.HotkeyText;
-        button.Enabled = option.Enabled;
-        button.LeftAlign = true; // A menu row always reads left-aligned, even without a HotkeyText column -- not the ink-centered look Button otherwise defaults to.
-        button.IsMarked = isMarked;
-        button.CheckBoxState = option.IsChecked;
-        button.LeadingIcon = hasIcons ? option.Icon ?? GlyphIcon.Blank : null;
-        button.TooltipText = option.TooltipText;
-        button.Clicked += _ => Choose(optionIndex);
+            Hierarchy = new ElementHierarchyOptions { ChildrenTileMode = ChildElementTileMode.Horizontal, ChildCrossAlignment = ChildCrossAlignment.Center },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, y), DisplayMode = ElementDisplayMode.WrapContent, IsTransparent = true },
+            Chrome = new ElementChromeOptions { ShowBorder = false, CanUserFocus = false },
+        };
 
-        AddChild(button);
-        return button;
+        PressableElement row;
+        if (option.IsChecked is { } isChecked)
+        {
+            var toggle = ElementPoolService.CreateElement<Toggle>(this, rowOptions);
+            toggle.CheckboxStyle = ToggleCheckboxStyle.Flat;
+            toggle.Configure(isChecked, Color.White, Color.White, _ => Choose(optionIndex));
+            row = toggle;
+        }
+        else
+        {
+            var button = ElementPoolService.CreateElement<Button>(this, rowOptions);
+            button.ShowsHoverHighlight = false;
+            button.Clicked += _ => Choose(optionIndex);
+            row = button;
+        }
+
+        row.ContentPadding = new Vector2(RowTextInset, 0);
+        row.Enabled = option.Enabled;
+        row.TooltipText = option.TooltipText;
+        AddChild(row);
+
+        if (hasIcons)
+        {
+            var icon = option.Icon ?? GlyphIcon.Blank;
+            var iconElement = ElementPoolService.CreateElement<IconElement>(row, new ElementOptions
+            {
+                Layout = new ElementLayoutOptions { Size = new Vector2(LeadingIconSide, RowHeight), DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true, SpacingAfter = LeadingIconGap },
+            });
+            iconElement.Configure(null, icon.Glyph, icon.Color, _font);
+            row.AddChild(iconElement);
+        }
+
+        AddRowLabel(row, option.Label, fillsRemaining: true, spacingAfter: option.HotkeyText is null ? 0f : HotkeyGap);
+        if (option.HotkeyText is { } hotkeyText)
+        {
+            AddRowLabel(row, hotkeyText, fillsRemaining: false, spacingAfter: 0f);
+        }
+
+        return row;
+    }
+
+    private Label AddRowLabel(Element row, string text, bool fillsRemaining, float spacingAfter)
+    {
+        var label = ElementPoolService.CreateElement<Label>(row, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { FillsRemaining = fillsRemaining, SpacingAfter = spacingAfter },
+            Text = new TextOptions { Text = text, TextColor = WindowPalette.BodyTextColor },
+        });
+        label.SetFont(_font);
+        row.AddChild(label);
+        return label;
     }
 
     /// <summary>Runs the option at optionIndex: opens its submenu, or turns a checkbox row and leaves the list open with its scroll and highlight where they are, or runs it and closes.</summary>
@@ -200,9 +270,9 @@ public sealed class Dropdown(ElementServices services)
         if (option.IsChecked is { } isChecked)
         {
             _options[optionIndex] = option with { IsChecked = !isChecked };
-            if (_optionRows[optionIndex] is { } row)
+            if (_optionRows[optionIndex] is Toggle toggle)
             {
-                row.CheckBoxState = !isChecked;
+                toggle.SetIsOn(!isChecked);
             }
 
             option.OnSelect();
@@ -248,15 +318,33 @@ public sealed class Dropdown(ElementServices services)
 
     private bool IsChoosable(int optionIndex) => optionIndex >= 0 && optionIndex < _options.Count && _options[optionIndex] is { IsHeader: false, Enabled: true };
 
+    /// <summary>Highlights optionIndex as Up/Down, a replaced list or the marked value do; the pointer leaving the list leaves it highlighted.</summary>
     private void SetHighlight(int optionIndex)
     {
         _highlightedIndex = optionIndex;
+        _isHighlightFromPointer = false;
+    }
+
+    /// <summary>Whether the highlight is where the pointer put it, and so goes once the pointer is over no option.</summary>
+    private bool _isHighlightFromPointer;
+
+    /// <summary>Highlights the hovered option; once the pointer is over no option (off the list, on a heading or a disabled row), clears a highlight the pointer gave.</summary>
+    private void FollowPointer()
+    {
         for (var rowIndex = 0; rowIndex < _optionRows.Count; rowIndex++)
         {
-            if (_optionRows[rowIndex] is { } row)
+            if (_optionRows[rowIndex] is { IsHovered: true })
             {
-                row.IsHighlighted = rowIndex == optionIndex;
+                _highlightedIndex = rowIndex;
+                _isHighlightFromPointer = true;
+                return;
             }
+        }
+
+        if (_isHighlightFromPointer)
+        {
+            _highlightedIndex = -1;
+            _isHighlightFromPointer = false;
         }
     }
 
@@ -286,14 +374,7 @@ public sealed class Dropdown(ElementServices services)
             ApplyReplacedOptions(replacedOptions);
         }
 
-        for (var rowIndex = 0; rowIndex < _optionRows.Count; rowIndex++)
-        {
-            if (_optionRows[rowIndex] is { IsHovered: true } && rowIndex != _highlightedIndex)
-            {
-                SetHighlight(rowIndex);
-                break;
-            }
-        }
+        FollowPointer();
 
         if (_pendingSubmenu is { } submenu)
         {
@@ -309,13 +390,31 @@ public sealed class Dropdown(ElementServices services)
         }
     }
 
-    /// <summary>The size Show will set this menu's own bounds to, given the same arguments -- exposed so DropdownController can position this menu edge-aware (PopupPositioning.GetPositionWithinBounds) before calling Show, since Show is also what first computes/applies this size.</summary>
-    public Vector2 MeasureSize(IReadOnlyList<DropdownOption> options, float minimumWidth = 0f, float maximumHeight = float.MaxValue)
+    /// <summary>Behind the rows: each option row's fill, the hover highlight on the highlighted row, and the accent at the marked row's left edge.</summary>
+    public override void DrawContent(GameTime gameTime)
     {
-        var rowsHeight = MeasureRowsHeight(options);
-        var scrolls = rowsHeight > maximumHeight;
-        var width = System.Math.Max(MeasureWidth(options), minimumWidth - BorderInsetDoubled.X - ChildContentPaddingDoubled.X - (scrolls ? WindowChrome.ScrollbarThickness : 0f));
-        return MeasureOuterSize(width, System.Math.Min(rowsHeight, maximumHeight), scrolls);
+        base.DrawContent(gameTime);
+
+        var spriteBatch = Render.Batch;
+        for (var rowIndex = 0; rowIndex < _optionRows.Count; rowIndex++)
+        {
+            if (_optionRows[rowIndex] is not { } row)
+            {
+                continue;
+            }
+
+            var rowRectangle = new Rectangle((int)row.RelativePosition.X, (int)row.RelativePosition.Y, (int)row.CurrentSize.X, (int)row.CurrentSize.Y);
+            spriteBatch.FillRectangle(rowRectangle, WindowPalette.PanelContentColor);
+            if (rowIndex == _highlightedIndex)
+            {
+                spriteBatch.FillRectangle(rowRectangle, WindowPalette.HoverDark);
+            }
+
+            if (rowIndex == _shownMarkedIndex)
+            {
+                spriteBatch.FillRectangle(new Rectangle(rowRectangle.X, rowRectangle.Y, MarkerWidth, rowRectangle.Height), WindowPalette.FocusAccentColor);
+            }
+        }
     }
 
     private Vector2 MeasureOuterSize(float rowWidth, float visibleHeight, bool scrolls) =>
@@ -330,21 +429,6 @@ public sealed class Dropdown(ElementServices services)
         }
 
         return totalHeight;
-    }
-
-    /// <summary>Widest Label+HotkeyText pairing across every row (headers included, HotkeyText-less), so every row shares one width and the hotkey column lines up -- the same "measure the widest, pin every row to it" idiom GridControl's own sort tile uses.</summary>
-    private float MeasureWidth(IReadOnlyList<DropdownOption> options)
-    {
-        var widest = 0f;
-        var iconWidth = HasIcons(options) ? Button.LeadingIconWidth : 0f;
-        foreach (var option in options)
-        {
-            var labelWidth = _font.MeasureString(option.Label).X + (option.IsChecked is null ? 0f : Button.CheckBoxWidth) + (option.IsHeader ? 0f : iconWidth);
-            var hotkeyWidth = option.HotkeyText is null ? 0f : HotkeyGap + _font.MeasureString(option.HotkeyText).X;
-            widest = System.Math.Max(widest, labelWidth + hotkeyWidth);
-        }
-
-        return widest + Button.HorizontalTextInset * 2;
     }
 
     /// <summary>Whether any row has an icon, so every row gives one its place.</summary>

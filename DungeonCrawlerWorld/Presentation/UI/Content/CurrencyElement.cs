@@ -60,7 +60,7 @@ public sealed class CurrencyElement(ElementServices services, SpriteSheetService
         Type = type;
         _showLabel = showLabel;
         _textFont = FontService.GetFont(FontChrome.DefaultFontSize);
-        _glyphFontMeasurer = FontService.GetTextMeasurer(FontService.GetFont((int)(elementSize.Y * GameFontChrome.IconGlyphFontFraction)));
+        _glyphFontMeasurer = FontService.GetTextMeasurer(FontService.GetFont((int)(elementSize.Y * FontChrome.IconGlyphFontFraction)));
     }
 
     /// <summary>Called every frame by the owning CurrencyRowContent -- Currency has no version watcher, so an unconditional re-read is the simplest correct option (same cost the old CurrencyRow.Format paid every Update).</summary>

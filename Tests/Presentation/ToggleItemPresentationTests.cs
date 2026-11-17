@@ -297,7 +297,7 @@ public sealed class ToggleItemPresentationTests
     private static Button MenuOption(GridFixture fixture, InventoryItemStackCell cell, string label)
     {
         cell.OnRightClicked!.Invoke(Point.Zero);
-        return fixture.ContextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == label);
+        return fixture.ContextMenuController.Menu.ChildElements.OfType<Button>().Single(button => MenuRows.LabelOf(button) == label);
     }
 
     [TestMethod]

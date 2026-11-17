@@ -77,7 +77,7 @@ public sealed class ControlGalleryTab : IIdeTab
         AddPaneLabel(split.SecondPane, "Right pane");
         split.SplitChanged += size => context.Status.Show($"Split pane: {size:N0}");
 
-        var dialogButton = Add<Button>(ref y, "Modal dialog", new Vector2(120, RowHeight), button => button.LeftText = "Open dialog");
+        var dialogButton = Add<Button>(ref y, "Modal dialog", new Vector2(120, RowHeight), button => button.SetText("Open dialog"));
         dialogButton.Clicked += _ => OpenDialog(area);
 
         var searchable = Add<SearchableChoiceField>(ref y, "Searchable choice", new Vector2(FieldWidth, RowHeight), field => field.Configure(ManyOptions, 2, allowsFreeText: false));

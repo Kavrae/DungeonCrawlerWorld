@@ -241,7 +241,7 @@ public sealed class MapPreviewWindow(ElementServices services, AreaPreviewCache 
         var toolbar = AddToolbarRow(this, width);
         AddZoomButtons(toolbar);
         _gridButton = AddButton(toolbar, "Grid", 56f, ToggleGrid);
-        _gridButton.IsHighlighted = _showsGrid;
+        _gridButton.IsSelected = _showsGrid;
         AddButton(toolbar, "Reroll", 66f, () => Reroll(area));
         _seedLine = CreateLine(width, string.Empty, ActivatableDetailsSections.BodyTextColor);
 
@@ -320,7 +320,7 @@ public sealed class MapPreviewWindow(ElementServices services, AreaPreviewCache 
     {
         foreach (var (cell, button) in _neighborhoodCellButtons)
         {
-            button.IsHighlighted = cell == _shownNeighborhoodCell;
+            button.IsSelected = cell == _shownNeighborhoodCell;
         }
     }
 
@@ -352,7 +352,7 @@ public sealed class MapPreviewWindow(ElementServices services, AreaPreviewCache 
                 Layout = new ElementLayoutOptions { RelativePosition = position, Size = size, MinimumSize = size, MaximumSize = size, DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = true },
             });
-            button.LeftText = glyph;
+            button.SetText(glyph);
             var (capturedDeltaX, capturedDeltaY) = (deltaX, deltaY);
             button.Clicked += _ => Navigate(capturedDeltaX, capturedDeltaY);
             frame.AddChild(button);
@@ -455,7 +455,7 @@ public sealed class MapPreviewWindow(ElementServices services, AreaPreviewCache 
         foreach (var (layer, label) in LayerButtons)
         {
             var button = AddButton(layerRow, label, 70f, () => SelectLayer(layer));
-            button.IsHighlighted = layer == _layer;
+            button.IsSelected = layer == _layer;
             _layerButtons.Add((layer, button));
         }
     }
@@ -503,7 +503,7 @@ public sealed class MapPreviewWindow(ElementServices services, AreaPreviewCache 
             Layout = new ElementLayoutOptions { Size = size, MinimumSize = size, MaximumSize = size, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true },
         });
-        button.LeftText = text;
+        button.SetText(text);
         button.Clicked += _ => onClick();
         toolbar.AddChild(button);
         return button;
@@ -543,7 +543,7 @@ public sealed class MapPreviewWindow(ElementServices services, AreaPreviewCache 
         _mapView?.SetLayer(layer);
         foreach (var (buttonLayer, button) in _layerButtons)
         {
-            button.IsHighlighted = buttonLayer == layer;
+            button.IsSelected = buttonLayer == layer;
         }
 
         ShowReadout(_mapView?.HoveredPosition);
@@ -559,7 +559,7 @@ public sealed class MapPreviewWindow(ElementServices services, AreaPreviewCache 
 
         if (_gridButton is { } gridButton)
         {
-            gridButton.IsHighlighted = _showsGrid;
+            gridButton.IsSelected = _showsGrid;
         }
     }
 

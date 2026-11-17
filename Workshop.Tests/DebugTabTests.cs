@@ -141,28 +141,12 @@ public sealed class DebugTabTests
         var launch = harness.View.Launch;
 
         Assert.AreEqual("Launch Settings", launch.Window.TitleText);
-        Assert.AreEqual("Launch Settings", harness.View.TileFor(DebugSection.Launch).OriginalText);
+        Assert.AreEqual("Launch Settings", harness.View.TileFor(DebugSection.Launch).Text);
         var allLeft = launch.ToggleFor(DiagnosticsFeatures.All).AbsolutePosition.X;
         foreach (var feature in new[] { DiagnosticsFeatures.FrameBudget, DiagnosticsFeatures.Memory, DiagnosticsFeatures.LeakDetection, DiagnosticsFeatures.Startup, DiagnosticsFeatures.Gauges })
         {
             Assert.AreEqual(allLeft + ToggleList.ItemIndent, launch.ToggleFor(feature).AbsolutePosition.X, 0.5f, feature.ToString());
         }
-    }
-
-    [TestMethod]
-    public void TheCopyButtons_CopyTheCommandLineAndTheSettingsFilesPath()
-    {
-        using var harness = new DebugTabHarness(_optionsPath);
-        var launch = harness.View.Launch;
-        Assert.AreEqual(_optionsPath, launch.OptionsFileText);
-
-        harness.Click(launch.CopyCommandLineButton);
-        Assert.AreEqual(launch.CommandLineText, harness.Clipboard[^1]);
-        Assert.AreEqual("Copied the command line.", harness.Status.LastMessage);
-
-        harness.Click(launch.CopyOptionsFileButton);
-        Assert.AreEqual(_optionsPath, harness.Clipboard[^1]);
-        Assert.HasCount(2, harness.Clipboard);
     }
 
     [TestMethod]

@@ -13,7 +13,10 @@ public sealed class DropdownTests
     private static DropdownField AddField(ControlTestHarness harness, Vector2 position, IReadOnlyList<string> labels, int selectedIndex = 0) =>
         harness.AddRoot<DropdownField>(position, new Vector2(180, 24), field => field.SetOptions(labels, selectedIndex));
 
-    private static Button Row(ControlTestHarness harness, int optionIndex) => harness.Dropdowns.Menu.ChildElements.OfType<Button>().ElementAt(optionIndex);
+    private static PressableElement Row(ControlTestHarness harness, int optionIndex) => harness.Dropdowns.Menu.OptionRows[optionIndex]!;
+
+    /// <summary>An icon's box and the gap after it, which every row of a menu holding one gives it.</summary>
+    private const int IconAndGapWidth = 20;
 
     [TestMethod]
     public void ClickingAField_OpensItsListUnderIt_AtLeastAsWide_WithTheChosenOptionMarked()
@@ -28,8 +31,7 @@ public sealed class DropdownTests
         Assert.AreEqual(field.Rectangle.Bottom, menu.Rectangle.Top);
         Assert.AreEqual(field.Rectangle.Left, menu.Rectangle.Left);
         Assert.IsGreaterThanOrEqualTo(field.Rectangle.Width, menu.Rectangle.Width);
-        Assert.IsTrue(Row(harness, 1).IsMarked);
-        Assert.IsFalse(Row(harness, 0).IsMarked);
+        Assert.AreEqual(1, menu.MarkedIndex);
         Assert.AreEqual(1, menu.HighlightedIndex);
     }
 
@@ -186,7 +188,7 @@ public sealed class DropdownTests
 
         Assert.AreEqual(new Point(300, 200), harness.Dropdowns.Menu.Rectangle.Location);
         Assert.IsNull(harness.Dropdowns.Owner);
-        Assert.IsFalse(Row(harness, 0).IsMarked);
+        Assert.AreEqual(-1, harness.Dropdowns.Menu.MarkedIndex);
         Assert.AreEqual(-1, harness.Dropdowns.Menu.HighlightedIndex);
     }
 
@@ -199,14 +201,74 @@ public sealed class DropdownTests
         DropdownOption[] plain = [new("Copy", null, Enabled: true, static () => { }), new("Paste", null, Enabled: true, static () => { })];
         contextMenus.Open(new Vector2(300, 200), plain);
         var plainWidth = harness.Dropdowns.Menu.Rectangle.Width;
-        Assert.IsNull(Row(harness, 0).LeadingIcon);
+        Assert.IsNull(MenuRows.IconOf(Row(harness, 0)));
 
         contextMenus.Open(new Vector2(300, 200), [plain[0] with { Icon = star, TooltipText = "Copies it" }, plain[1]]);
 
-        Assert.AreEqual(star, Row(harness, 0).LeadingIcon);
-        Assert.AreEqual(GlyphIcon.Blank, Row(harness, 1).LeadingIcon);
+        Assert.AreEqual(star, MenuRows.IconOf(Row(harness, 0)));
+        Assert.AreEqual(GlyphIcon.Blank, MenuRows.IconOf(Row(harness, 1)));
         Assert.AreEqual("Copies it", Row(harness, 0).TooltipText);
         Assert.IsNull(Row(harness, 1).TooltipText);
-        Assert.AreEqual(plainWidth + (int)Button.LeadingIconWidth, harness.Dropdowns.Menu.Rectangle.Width);
+        Assert.AreEqual(plainWidth + IconAndGapWidth, harness.Dropdowns.Menu.Rectangle.Width);
+    }
+
+    [TestMethod]
+    public void EveryRow_IsAsWideAsTheWidest_ItsLabelTakesTheRest_AndItsHotkeySitsAtTheRightEnd()
+    {
+        var harness = new ControlTestHarness();
+        var contextMenus = new ContextMenuController(harness.Dropdowns);
+
+        contextMenus.Open(new Vector2(300, 200),
+        [
+            new DropdownOption("Cut", "Ctrl+X", Enabled: true, static () => { }),
+            new DropdownOption("Select everything there is", null, Enabled: true, static () => { }),
+            new DropdownOption("Paste", "Ctrl+V", Enabled: false, static () => { }),
+        ]);
+
+        var rows = harness.Dropdowns.Menu.OptionRows.Select(row => row!).ToList();
+        Assert.IsTrue(rows.All(row => row is Button), "An option without a checkbox is a button.");
+        Assert.AreEqual(1, rows.Select(row => row.Rectangle.Width).Distinct().Count());
+        var cutHotkey = rows[0].ChildElements.OfType<Label>().Single(label => label.Text == "Ctrl+X");
+        Assert.AreEqual(rows[0].Rectangle.Right - 4, cutHotkey.Rectangle.Right);
+        var cutLabel = rows[0].ChildElements.OfType<Label>().Single(label => label.FillsRemaining);
+        Assert.AreEqual(cutHotkey.Rectangle.Left - 24, cutLabel.Rectangle.Right, "The label takes what the hotkey and its gap leave.");
+        Assert.IsFalse(rows[2].Enabled);
+    }
+
+    [TestMethod]
+    public void MovingThePointerOffTheMenu_ClearsTheHighlightItGave_ButNotOneUpDownGave()
+    {
+        var harness = new ControlTestHarness();
+        var contextMenus = new ContextMenuController(harness.Dropdowns);
+        contextMenus.Open(new Vector2(300, 200),
+        [
+            new DropdownOption("Copy", null, Enabled: true, static () => { }),
+            new DropdownOption("Paste", null, Enabled: true, static () => { }),
+        ]);
+        var menu = harness.Dropdowns.Menu;
+
+        harness.MoveTo(menu.OptionRows[1]!.Rectangle.Center);
+        Assert.AreEqual(1, menu.HighlightedIndex);
+
+        harness.MoveTo(new Point(10, 10));
+        Assert.AreEqual(-1, menu.HighlightedIndex);
+
+        harness.Press(Keys.Down);
+        Assert.AreEqual(0, menu.HighlightedIndex);
+        harness.MoveTo(new Point(20, 20));
+        Assert.AreEqual(0, menu.HighlightedIndex);
+    }
+
+    [TestMethod]
+    public void MovingTheHighlight_MovesTheMenusOwnHighlight_NotTheRows()
+    {
+        var harness = new ControlTestHarness();
+        var field = AddField(harness, new Vector2(100, 100), Colours);
+        harness.Click(field);
+
+        harness.Press(Keys.Down);
+
+        Assert.AreEqual(1, harness.Dropdowns.Menu.HighlightedIndex);
+        Assert.IsTrue(harness.Dropdowns.Menu.OptionRows.All(row => row is Button { ShowsHoverHighlight: false }), "The menu draws which row is current; its rows draw no hover of their own.");
     }
 }

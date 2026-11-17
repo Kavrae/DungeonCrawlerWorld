@@ -234,41 +234,41 @@ public sealed class UiInputController
     internal void OnTextInput(char character) => _pendingTextInput.Add(character);
 
     /// <summary>
-    /// The Button (title bar or content area) currently held down by the mouse, if any -- null
-    /// the rest of the time, including once the matching release fires (regardless of where the
-    /// mouse ends up). Drives Button's own pressed-bevel look via SetPressed.
+    /// The pressable control (a title button, a content-area button or toggle) the mouse went down on and still holds,
+    /// if any -- null the rest of the time, including once the matching release fires wherever the mouse ends up. Set on
+    /// the nearest pressable above what was hit, so pressing a label inside a button presses the button. Drives the
+    /// control's pressed look through SetPressed.
     /// </summary>
-    internal Button? PressedButton { get; private set; }
+    internal PressableElement? PressedPressable { get; private set; }
 
     /// <summary>
-    /// The Button (title bar or content area) currently under the cursor, if any -- updated from
-    /// the same per-frame hover hit-test UpdateCursor already performs for the OS cursor icon, so
-    /// this doesn't cost a second tree walk. Drives Button's own IsHovered highlight; every Button
-    /// anywhere gets this for free rather than each owner self-polling Mouse.GetState().
+    /// The pressable control under the cursor, if any -- the nearest pressable above what the per-frame hover hit-test
+    /// UpdateCursor already performs found, so this costs no second tree walk. Drives the control's IsHovered; every
+    /// control gets it rather than each owner polling the mouse itself.
     /// </summary>
-    private Button? _hoveredButton;
+    private PressableElement? _hoveredPressable;
 
-    private void SetHoveredButton(Button? button)
+    private void SetHoveredPressable(PressableElement? pressable)
     {
-        if (ReferenceEquals(button, _hoveredButton))
+        if (ReferenceEquals(pressable, _hoveredPressable))
         {
             return;
         }
 
-        if (_hoveredButton is not null)
+        if (_hoveredPressable is not null)
         {
-            _hoveredButton.IsHovered = false;
+            _hoveredPressable.IsHovered = false;
         }
 
-        _hoveredButton = button;
+        _hoveredPressable = pressable;
 
-        if (_hoveredButton is not null)
+        if (_hoveredPressable is not null)
         {
-            _hoveredButton.IsHovered = true;
+            _hoveredPressable.IsHovered = true;
         }
     }
 
-    /// <summary>Moves the scrollbar hover highlight to part of element, clearing it from whichever element had it -- see _hoveredButton for the same per-frame hover source.</summary>
+    /// <summary>Moves the scrollbar hover highlight to part of element, clearing it from whichever element had it -- see _hoveredPressable for the same per-frame hover source.</summary>
     private void SetHoveredScrollbar(Element? element, ScrollbarPart part)
     {
         if (!ReferenceEquals(element, _hoveredScrollbarElement))
@@ -701,8 +701,8 @@ public sealed class UiInputController
         }
 
         _activeInteraction = HitTestAt(clickPosition);
-        PressedButton = _activeInteraction.Button;
-        PressedButton?.SetPressed(true);
+        PressedPressable = _activeInteraction.Pressable;
+        PressedPressable?.SetPressed(true);
         DragDelta = Vector2.Zero;
 
         _textSelectionDragBox = _activeInteraction.Kind == ElementDragInteractionKind.None && _activeInteraction.Element is TextBox { Enabled: true } pressedTextBox ? pressedTextBox : null;
@@ -719,10 +719,12 @@ public sealed class UiInputController
                 // window (so RaiseToFront above still raises it), not the button. SetFocus on
                 // that window would otherwise redirect via NextFocusableDescendant into whatever
                 // unrelated child happens to be focusable -- clicking a window's
-                // Close button would focus its search box.
-                if (_activeInteraction.Button is null)
+                // Close button would focus its search box. Any other pressable (a toggle) is
+                // focused itself, whichever of its children was hit.
+                if (_activeInteraction.Pressable is not Button)
                 {
-                    SetFocus(_activeInteraction.Element is { CanUserFocus: true, Enabled: true } focusable ? focusable : null);
+                    var focusCandidate = _activeInteraction.Pressable ?? _activeInteraction.Element;
+                    SetFocus(focusCandidate is { CanUserFocus: true, Enabled: true } focusable ? focusable : null);
                 }
             }
             else
@@ -807,7 +809,7 @@ public sealed class UiInputController
         var isPointerResting = mouseState.LeftButton == ButtonState.Released
             && mouseState.RightButton == ButtonState.Released
             && _activeInteraction.Kind == ElementDragInteractionKind.None;
-        var hoveredElement = isPointerResting ? _hoveredButton ?? _hoveredInteraction.Element : null;
+        var hoveredElement = isPointerResting ? TooltipOwnerOf(_hoveredInteraction) : null;
 
         if (!ReferenceEquals(hoveredElement, _tooltipHoveredElement))
         {
@@ -828,6 +830,30 @@ public sealed class UiInputController
 
         var cursor = new Rectangle(_tooltipCursorPosition.X, _tooltipCursorPosition.Y, 0, (int)PopupChrome.CursorHeight);
         _tooltipController.Show(this, cursor, PopupAnchor.SouthEast, PopupChrome.ElementTooltipGap, PopupChrome.HoverPopupMaximumSize, tooltipText);
+    }
+
+    /// <summary>Whose tooltip the pointer over interaction shows: inside a pressable control, the deepest element from what was hit up to the control that has one, else the control; a title button itself; otherwise what was hit.</summary>
+    private static Element? TooltipOwnerOf(ElementInteraction interaction)
+    {
+        if (interaction.Pressable is not { } pressable)
+        {
+            return interaction.Element;
+        }
+
+        if (!IsSelfOrAncestor(pressable, interaction.Element))
+        {
+            return pressable;
+        }
+
+        for (var candidate = interaction.Element; candidate is not null && !ReferenceEquals(candidate, pressable); candidate = candidate.ParentElement)
+        {
+            if (candidate.TooltipText is not null)
+            {
+                return candidate;
+            }
+        }
+
+        return pressable;
     }
 
     /// <summary>Where the pointer was when the element tooltip showing now appeared -- it stays there, below and right of the cursor, while the pointer moves within the element.</summary>
@@ -874,7 +900,7 @@ public sealed class UiInputController
 
         if (!isScrollbarInteraction && !isPointerDrag && !IsTextSelectionDrag && !IsContentDragPastTapThreshold)
         {
-            var opensDoubleClickPair = _activeInteraction.Button is null &&
+            var opensDoubleClickPair = _activeInteraction.Pressable is not Button &&
                 !(_leftGesture.IsDrag && _activeInteraction.Kind is ElementDragInteractionKind.Move or ElementDragInteractionKind.Resize);
             DispatchClick(_activeInteraction.Element, releasePosition, opensDoubleClickPair);
         }
@@ -902,8 +928,8 @@ public sealed class UiInputController
             InvalidateHoveredInteraction();
         }
 
-        PressedButton?.SetPressed(false);
-        PressedButton = null;
+        PressedPressable?.SetPressed(false);
+        PressedPressable = null;
         _activeInteraction = ElementInteraction.NotHit;
         DragDelta = Vector2.Zero;
         _textSelectionDragBox = null;
@@ -1824,13 +1850,13 @@ public sealed class UiInputController
         if (_activeInteraction is { Kind: ElementDragInteractionKind.Resize or ElementDragInteractionKind.Move } or { Kind: ElementDragInteractionKind.PointerDrag, Element: not null })
         {
             cursor = GetHoverCursor(_activeInteraction);
-            SetHoveredButton(null); // No hover feedback while a drag is actually in progress.
+            SetHoveredPressable(null); // No hover feedback while a drag is actually in progress.
             SetHoveredScrollbar(null, ScrollbarPart.None);
         }
         else if (_activeInteraction.Kind is ElementDragInteractionKind.ScrollThumb or ElementDragInteractionKind.ScrollTrack)
         {
             cursor = MouseCursor.Arrow;
-            SetHoveredButton(null);
+            SetHoveredPressable(null);
         }
         else
         {
@@ -1839,12 +1865,12 @@ public sealed class UiInputController
             if (IsContentDropRefusedAt(position) || IsInputRefusedAt(position))
             {
                 cursor = MouseCursor.No;
-                SetHoveredButton(null);
+                SetHoveredPressable(null);
             }
             else
             {
                 cursor = GetHoverCursor(_hoveredInteraction);
-                SetHoveredButton(_hoveredInteraction.Button);
+                SetHoveredPressable(_hoveredInteraction.Pressable);
                 SetHoveredScrollbar(_hoveredInteraction.ScrollbarPart != ScrollbarPart.None ? _hoveredInteraction.Element : null, _hoveredInteraction.ScrollbarPart);
             }
         }

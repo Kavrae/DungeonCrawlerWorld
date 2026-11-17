@@ -37,9 +37,10 @@ public sealed class HealthWindowController(
         {
             Layout = new ElementLayoutOptions { RelativePosition = HealthWindowChrome.ButtonPosition, Size = HealthWindowChrome.ButtonSize, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
-            Text = new TextOptions { Text = HeartGlyph, TextColor = GameWindowPalette.HeartGlyphColor },
-            Button = new ButtonOptions { HotkeyLabel = "U" },
+            Text = new TextOptions { TextColor = GameWindowPalette.HeartGlyphColor },
         });
+        _button.SetText(HeartGlyph);
+        _button.ShowKeyLabel("U");
         _button.Initialize();
         _button.TooltipText = "Health";
         _button.Clicked += _ => _slot.Toggle();

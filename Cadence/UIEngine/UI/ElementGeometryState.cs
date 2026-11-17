@@ -44,4 +44,7 @@ internal sealed class ElementGeometryState
 
     /// <summary>Gap tiled after this element by RetileChildren, on top of its own CurrentSize -- replaces inserting a separate blank spacer element into the sibling chain.</summary>
     public float SpacingAfter;
+
+    /// <summary>Whether this element takes the main-axis space its tiled parent's other children leave (Layout.FillsRemaining).</summary>
+    public bool FillsRemaining;
 }

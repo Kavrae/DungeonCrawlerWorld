@@ -30,7 +30,15 @@ public sealed class ListFilterChipsTests
     private static ListFilterChips AddChips(ControlTestHarness harness, ListFilter<Fruit> filter, float width = 400f) =>
         harness.AddRoot<ListFilterChips>(new Vector2(100, 100), new Vector2(width, 0), chips => chips.Configure(new ListFilterMenuSource<Fruit>(filter, () => Basket), width), new ElementChromeOptions { ShowBorder = false });
 
-    private static Button Chip(ListFilterChips chips, string label) => chips.ChildElements.OfType<Button>().Single(chip => chip.LeftText == label);
+    private static Button Chip(ListFilterChips chips, string label) => chips.ChildElements.OfType<Button>().Single(chip => LabelOf(chip) == label);
+
+    private static string LabelOf(Button chip) => chip.ChildElements.OfType<Label>().First().Text;
+
+    /// <summary>The remove marker at a chip's end, or null for none.</summary>
+    private static string? MarkerOf(Button chip) => chip.ChildElements.OfType<Label>().Skip(1).FirstOrDefault()?.Text;
+
+    /// <summary>An icon's box and the gap after it.</summary>
+    private const int IconAndGapWidth = 20;
 
     [TestMethod]
     public void NothingChecked_HasNoHeight_AndIsHidden()
@@ -56,10 +64,10 @@ public sealed class ListFilterChipsTests
         filter.Selection.SetCheckedIds(["show:ripe", "kind:pear"]);
 
         Assert.IsTrue(chips.IsVisible);
-        CollectionAssert.AreEqual(new[] { "Ripe", "Pear", ListFilterChips.ClearLabel }, chips.ChildElements.OfType<Button>().Select(chip => chip.LeftText).ToArray());
-        Assert.AreEqual(ListFilterChips.RemoveMarker, Chip(chips, "Ripe").RightText);
+        CollectionAssert.AreEqual(new[] { "Ripe", "Pear", ListFilterChips.ClearLabel }, chips.ChildElements.OfType<Button>().Select(LabelOf).ToArray());
+        Assert.AreEqual(ListFilterChips.RemoveMarker, MarkerOf(Chip(chips, "Ripe")));
         Assert.AreEqual(ListFilterChips.RemoveTooltip, Chip(chips, "Ripe").TooltipText);
-        Assert.IsNull(Chip(chips, ListFilterChips.ClearLabel).RightText);
+        Assert.IsNull(MarkerOf(Chip(chips, ListFilterChips.ClearLabel)));
         Assert.AreEqual(ListFilterChips.ChipHeight, chips.CurrentSize.Y);
         Assert.IsGreaterThan(0, resized);
     }
@@ -74,7 +82,8 @@ public sealed class ListFilterChipsTests
         filter.Selection.SetCheckedIds(["show:ripe", "show:bruised", "kind:apple", "kind:pear"]);
 
         Assert.IsGreaterThan(ListFilterChips.ChipHeight, chips.CurrentSize.Y);
-        Assert.AreEqual(chips.MeasureHeight(120f), chips.CurrentSize.Y);
+        var lines = chips.ChildElements.Select(chip => chip.RelativePosition.Y).Distinct().Count();
+        Assert.AreEqual(lines * ListFilterChips.ChipHeight + (lines - 1) * ListFilterChips.ChipGap, chips.CurrentSize.Y);
         Assert.IsTrue(chips.ChildElements.All(chip => chip.RelativePosition.X + chip.CurrentSize.X <= 120f || chip.RelativePosition.X == 0f));
 
         chips.SetWidth(1000f);
@@ -146,10 +155,10 @@ public sealed class ListFilterChipsTests
         filter.Selection.SetCheckedIds(["show:ripe"]);
         plainFilter.Selection.SetCheckedIds(["show:ripe"]);
 
-        Assert.AreEqual(Chip(plainChips, "Ripe").Rectangle.Width + (int)Button.LeadingIconWidth, Chip(chips, "Ripe").Rectangle.Width);
+        Assert.AreEqual(Chip(plainChips, "Ripe").Rectangle.Width + IconAndGapWidth, Chip(chips, "Ripe").Rectangle.Width);
         Assert.AreEqual(ListFilterChips.RemoveTooltip, Chip(plainChips, "Ripe").TooltipText);
-        Assert.AreEqual(ripeIcon, Chip(chips, "Ripe").LeadingIcon);
+        Assert.AreEqual(ripeIcon, MenuRows.IconOf(Chip(chips, "Ripe")));
         Assert.AreEqual("Ready to eat", Chip(chips, "Ripe").TooltipText);
-        Assert.IsNull(Chip(chips, ListFilterChips.ClearLabel).LeadingIcon);
+        Assert.IsNull(MenuRows.IconOf(Chip(chips, ListFilterChips.ClearLabel)));
     }
 }

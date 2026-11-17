@@ -301,7 +301,7 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
 
     private void AddIcon(Window row, string? spriteName, string glyph, Color glyphColor, float rowContentHeight)
     {
-        var icon = elementPoolService.CreateElement<ItemIconElement>(row, new ElementOptions
+        var icon = elementPoolService.CreateElement<IconElement>(row, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, (rowContentHeight - IconSize) / 2f), Size = new Vector2(IconSize, IconSize), DisplayMode = ElementDisplayMode.Fixed },

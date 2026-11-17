@@ -389,9 +389,13 @@ public class Window : Element
         var button = window.ElementPoolService.CreateElement<Button>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { Size = DefaultTitleButtonSize(window) },
-            Text = text is null ? null : new TextOptions { Text = text },
         });
         button.ContentFont = window.TitleFont;
+        if (text is not null)
+        {
+            button.SetText(text);
+        }
+
         return button;
     }
 

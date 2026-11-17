@@ -30,7 +30,6 @@ public sealed class DetailsWindowsTests
         var actionStateView = TestActionStateViews.Over(Build.Value.EcsContext.ComponentManager, context.Actions, context.Items);
 
         elementPool.RegisterFactory(() => new TextDivider(TestElementServices.For(elementPool, fontService)));
-        elementPool.RegisterFactory(() => new ItemIconElement(TestElementServices.For(elementPool, fontService), spriteSheetService));
         elementPool.RegisterFactory(() => new TargetShapePreviewElement(TestElementServices.For(elementPool, fontService)));
         elementPool.RegisterFactory(() => new ItemDetailsWindow(TestElementServices.For(elementPool, fontService), context.Actions, context.GameplayTags, actionStateView, TestPlayerQuery.NoPlayer));
         elementPool.RegisterFactory(() => new ActionDetailsWindow(TestElementServices.For(elementPool, fontService), context.Actions, context.GameplayTags));

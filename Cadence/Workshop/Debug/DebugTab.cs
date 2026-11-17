@@ -1,5 +1,4 @@
 using Microsoft.Xna.Framework;
-using SDL3;
 using UIEngine.Bootstrap;
 
 namespace Workshop.Debug;
@@ -32,7 +31,7 @@ public sealed class DebugTab : IIdeTab
 
     public void Open(WorkshopTabContext context, Rectangle area)
     {
-        _view ??= new DebugTabView(new DebugTabServices(_uiEngine.ElementPoolService, _uiEngine.FontService, _uiEngine.RenderService, context.Layers, context.AddInputHandler, context.Status, static text => SDL.SDL_SetClipboardText(text), context.ContextMenuController), _debugging);
+        _view ??= new DebugTabView(new DebugTabServices(_uiEngine.ElementPoolService, _uiEngine.FontService, _uiEngine.RenderService, context.Layers, context.AddInputHandler, context.Status, context.ContextMenuController), _debugging);
         _view.Open(area);
     }
 

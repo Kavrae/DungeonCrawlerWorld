@@ -3636,17 +3636,64 @@ instead of bracketed text, and the filter menu's Show only rows and their chips 
   still read the state, so Show only > Draft lists an unsaved draft whose row shows only ✎, and Disabled lists the
   replaced records too. `Replaced` is a state of its own (disabled with a replacement, in `StateOf`), so its filter and
   its marker read one rule.
-- **Tooltips.** Each row symbol is its own element (`RecordRow`: an `ItemIconElement` per symbol, packed against the
-  row's right end) with its own tooltip, Replaced's naming the replacement; the row and the name say only the full name,
-  and only when it is cut. A chip and a menu row carry the choice's tooltip -- the same text, Replaced's naming no
+- **Tooltips.** Each row symbol is its own element (`RecordRow`: an `IconElement` per symbol, packed against the
+  row's right end) with its own tooltip, Replaced's naming the replacement; the name says the full name, and only when
+  it is cut (`Label.ShowsFullTextWhenCut`). A chip and a menu row carry the choice's tooltip -- the same text, Replaced's naming no
   record -- and a choice without one keeps "Remove filter".
 - **The row** is `Builders/Browsing/RecordRow`, out of `RecordBrowserTab`: icon, the name cut with "..." to what the
   symbols leave, the symbols, greyed with a dimmed row (their colours blended toward `DimmedRowTextColor`). The pinned
   row's last symbol is 📌, the browser's own, not a content marker.
 - **UIEngine pieces**: `GlyphIcon` (a glyph and colour; `Blank` keeps a column); `DropdownOption.Icon`/`TooltipText`,
   where any row with an icon makes every row keep its place; `ListFilterChoice.Icon` and its `TooltipText`, shown on the
-  menu row and the chip. They draw through `Button.LeadingIcon` for now, which `PLAN-control-content.md` replaces with
-  child elements.
+  menu row and the chip, each as an `IconElement` child (see "Control content").
+
+### Control content (2026-11-17)
+
+`PLAN-control-content.md`, Phases 1-3. What makes a control pressable is separate from what it shows, and what it shows
+is ordinary child elements laid out like a window's -- the WPF/Qt shape (a pressable base under `Button` and `Toggle`),
+with SwiftUI's menu (a checkbox row is a toggle in a menu).
+
+- **`PressableElement`** (UIEngine, abstract) holds hover (`IsHovered`), press (`SetPressed`, `OnPressedChanged`),
+  disabled (never hit-tested while disabled, so its children take nothing either) and keyboard activation (Space,
+  `OnActivated`). `Button` (an action: bevel, hover darkening, `IsSelected` holding it inset, `RestingBorderStyle` for a
+  tab strip's raised open tab) and `Toggle` (a choice: `IsOn`, its checkbox `Raised` or `Flat`) derive from it. A
+  pressable always holds children, with no padding of its own unless its builder sets one.
+- **Content is children.** There is no text, icon or row mode on `Button`: the shorthands add children -- `SetText` (a
+  centred `Label` filling it), `SetIcon` (an `IconElement` filling it), `ShowKeyLabel` (an outlined `Label` in the top-left
+  corner, the HUD's keys), `Toggle.SetLabel` (a centred `Label` after the checkbox). `Button.Text` reads `SetText`'s.
+  Content drawn inside a disabled control greys itself (`PressableElement.IsHeldByDisabledControl`), so a control never
+  pushes its state into its children.
+- **Hover and press go to the nearest pressable above what was hit** (`Element.HitTestInsideChrome` wraps a child's plain
+  click as `ElementInteraction.PressableClick(hit, pressable)`), the rule a click already followed. A click is still
+  offered to what was hit first and bubbles to the control. A tooltip belongs to the deepest element from the hit up to
+  the control that has one (`UiInputController.TooltipOwnerOf`), so a symbol inside a row keeps its own. A Button press
+  never takes focus or opens a double-click pair; any other pressable (a toggle) is focused itself.
+- **Tiling** grew three things on the one layout pass: `ChildGap` between tiled children, `ChildCrossAlignment`
+  (`Start`/`Center`/`End`, whole pixels, Start when a child doesn't fit), and one `FillsRemaining` child per parent that
+  takes the main-axis space the others leave -- only under a Fixed or Fill parent that doesn't scroll along that axis
+  (a WrapContent parent has nothing left over, so there it keeps its own size). The filler is measured after its
+  siblings, re-measured whenever one changes (`OnChildLayoutChanged`), and a child after it is offered the filler's space
+  back so it can grow. A parent with no filler pays nothing: `_hasAddedFillsRemainingChild` gates every lookup.
+  `LeadingTileInset` is space an element keeps before its tiled children for what it draws itself (a toggle's checkbox).
+- **`Label`** is one line: font, colour, cut with "..." to its width, its text measured once per text or font change
+  and the cut made once per text, font or width change (`KeyedCache`s). Transparent and WrapContent unless built
+  otherwise; `IsCentered` (ink-centred, a button's), `IsOutlined`, `IsBold`, `DisabledTextColor`,
+  `ShowsFullTextWhenCut`. Not a `Window`, so a row of them stays cheap; `TextWindow` stays for wrapped and scrolling
+  text. **`IconElement`** is a sprite by name, else a coloured glyph (`FontChrome.IconGlyphFontFraction` of its height
+  unless a font is given), through `SpriteOrGlyphRenderer`.
+- **A menu row is an ordinary control.** `Dropdown` builds each option as a `Button`, or for a checkbox option a `Toggle`
+  with a `Flat` checkbox, holding the icon (when any option has one), a filling label and the hotkey or count. Rows are
+  built WrapContent, then all fixed at the widest (`Element.SetFixedSize`), so widths come from layout -- there is no
+  `MeasureWidth`, and the controller shows the menu before placing it by its real size. Which row is current is the
+  menu's to know: its rows are transparent and draw no hover (`Button.ShowsHoverHighlight` false), and `Dropdown.DrawContent`
+  draws the row fills, the highlight and the mark behind them (`HighlightedIndex`, `MarkedIndex`, `OptionRows`).
+- **Chips** are the same: a WrapContent button holding an icon, a label and the "X", then fixed at `ChipHeight`; the row
+  of chips is as tall as the lines they took. **`RecordRow`** is a Horizontal row of an `IconElement`, a filling name
+  `Label` and the symbols.
+- **Where it is not used**: `ListView`, tooltip rows and anything that can list thousands draw their own rows. A bounded
+  list -- a menu, the chips, a browser's rows -- builds elements. Recycling rows is not part of this.
+- **Tabs are buttons.** The game's `TabbedContent`, the Workshop's tab strip, its command tiles and bottom panel, and the
+  Debug tab's switches (`DebugTabElements.CreateTile`) are `Button`s, so they darken on hover with every other control.
 
 ### Component writes: write scopes and struct updaters (2026-11-03, scopes 2026-11-06)
 

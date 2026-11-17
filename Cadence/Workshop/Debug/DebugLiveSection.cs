@@ -71,7 +71,7 @@ public sealed class DebugLiveSection(DebugTabServices services, string title = "
 
     private readonly string _idleText = idleText;
     private readonly LiveReportViews _reportViews = new(services);
-    private readonly List<(LiveView View, TextWindow Tile)> _viewTiles = [];
+    private readonly List<(LiveView View, Button Tile)> _viewTiles = [];
     private readonly Dictionary<LiveView, TextWindow> _viewMessages = [];
     private Rectangle _viewBounds;
     private float _viewsTop;
@@ -128,7 +128,7 @@ public sealed class DebugLiveSection(DebugTabServices services, string title = "
     public LiveReportViews ReportViews => _reportViews;
 
     /// <summary>view's tile on the switch under the header; only with hasViewSwitch.</summary>
-    public TextWindow TileFor(LiveView view) => _viewTiles.First(entry => entry.View == view).Tile;
+    public Button TileFor(LiveView view) => _viewTiles.First(entry => entry.View == view).Tile;
 
     /// <summary>The line over View, as shown.</summary>
     public string ViewMessageText => _viewMessages[View].OriginalText;
@@ -195,7 +195,8 @@ public sealed class DebugLiveSection(DebugTabServices services, string title = "
             Chrome = new ElementChromeOptions { ShowBorder = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
-        _freeze.Configure("Freeze", LabelPosition.East, defaultOn: false, DebugTabChrome.ToggleOn, WindowPalette.ControlBackground, WindowPalette.BodyTextColor, font, OnFreezeToggled);
+        _freeze.Configure(defaultOn: false, DebugTabChrome.ToggleOn, WindowPalette.ControlBackground, OnFreezeToggled);
+        _freeze.SetLabel("Freeze", font, WindowPalette.BodyTextColor);
         Window.AddChild(_freeze);
         _readout = DebugTabElements.CreateText(services, Window, Vector2.Zero, Vector2.One, string.Empty);
         _timeline = DebugTabElements.CreateChild<DiagnosticsTimelineView>(services, Window, Vector2.Zero, Vector2.One, showBorder: false);
@@ -361,8 +362,9 @@ public sealed class DebugLiveSection(DebugTabServices services, string title = "
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = new Vector2(StopButtonWidth, DebugTabChrome.RowHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true },
             Content = new ElementContentOptions { ContentColor = WindowPalette.ControlBackground },
-            Text = new TextOptions { Text = "Stop", TextColor = WindowPalette.ControlLabelTextColor },
+            Text = new TextOptions { TextColor = WindowPalette.ControlLabelTextColor },
         });
+        _stop.SetText("Stop");
         _stop.Clicked += _ => OnStopClicked();
         Window.AddChild(_stop);
         _progressBar = DebugTabElements.CreateChild<FractionBarElement>(services, Window, Vector2.Zero, new Vector2(ProgressBarWidth, DebugTabChrome.RowHeight), showBorder: false);

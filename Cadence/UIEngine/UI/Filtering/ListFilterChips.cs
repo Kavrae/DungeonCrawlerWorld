@@ -1,13 +1,14 @@
 using FontStashSharp;
 using Microsoft.Xna.Framework;
 using UIEngine.UI.Chrome;
+using UIEngine.UI.ColorPalettes;
 
 namespace UIEngine.UI.Filtering;
 
 /// <summary>A filter's checked choices as a wrapping row of chips, Clear last: a click on a chip unchecks its choice, on Clear every one.</summary>
 /// <remarks>
 /// <para>
-/// A chip is one button, the choice's icon if it has one, its label, then an "X" at its end; its tooltip is the
+/// A chip is one button holding the choice's icon if it has one, its label, then an "X" at its end, as wide as those need; its tooltip is the
 /// choice's, else "Remove filter". There is no chip that stays shown
 /// while switched off. The row follows the selection: rebuilt whenever it changes, and laid out within the width the
 /// host gives it (SetWidth), wrapping onto as many lines as it needs. With nothing checked it has no height and is
@@ -30,8 +31,18 @@ public sealed class ListFilterChips(ElementServices services)
     public const string RemoveTooltip = "Remove filter";
     public const string ClearTooltip = "Remove every filter";
 
-    private const float ChipTextPadding = 18f;
-    private const float RemoveMarkerGap = 8f;
+    /// <summary>Room either side of a chip's content; a chip of one label (Clear) has more, so the label sits centred in a chip as wide as one with a marker would be around it.</summary>
+    private const float ChipContentInset = 4f;
+
+    private const float LoneLabelInset = 9f;
+
+    /// <summary>A choice icon's box and the gap after it.</summary>
+    private const float IconSide = 16f;
+
+    private const float IconGap = 4f;
+
+    /// <summary>Between a chip's label and its remove marker.</summary>
+    private const float MarkerGap = 18f;
     private const int ClearAll = -1;
     private const int NoRemoval = -2;
 
@@ -64,18 +75,6 @@ public sealed class ListFilterChips(ElementServices services)
 
         _width = width;
         Rebuild();
-    }
-
-    /// <summary>The height the chips need within width, each wrapped line ChipHeight tall with ChipGap between; 0 with nothing checked.</summary>
-    public float MeasureHeight(float width)
-    {
-        if (_source is not { } source)
-        {
-            return 0f;
-        }
-
-        var lines = LineCountWithin(source, width);
-        return lines == 0 ? 0f : lines * ChipHeight + (lines - 1) * ChipGap;
     }
 
     public override void Initialize()
@@ -152,69 +151,63 @@ public sealed class ListFilterChips(ElementServices services)
 
         if (ChipCount > 0)
         {
-            AddChip(ClearLabel, null, null, ClearTooltip, ClearAll, position);
+            position = AddChip(ClearLabel, null, null, ClearTooltip, ClearAll, position);
         }
 
-        var height = MeasureHeight(_width);
+        var height = ChipCount == 0 ? 0f : position.Y + ChipHeight;
         IsVisible = height > 0f;
         SetSize(new Vector2(_width, height));
     }
 
     /// <summary>A chip at position, or at the start of the next line when it doesn't fit what is left of this one; returns where the next chip starts.</summary>
+    /// <remarks>A chip is a button as wide as what it holds -- the choice's icon, its label, then the remove marker -- and ChipHeight tall.</remarks>
     private Vector2 AddChip(string label, GlyphIcon? icon, string? marker, string tooltip, int removal, Vector2 position)
     {
-        var size = new Vector2(ChipWidth(label, icon, marker), ChipHeight);
-        if (position.X > 0f && position.X + size.X > _width)
+        var chip = ElementPoolService.CreateElement<Button>(this, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { ChildrenTileMode = ChildElementTileMode.Horizontal, ChildCrossAlignment = ChildCrossAlignment.Center },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0f, position.Y), DisplayMode = ElementDisplayMode.WrapContent },
+        });
+        chip.ContentPadding = new Vector2(marker is null ? LoneLabelInset : ChipContentInset, 0f);
+        chip.TooltipText = tooltip;
+        chip.Clicked += _ => _pendingRemoval = removal;
+        AddChild(chip);
+
+        if (icon is { } glyphIcon)
+        {
+            var iconElement = ElementPoolService.CreateElement<IconElement>(chip, new ElementOptions
+            {
+                Layout = new ElementLayoutOptions { Size = new Vector2(IconSide, ChipHeight), DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true, SpacingAfter = IconGap },
+            });
+            iconElement.Configure(null, glyphIcon.Glyph, glyphIcon.Color, _font);
+            chip.AddChild(iconElement);
+        }
+
+        AddChipLabel(chip, label, marker is null ? 0f : MarkerGap);
+        if (marker is not null)
+        {
+            AddChipLabel(chip, marker, 0f);
+        }
+
+        var width = chip.CurrentSize.X;
+        if (position.X > 0f && position.X + width > _width)
         {
             position = new Vector2(0f, position.Y + ChipHeight + ChipGap);
         }
 
-        var chip = ElementPoolService.CreateElement<Button>(this, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = position, Size = size, MinimumSize = size, MaximumSize = size, DisplayMode = ElementDisplayMode.Fixed },
-            Text = new TextOptions { Text = label },
-        });
-        chip.ContentFont = _font;
-        chip.RightText = marker;
-        chip.LeftAlign = marker is not null;
-        chip.LeadingIcon = icon;
-        chip.TooltipText = tooltip;
-        chip.Clicked += _ => _pendingRemoval = removal;
-        AddChild(chip);
-        return position + new Vector2(size.X + ChipGap, 0f);
+        chip.SetRelativePosition(position);
+        chip.SetFixedSize(new Vector2(width, ChipHeight));
+        return position + new Vector2(width + ChipGap, 0f);
     }
 
-    private float ChipWidth(string label, GlyphIcon? icon, string? marker) =>
-        (icon is null ? 0f : Button.LeadingIconWidth) + _font.MeasureString(label).X + (marker is null ? 0f : RemoveMarkerGap + _font.MeasureString(marker).X) + ChipTextPadding;
-
-    private int LineCountWithin(IListFilterMenuSource source, float width)
+    private void AddChipLabel(Button chip, string text, float spacingAfter)
     {
-        var selection = source.Selection;
-        if (selection.IsEmpty)
+        var label = ElementPoolService.CreateElement<Label>(chip, new ElementOptions
         {
-            return 0;
-        }
-
-        var lines = 1;
-        var x = 0f;
-        for (var choiceIndex = 0; choiceIndex <= selection.ChoiceCount; choiceIndex++)
-        {
-            var isClear = choiceIndex == selection.ChoiceCount;
-            if (!isClear && !selection.IsChecked(choiceIndex))
-            {
-                continue;
-            }
-
-            var chipWidth = isClear ? ChipWidth(ClearLabel, null, null) : ChipWidth(source.ChoiceLabel(choiceIndex), source.ChoiceIcon(choiceIndex), RemoveMarker);
-            if (x > 0f && x + chipWidth > width)
-            {
-                lines++;
-                x = 0f;
-            }
-
-            x += chipWidth + ChipGap;
-        }
-
-        return lines;
+            Layout = new ElementLayoutOptions { SpacingAfter = spacingAfter },
+            Text = new TextOptions { Text = text, TextColor = WindowPalette.BodyTextColor },
+        });
+        label.SetFont(_font);
+        chip.AddChild(label);
     }
 }

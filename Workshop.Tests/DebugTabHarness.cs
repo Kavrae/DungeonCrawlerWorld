@@ -30,6 +30,8 @@ internal sealed class DebugTabHarness : IDisposable
         Pool.RegisterFactory(() => new Window(services));
         Pool.RegisterFactory(() => new TextWindow(services));
         Pool.RegisterFactory(() => new Button(services));
+        Pool.RegisterFactory(() => new Label(services));
+        Pool.RegisterFactory(() => new IconElement(services, new SpriteSheetService(null, "Spritesheets", SpriteManifestResolver.Load(Path.Combine(AppContext.BaseDirectory, "SpriteManifest.json")))));
         Pool.RegisterFactory(() => new Dropdown(services));
         Pool.RegisterFactory(() => new Toggle(services));
         Pool.RegisterFactory(() => new ToggleList(services));
@@ -47,7 +49,7 @@ internal sealed class DebugTabHarness : IDisposable
         Debugging = new WorkshopDebugging(new DiagnosticsLinkListener(historyCapacity: 2_000), new DebugLaunchOptionsStore(optionsPath), Launcher, reportDirectories);
         Debugging.Link.Start();
         ContextMenus = new ContextMenuController(dropdowns);
-        View = new DebugTabView(new DebugTabServices(Pool, fonts, render, Layers, Input.AddInputHandler, Status, Clipboard.Add, ContextMenus), Debugging);
+        View = new DebugTabView(new DebugTabServices(Pool, fonts, render, Layers, Input.AddInputHandler, Status, ContextMenus), Debugging);
         View.Open(new Rectangle(0, 30, (int)ScreenSize.X, (int)ScreenSize.Y - 30));
     }
 
@@ -64,9 +66,6 @@ internal sealed class DebugTabHarness : IDisposable
     public DebugTabView View { get; }
 
     public ContextMenuController ContextMenus { get; }
-
-    /// <summary>Everything copied to the clipboard, oldest first.</summary>
-    public List<string> Clipboard { get; } = [];
 
     public RecordingStatus Status { get; } = new();
 

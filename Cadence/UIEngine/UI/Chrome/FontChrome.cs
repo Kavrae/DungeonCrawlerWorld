@@ -14,11 +14,14 @@ public static class FontChrome
 
     public static int CursorTextFontSize = 14;
 
+    /// <summary>An icon element's glyph font, as a fraction of its icon size -- IconElement's, and any host icon drawn to read alike with it.</summary>
+    public static float IconGlyphFontFraction = 0.8f;
+
     public static float FolderFallbackGlyphFontFraction = 0.6f;
     public static float GridControlLabelFontFraction = 0.6f;
     public static float TabHeaderLabelFontFraction = 0.6f;
 
-    /// <summary>Button.HotkeyLabel's font size, as a fraction of the button's height; a host drawing key labels over its own icons uses the same fraction so the two read alike.</summary>
+    /// <summary>The font size of a key label Button.ShowKeyLabel puts in a button's corner, as a fraction of the button's height; a host drawing key labels over its own icons uses the same fraction so the two read alike.</summary>
     public static float ButtonHotkeyLabelFontFraction = 0.3f;
 
     /// <summary>The "current / maximum" text on a resource bar, as a fraction of the drawn bar's height.</summary>

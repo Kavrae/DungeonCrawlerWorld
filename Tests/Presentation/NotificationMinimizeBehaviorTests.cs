@@ -46,7 +46,7 @@ public sealed class NotificationMinimizeBehaviorTests
         var closeButton = window.TitleButtons[0];
         var dismissButton = window.TitleButtons[1];
         Assert.IsLessThan(closeButton.RelativePosition.X, dismissButton.RelativePosition.X);
-        Assert.AreEqual("_", dismissButton.LeftText);
+        Assert.AreEqual("_", ButtonContent.TextOf(dismissButton));
     }
 
     [TestMethod]

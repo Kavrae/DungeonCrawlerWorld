@@ -46,9 +46,9 @@ public sealed class ListFilterButtonTests
     private static ListFilterButton AddButton(ControlTestHarness harness, ListFilter<Fruit> filter, IReadOnlyList<Fruit>? items = null) =>
         harness.AddRoot<ListFilterButton>(new Vector2(100, 100), new Vector2(90, 24), button => button.Configure(new ListFilterMenuSource<Fruit>(filter, () => items ?? Basket)));
 
-    private static Button Row(ControlTestHarness harness, int row) => harness.Dropdowns.Menu.ChildElements.OfType<Button>().ElementAt(row);
+    private static PressableElement Row(ControlTestHarness harness, int row) => harness.Dropdowns.Menu.OptionRows.OfType<PressableElement>().ElementAt(row);
 
-    private static string?[] Counts(ControlTestHarness harness) => [.. Enumerable.Range(RipeRow, PlumRow + 1).Select(row => Row(harness, row).RightText)];
+    private static string?[] Counts(ControlTestHarness harness) => [.. Enumerable.Range(RipeRow, PlumRow + 1).Select(row => MenuRows.HotkeyOf(Row(harness, row)))];
 
     [TestMethod]
     public void Opening_ListsEachHeadingAndChoice_WithTheCountAFlipWouldLeave_AndClearFiltersLast()
@@ -59,10 +59,10 @@ public sealed class ListFilterButtonTests
         harness.Click(button);
 
         Assert.IsTrue(button.IsMenuOpen);
-        CollectionAssert.AreEqual(new[] { "Show only", "Kind: any of" }, harness.Dropdowns.Menu.ChildElements.OfType<TextWindow>().Select(header => header.OriginalText).ToArray());
+        CollectionAssert.AreEqual(new[] { "Show only", "Kind: any of" }, MenuRows.HeadingsOf(harness.Dropdowns.Menu).ToArray());
         CollectionAssert.AreEqual(new[] { "3", "2", "3", "2", "0" }, Counts(harness));
         Assert.IsFalse(Row(harness, PlumRow).Enabled, "A choice that would leave nothing can't be checked.");
-        Assert.AreEqual(ListFilterButton.ClearFiltersLabel, Row(harness, ClearRow).LeftText);
+        Assert.AreEqual(ListFilterButton.ClearFiltersLabel, MenuRows.LabelOf(Row(harness, ClearRow)));
         Assert.IsFalse(Row(harness, ClearRow).Enabled);
         Assert.AreEqual(ListFilterButton.DefaultLabel, button.DrawnLabel);
     }
@@ -82,7 +82,7 @@ public sealed class ListFilterButtonTests
         Assert.IsTrue(filter.Selection.IsChecked(0));
         Assert.IsTrue(button.IsMenuOpen);
         Assert.AreEqual(menuTop, harness.Dropdowns.Menu.Rectangle.Top);
-        Assert.IsTrue(Row(harness, RipeRow).CheckBoxState);
+        Assert.IsTrue(((Toggle)Row(harness, RipeRow)).IsOn);
         CollectionAssert.AreEqual(new[] { null, "2", "2", "1", "0" }, Counts(harness), "A checked row shows no count; the others count what checking them would leave.");
         Assert.IsTrue(Row(harness, ClearRow).Enabled);
         Assert.AreEqual($"{ListFilterButton.DefaultLabel} (1)", button.DrawnLabel);
@@ -156,7 +156,7 @@ public sealed class ListFilterButtonTests
         button.RefreshMenu();
         harness.Frame();
 
-        Assert.AreEqual("1", Row(harness, PlumRow).RightText);
+        Assert.AreEqual("1", MenuRows.HotkeyOf(Row(harness, PlumRow)));
         Assert.IsTrue(Row(harness, PlumRow).Enabled);
     }
 
@@ -191,7 +191,7 @@ public sealed class ListFilterButtonTests
 
         Assert.AreEqual(59, menu.HighlightedIndex);
         Assert.AreEqual(scroll, menu.ScrollOffset);
-        Assert.AreEqual("Renamed 59", Row(harness, 59).LeftText);
+        Assert.AreEqual("Renamed 59", MenuRows.LabelOf(Row(harness, 59)));
     }
 
     [TestMethod]
@@ -211,9 +211,9 @@ public sealed class ListFilterButtonTests
 
         harness.Click(button);
 
-        Assert.AreEqual(ripeIcon, Row(harness, RipeRow).LeadingIcon);
+        Assert.AreEqual(ripeIcon, MenuRows.IconOf(Row(harness, RipeRow)));
         Assert.AreEqual("Ready to eat", Row(harness, RipeRow).TooltipText);
-        Assert.AreEqual(GlyphIcon.Blank, Row(harness, BruisedRow).LeadingIcon);
+        Assert.AreEqual(GlyphIcon.Blank, MenuRows.IconOf(Row(harness, BruisedRow)));
         Assert.IsNull(Row(harness, BruisedRow).TooltipText);
     }
 }

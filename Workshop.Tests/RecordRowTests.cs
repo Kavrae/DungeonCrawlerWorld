@@ -2,7 +2,6 @@ using Builders.Browsing;
 using Builders.Editing;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
-using Presentation.UI.Content;
 using UIEngine.Fonts;
 using UIEngine.Input;
 using UIEngine.Rendering;
@@ -38,7 +37,8 @@ public sealed class RecordRowTests
         _pool.RegisterFactory(() => new Window(services));
         _pool.RegisterFactory(() => new TextWindow(services));
         _pool.RegisterFactory(() => new Tooltip(services));
-        _pool.RegisterFactory(() => new ItemIconElement(services, spriteSheets));
+        _pool.RegisterFactory(() => new IconElement(services, spriteSheets));
+        _pool.RegisterFactory(() => new Label(services));
         var tooltips = new TooltipController { ScreenBoundsOverrideForTests = new Rectangle(0, 0, (int)ScreenSize.X, (int)ScreenSize.Y) };
         tooltips.Initialize(_pool, _layers);
         _tooltip = _layers[UiLayer.Tooltip].OfType<Tooltip>().Single();
@@ -61,14 +61,14 @@ public sealed class RecordRowTests
             Markers = ContentRecordMarkers.Of(state, replacementName),
             IsDimmed = ContentRecordMarkers.IsDimmed(state),
         };
-        var row = RecordRow.Create(_pool, SharedFonts, _host, RowWidth, appearance, Color.Black);
+        var row = RecordRow.Create(_pool, _host, RowWidth, appearance, Color.Black);
         _host.AddChild(row);
         return row;
     }
 
-    private static TextWindow NameOf(Window row) => row.ChildElements.OfType<TextWindow>().Single();
+    private static Label NameOf(Window row) => row.ChildElements.OfType<Label>().Single();
 
-    private static List<ItemIconElement> SymbolsOf(Window row) => [.. row.ChildElements.OfType<ItemIconElement>().Skip(1)];
+    private static List<IconElement> SymbolsOf(Window row) => [.. row.ChildElements.OfType<IconElement>().Skip(1)];
 
     private void Hover(Point position, int frames)
     {
@@ -95,7 +95,7 @@ public sealed class RecordRowTests
         var symbols = SymbolsOf(row);
 
         Assert.HasCount(4, symbols);
-        StringAssert.EndsWith(name.OriginalText, "...");
+        StringAssert.EndsWith(name.ShownText, "...");
         Assert.IsLessThanOrEqualTo(symbols[0].Rectangle.Left, name.Rectangle.Right);
         foreach (var symbol in symbols)
         {
@@ -113,7 +113,7 @@ public sealed class RecordRowTests
     {
         var row = AddRow("Potion", ContentRecordState.Draft);
 
-        Assert.AreEqual("Potion", NameOf(row).OriginalText);
+        Assert.AreEqual("Potion", NameOf(row).ShownText);
         Assert.IsNull(row.TooltipText);
         Assert.IsNull(NameOf(row).TooltipText);
     }

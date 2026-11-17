@@ -103,7 +103,7 @@ public sealed class HotbarControllerTests
     }
 
     private static Button MenuOption(ContextMenuController contextMenuController, string label) =>
-        contextMenuController.Dropdowns.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == label);
+        contextMenuController.Dropdowns.Menu.ChildElements.OfType<Button>().Single(button => MenuRows.LabelOf(button) == label);
 
     [TestMethod]
     public void RightClickingABoundActionSlot_OffersArmThenUnbind()
@@ -113,7 +113,7 @@ public sealed class HotbarControllerTests
         controller.OnSlotRightClicked(HotkeySlot.Slot1, new Point(100, 100));
 
         Assert.IsTrue(contextMenuController.Dropdowns.IsOpen);
-        CollectionAssert.AreEqual(new[] { "Arm", "Unbind" }, contextMenuController.Dropdowns.Menu.ChildElements.OfType<Button>().Select(button => button.LeftText).ToArray());
+        CollectionAssert.AreEqual(new[] { "Arm", "Unbind" }, contextMenuController.Dropdowns.Menu.ChildElements.OfType<Button>().Select(button => MenuRows.LabelOf(button)).ToArray());
         Assert.IsTrue(MenuOption(contextMenuController, "Arm").Enabled);
     }
 

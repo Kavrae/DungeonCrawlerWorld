@@ -96,12 +96,14 @@ public sealed class DropdownController(ElementPoolService elementPoolService, Ui
 
     private void Place(IReadOnlyList<DropdownOption> options, int markedIndex)
     {
-        var menuSize = _menu.MeasureSize(options, _minimumWidth, _maximumHeight); // The exact size Show below will apply -- computed ahead of it so flip/clamp below sees the real footprint, not Vector2.Zero.
+        // The menu's size comes from the rows it builds, so it is shown first and then moved where its real footprint fits.
+        _menu.Show(_menu.RelativePosition, options, _minimumWidth, _maximumHeight, markedIndex);
+        var menuSize = _menu.CurrentSize;
         var screenBounds = ScreenBoundsOverrideForTests ?? renderService.GraphicsDevice.Viewport.Bounds;
         var topLeft = _placedBelowAnchor
             ? PlaceBelow(_placementAnchor, menuSize, screenBounds)
             : PopupPositioning.GetPositionWithinBounds(_placementAnchor, menuSize, PopupAnchor.SouthEast, Vector2.Zero, screenBounds);
-        _menu.Show(topLeft, options, _minimumWidth, _maximumHeight, markedIndex);
+        _menu.SetRelativePosition(topLeft);
         _layers.OpenLightDismiss(this);
     }
 

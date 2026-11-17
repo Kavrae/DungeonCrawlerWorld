@@ -111,7 +111,7 @@ public sealed class LootboxInventoryInputTests
         harness.LootboxCell.OnRightClicked!.Invoke(Point.Zero);
 
         var options = harness.ContextMenuController.Menu.ChildElements.OfType<Button>().ToList();
-        CollectionAssert.AreEqual(new[] { "Open All" }, options.Select(option => option.LeftText).ToArray());
+        CollectionAssert.AreEqual(new[] { "Open All" }, options.Select(option => MenuRows.LabelOf(option)).ToArray());
 
         Click(harness.Controller, options[0].Rectangle.Center);
 

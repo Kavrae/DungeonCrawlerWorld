@@ -71,7 +71,6 @@ public static class BuilderTabs
             return;
         }
 
-        elementPool.RegisterFactory(() => new ItemIconElement(services, uiEngine.SpriteSheetService));
         elementPool.RegisterFactory(() => new TargetShapePreviewElement(services));
         elementPool.RegisterFactory(() => new AreaMapView(services, uiEngine.SpriteSheetService));
         elementPool.RegisterFactory(() => new CellDetailsWindow(services));

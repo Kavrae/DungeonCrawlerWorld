@@ -233,7 +233,7 @@ public sealed class HealthWindowControllerTests
     }
 
     private static Button MenuRow(Harness harness, string label) =>
-        harness.ContextMenus.Dropdowns.Menu.ChildElements.OfType<Button>().Single(row => row.LeftText == label);
+        harness.ContextMenus.Dropdowns.Menu.ChildElements.OfType<Button>().Single(row => MenuRows.LabelOf(row) == label);
 
     [TestMethod]
     public void RightClickingTheWindow_Close_ClosesOnlyTheHealthWindow()

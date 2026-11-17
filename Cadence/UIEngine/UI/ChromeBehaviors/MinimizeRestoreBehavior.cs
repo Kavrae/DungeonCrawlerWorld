@@ -30,9 +30,9 @@ public sealed class MinimizeRestoreBehavior : IChromeBehavior
     private static void UpdateButtonLabel(Window window, Button button)
     {
         var isMinimized = window.DisplayMode == ElementDisplayMode.Minimized;
-        button.LeftText = isMinimized
+        button.SetText(isMinimized
             ? "O"
-            : "_";
+            : "_");
         button.TooltipText = isMinimized
             ? "Restore"
             : "Minimize";

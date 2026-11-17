@@ -13,7 +13,7 @@ public static class HealthWindowChrome
 
     public static Vector2 ButtonPosition = HudChrome.Margin + new Vector2(0, NotificationChrome.FolderMaximumSize.Y) + NotificationClearanceGap;
 
-    /// <summary>Matches HotbarContent.SlotSize -- reads as a real icon button (see Button's own single-glyph ink-centered DrawContent) sized consistently with the hotbar, since this button now also carries its own hotbar-style HotkeyLabel overlay (see HealthWindowController.Initialize).</summary>
+    /// <summary>Matches HotbarContent.SlotSize -- reads as a real icon button (its glyph a centred label, Button.SetText) sized consistently with the hotbar, since it also carries a hotbar-style key label in its corner (see HealthWindowController.Initialize).</summary>
     public static Vector2 ButtonSize = HotbarContent.SlotSize;
 
     /// <summary>Same value as InventoryChrome.WindowPosition today, but kept as its own independent field -- two separately-owned windows that happen to coincide, not one true duplicate (see InventoryChrome's own doc comment).</summary>

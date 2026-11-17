@@ -502,7 +502,7 @@ public sealed class InventoryGridContentShopModeTests
     }
 
     private static string[] MenuLabels(ContextMenuController contextMenuController) =>
-        contextMenuController.Menu.ChildElements.OfType<Button>().Select(b => b.LeftText).ToArray();
+        contextMenuController.Menu.ChildElements.OfType<Button>().Select(b => MenuRows.LabelOf(b)).ToArray();
 
     [TestMethod]
     public void RightClick_PlayerCellWithShopSecondaryTarget_ShowsSellAllNotGive()
@@ -575,7 +575,7 @@ public sealed class InventoryGridContentShopModeTests
         Assert.IsTrue(contextMenuController.IsOpen);
         CollectionAssert.Contains(MenuLabels(contextMenuController), "Add to trade");
 
-        var addToTradeButton = contextMenuController.Menu.ChildElements.OfType<Button>().Single(b => b.LeftText == "Add to trade");
+        var addToTradeButton = contextMenuController.Menu.ChildElements.OfType<Button>().Single(b => MenuRows.LabelOf(b) == "Add to trade");
         addToTradeButton.HandleClick(addToTradeButton.Rectangle.Center);
 
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
@@ -613,7 +613,7 @@ public sealed class InventoryGridContentShopModeTests
         cell.OnRightClicked!.Invoke(Point.Zero);
 
         Assert.IsTrue(contextMenuController.IsOpen);
-        var addToTradeButton = contextMenuController.Menu.ChildElements.OfType<Button>().Single(b => b.LeftText == "Add to trade");
+        var addToTradeButton = contextMenuController.Menu.ChildElements.OfType<Button>().Single(b => MenuRows.LabelOf(b) == "Add to trade");
         addToTradeButton.HandleClick(addToTradeButton.Rectangle.Center);
 
         Assert.IsTrue(InventoryQueries.TryGetStack(stacks, PlayerEntityId, PotionItemId, out _), "The item must still be in the player's own inventory -- the transfer must have been refused.");
@@ -639,7 +639,7 @@ public sealed class InventoryGridContentShopModeTests
         Assert.IsTrue(contextMenuController.IsOpen);
         CollectionAssert.Contains(MenuLabels(contextMenuController), "Add to trade");
 
-        var addToTradeButton = contextMenuController.Menu.ChildElements.OfType<Button>().Single(b => b.LeftText == "Add to trade");
+        var addToTradeButton = contextMenuController.Menu.ChildElements.OfType<Button>().Single(b => MenuRows.LabelOf(b) == "Add to trade");
         addToTradeButton.HandleClick(addToTradeButton.Rectangle.Center);
 
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
@@ -675,7 +675,7 @@ public sealed class InventoryGridContentShopModeTests
 
         Assert.IsTrue(contextMenuController.IsOpen);
         CollectionAssert.Contains(MenuLabels(contextMenuController), "Add to trade");
-        Assert.IsFalse(contextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == "Buy All").Enabled);
+        Assert.IsFalse(contextMenuController.Menu.ChildElements.OfType<Button>().Single(button => MenuRows.LabelOf(button) == "Buy All").Enabled);
     }
 
     [TestMethod]

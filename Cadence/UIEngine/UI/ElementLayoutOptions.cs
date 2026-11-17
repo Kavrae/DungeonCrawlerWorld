@@ -23,4 +23,8 @@ public sealed class ElementLayoutOptions
 
     /// <summary>Gap tiled after this element by RetileChildren, on top of its own size -- lets a caller reserve a blank gap before the next sibling in a Vertical/Horizontal-tiled parent without inserting a separate spacer element.</summary>
     public float? SpacingAfter { get; init; }
+
+    /// <summary>Whether this element takes the space its tiled parent's other children leave along the tiling axis.</summary>
+    /// <remarks>At most one child of a parent; only under a Fixed or Fill parent, since a WrapContent parent has no space left over, so there it keeps its own size.</remarks>
+    public bool? FillsRemaining { get; init; }
 }

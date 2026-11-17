@@ -1,35 +1,27 @@
 using FontStashSharp;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
-using UIEngine.Fonts;
 using UIEngine.Rendering;
 using UIEngine.UI.ColorPalettes;
 
 namespace UIEngine.UI;
 
 /// <summary>
-/// A clickable checkbox-style bordered square, plus a text label positioned outside it (see
-/// LabelPosition) rather than centered as content -- a generic on/off control, not scoped to any
-/// one caller (GridControl's toggle row is one). A plain Element (not Window, not
-/// TextWindow) -- the same reasoning Button's own doc comment gives for skipping Window's title/
-/// content/hierarchy/chrome baggage, except Toggle participates in the ordinary ChildElements
-/// hierarchy like any grid cell (AddChild'd, positioned by the normal layout
-/// pipeline, drawn via DrawContent) rather than Button's own hand-rolled-geometry, outside-the-
-/// hierarchy title-button special case. Owns its own on/off state and visual entirely; a caller
-/// wires what happens on flip via onToggled at Configure time, called with the new state --
-/// no index, no generic event to route externally by position.
-///
-/// The whole ContentRectangle (checkbox + gap + label) is the clickable region, the usual larger-
-/// hit-target checkbox convention -- only the checkbox square itself gets the Inset/Outset+color
-/// treatment; the label is plain text, no background of its own.
+/// A choice: a pressable control holding IsOn, flipped by a click anywhere on it or Space while focused, drawing its
+/// checkbox first in its content and showing its children after it. SetLabel adds the common child, a label filling
+/// the rest.
 /// </summary>
+/// <remarks>
+/// Owns its state and look; a caller wires what happens on a flip through Configure's onToggled, called with the new
+/// state. A disabled toggle keeps its state, draws its checkbox darkened (WindowPalette.DisabledBackground) with its
+/// mark, border and label dimmed, and takes a click without flipping.
+/// </remarks>
 public sealed class Toggle(ElementServices services)
-    : Element(services)
+    : PressableElement(services)
 {
-    /// <summary>Side length of the checkbox square -- public so a caller (e.g. GridControl, sizing its own row layout before this element's ContentSize exists yet) can compute how much total width a given label needs without duplicating the number.</summary>
+    /// <summary>Side length of the checkbox square -- public so a caller sizing its own row can compute how much width a label needs beside it.</summary>
     public const float CheckboxSize = 14f;
 
-    /// <summary>Gap between the checkbox square and the label -- same visibility/reuse reasoning as CheckboxSize.</summary>
+    /// <summary>Gap between the checkbox square and what follows it.</summary>
     public const float LabelGap = 4f;
 
     /// <summary>How far the on-state X's four endpoints sit in from the checkbox square's own edges -- keeps the mark from touching/overlapping the checkbox's own border.</summary>
@@ -39,53 +31,85 @@ public sealed class Toggle(ElementServices services)
     private const float DisabledOpacity = 0.45f;
     private static readonly Color CheckMarkColor = Color.White;
 
-    private string _label = string.Empty;
-    private LabelPosition _labelPosition;
     private Color _onColor;
     private Color _offColor;
-    private Color _labelColor;
-    private FontStashTextMeasurer _fontMeasurer = null!;
     private Action<bool>? _onToggled;
+    private Label? _label;
 
     public bool IsOn { get; private set; }
 
-    /// <summary>A disabled toggle keeps its state, draws its checkbox darkened (WindowPalette.DisabledBackground) with its mark, border and label dimmed, and takes a click without flipping.</summary>
-    protected override bool IsHitTestable => base.IsHitTestable && Enabled;
-
     public override bool IsTabStop => Enabled;
+
+    /// <summary>How the checkbox is drawn; Raised unless set.</summary>
+    public ToggleCheckboxStyle CheckboxStyle { get; set; }
+
+    /// <summary>The flat checkbox's side.</summary>
+    public const float FlatCheckboxSize = 12f;
+
+    /// <summary>The flat checkbox's side and the gap after it.</summary>
+    private const float FlatCheckboxReserve = FlatCheckboxSize + 6f;
+
+    /// <summary>How opaque a flat checkbox is while disabled.</summary>
+    private const float FlatDisabledOpacity = 0.5f;
+
+    /// <summary>Tiled children start after the checkbox and its gap, so a menu row's icon and text follow it.</summary>
+    protected override float LeadingTileInset =>
+        CheckboxStyle == ToggleCheckboxStyle.Flat ? FlatCheckboxReserve : (int)(CheckboxSize + LabelGap);
+
+    public override void Build(Element? parent, ElementOptions options)
+    {
+        base.Build(parent, options);
+
+        _label = null;
+        CheckboxStyle = ToggleCheckboxStyle.Raised;
+    }
 
     /// <summary>Shows isOn without notifying onToggled -- for a caller that keeps several toggles in step (an "All" toggle and the ones it covers).</summary>
     public void SetIsOn(bool isOn) => IsOn = isOn;
 
-    /// <summary>Must be called after CreateElement but before Initialize -- the usual Configure contract. font should be whatever the caller already measured label's width with (see GridControl's own row-layout comment) -- a mismatch would let the label clip against whatever fixed width the caller chose.</summary>
-    public void Configure(string label, LabelPosition labelPosition, bool defaultOn, Color onColor, Color offColor, Color labelColor, SpriteFontBase font, Action<bool> onToggled)
+    /// <summary>Sets the state, the checkbox's colours and what a flip calls; called after CreateElement, before the toggle is added.</summary>
+    public void Configure(bool defaultOn, Color onColor, Color offColor, Action<bool> onToggled)
     {
-        _label = label;
-        _labelPosition = labelPosition;
         _onColor = onColor;
         _offColor = offColor;
-        _labelColor = labelColor;
-        _fontMeasurer = FontService.GetTextMeasurer(font);
         _onToggled = onToggled;
         IsOn = defaultOn;
         Enabled = true;
     }
 
-    /// <summary>Flips state and notifies onToggled -- fires from OnContentClickAction (before the base Clicked event, see Element's own doc comment on that ordering), the same "subclass owns its own click behavior" mechanism TextWindow already uses rather than this element self-subscribing to its own public event.</summary>
+    /// <summary>Shows text centred in the space after the checkbox, in font and color (dimmed while disabled); a later call changes the text shown.</summary>
+    public Label SetLabel(string text, SpriteFontBase font, Color color)
+    {
+        if (_label is { } label)
+        {
+            label.TextColor = color;
+            label.DisabledTextColor = color * DisabledOpacity;
+            label.SetFont(font);
+            label.SetText(text);
+            return label;
+        }
+
+        label = ElementPoolService.CreateElement<Label>(this, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2((int)(CheckboxSize + LabelGap), 0), DisplayMode = ElementDisplayMode.Fill },
+            Text = new TextOptions { Text = text, TextColor = color },
+        });
+        label.DisabledTextColor = color * DisabledOpacity;
+        label.IsCentered = true;
+        label.SetFont(font);
+        _label = label;
+        AddChild(label);
+        return label;
+    }
+
+    /// <summary>Flips the state and notifies onToggled.</summary>
     protected override bool OnContentClickAction(Point mousePosition)
     {
         Flip();
         return true;
     }
 
-    /// <summary>Focused, Space flips it as a click does.</summary>
-    protected override void OnKeyPressAction(Microsoft.Xna.Framework.Input.Keys key)
-    {
-        if (key == Microsoft.Xna.Framework.Input.Keys.Space && Enabled)
-        {
-            Flip();
-        }
-    }
+    protected override void OnActivated() => Flip();
 
     private void Flip()
     {
@@ -103,7 +127,7 @@ public sealed class Toggle(ElementServices services)
             return;
         }
 
-        var checkbox = ComputeLayout().Checkbox;
+        var checkbox = CheckboxRectangle();
         var origin = ContentDrawOrigin;
         var onScreen = new Rectangle(checkbox.X + (int)origin.X, checkbox.Y + (int)origin.Y, checkbox.Width, checkbox.Height);
         onScreen.Inflate(2, 2);
@@ -113,59 +137,39 @@ public sealed class Toggle(ElementServices services)
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = Render.Batch;
+        var checkboxRectangle = CheckboxRectangle();
+        var thickness = BorderThickness.Uniform(Vector2.One);
+        var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(checkboxRectangle, thickness);
+        var checkboxCorner = new Vector2(checkboxRectangle.X, checkboxRectangle.Y);
+        var checkboxSize = new Vector2(checkboxRectangle.Width, checkboxRectangle.Height);
 
-        var (checkboxRectangle, labelRectangle) = ComputeLayout();
+        if (CheckboxStyle == ToggleCheckboxStyle.Flat)
+        {
+            var flatOpacity = Enabled ? 1f : FlatDisabledOpacity;
+            spriteBatch.FillRectangle(checkboxRectangle, Color.White * flatOpacity);
+            BorderRenderer.Draw(spriteBatch, BorderStyle.Flat, WindowPalette.BorderColor * flatOpacity, top, bottom, left, right);
+            if (IsOn)
+            {
+                CrossRenderer.Draw(spriteBatch, checkboxCorner, checkboxSize, CheckMarkInset, CheckMarkThickness, WindowPalette.BodyTextColor * flatOpacity);
+            }
+
+            return;
+        }
 
         var opacity = Enabled ? 1f : DisabledOpacity;
         var checkboxColor = IsOn ? _onColor : _offColor;
         spriteBatch.FillRectangle(checkboxRectangle, Enabled ? checkboxColor : WindowPalette.DisabledBackground(checkboxColor));
-
-        var borderStyle = IsOn ? BorderStyle.Inset : BorderStyle.Outset;
-        var thickness = BorderThickness.Uniform(Vector2.One);
-        var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(checkboxRectangle, thickness);
-        BorderRenderer.Draw(spriteBatch, borderStyle, Color.White * opacity, top, bottom, left, right);
-
+        BorderRenderer.Draw(spriteBatch, IsOn ? BorderStyle.Inset : BorderStyle.Outset, Color.White * opacity, top, bottom, left, right);
         if (IsOn)
         {
-            DrawCheckMark(spriteBatch, checkboxRectangle, CheckMarkColor * opacity);
-        }
-
-        if (!string.IsNullOrWhiteSpace(_label))
-        {
-            LabelRenderer.DrawCentered(spriteBatch, _fontMeasurer, _label, new Vector2(labelRectangle.X, labelRectangle.Y), new Vector2(labelRectangle.Width, labelRectangle.Height), _labelColor * opacity);
+            CrossRenderer.Draw(spriteBatch, checkboxCorner, checkboxSize, CheckMarkInset, CheckMarkThickness, CheckMarkColor * opacity);
         }
     }
 
-    /// <summary>Two diagonals corner-to-corner across checkboxRectangle, inset so the mark's own endpoints don't touch the checkbox's border.</summary>
-    private static void DrawCheckMark(SpriteEffectBatch spriteBatch, Rectangle checkboxRectangle, Color color) =>
-        CrossRenderer.Draw(spriteBatch, new Vector2(checkboxRectangle.X, checkboxRectangle.Y), new Vector2(checkboxRectangle.Width, checkboxRectangle.Height), CheckMarkInset, CheckMarkThickness, color);
-
-    /// <summary>
-    /// Splits ContentRectangle into the checkbox square (fixed CheckboxSize, on the edge
-    /// LabelPosition names -- e.g. East puts it on the left edge, since the label reads to its
-    /// east) and whatever's left over for the label, vertically/horizontally centered against
-    /// the checkbox on the cross axis.
-    /// </summary>
-    private (Rectangle Checkbox, Rectangle Label) ComputeLayout()
+    /// <summary>The checkbox square at the content's left edge, centred vertically, its side set by CheckboxStyle.</summary>
+    private Rectangle CheckboxRectangle()
     {
-        var origin = Vector2.Zero;
-        var size = ContentSize;
-        var checkboxSize = (int)CheckboxSize;
-
-        return _labelPosition switch
-        {
-            LabelPosition.East => (
-                new Rectangle((int)origin.X, (int)(origin.Y + (size.Y - CheckboxSize) / 2f), checkboxSize, checkboxSize),
-                new Rectangle((int)(origin.X + CheckboxSize + LabelGap), (int)origin.Y, (int)(size.X - CheckboxSize - LabelGap), (int)size.Y)),
-            LabelPosition.West => (
-                new Rectangle((int)(origin.X + size.X - CheckboxSize), (int)(origin.Y + (size.Y - CheckboxSize) / 2f), checkboxSize, checkboxSize),
-                new Rectangle((int)origin.X, (int)origin.Y, (int)(size.X - CheckboxSize - LabelGap), (int)size.Y)),
-            LabelPosition.South => (
-                new Rectangle((int)(origin.X + (size.X - CheckboxSize) / 2f), (int)origin.Y, checkboxSize, checkboxSize),
-                new Rectangle((int)origin.X, (int)(origin.Y + CheckboxSize + LabelGap), (int)size.X, (int)(size.Y - CheckboxSize - LabelGap))),
-            _ => ( // North
-                new Rectangle((int)(origin.X + (size.X - CheckboxSize) / 2f), (int)(origin.Y + size.Y - CheckboxSize), checkboxSize, checkboxSize),
-                new Rectangle((int)origin.X, (int)origin.Y, (int)size.X, (int)(size.Y - CheckboxSize - LabelGap))),
-        };
+        var side = CheckboxStyle == ToggleCheckboxStyle.Flat ? FlatCheckboxSize : CheckboxSize;
+        return new Rectangle(0, (int)((ContentSize.Y - side) / 2f), (int)side, (int)side);
     }
 }

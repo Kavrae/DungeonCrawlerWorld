@@ -95,7 +95,6 @@ public static class ElementFactoryRegistry
 
         elementPool.RegisterFactory(() => new InspectionWindow(services));
         elementPool.RegisterFactory(() => new ItemDetailsWindow(services, actionCatalog, catalogs.GameplayTags, views.ActionStateView, world));
-        elementPool.RegisterFactory(() => new ItemIconElement(services, sprites));
         elementPool.RegisterFactory(() => new CurrencyElement(services, sprites));
         elementPool.RegisterFactory(() => new TargetShapePreviewElement(services));
     }

@@ -88,6 +88,21 @@ internal sealed class ControlTestHarness
 
     public void Click(Element element) => Click(element.Rectangle.Center);
 
+    /// <summary>Moves to position and holds the left button down there.</summary>
+    public void Hold(Point position)
+    {
+        MoveTo(position);
+        _mouse = new MouseState(position.X, position.Y, _mouse.ScrollWheelValue, ButtonState.Pressed, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released);
+        Frame();
+    }
+
+    /// <summary>Releases the left button where the pointer is.</summary>
+    public void Release()
+    {
+        _mouse = new MouseState(_mouse.X, _mouse.Y, _mouse.ScrollWheelValue, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released);
+        Frame();
+    }
+
     /// <summary>Presses at from, moves to to, and releases there.</summary>
     public void Drag(Point from, Point to)
     {

@@ -234,7 +234,7 @@ public sealed class TradeWindowTests
     }
 
     private static Button FindButton(TradeWindow window, string text) =>
-        window.ChildElements.OfType<Button>().Single(b => b.LeftText == text);
+        window.ChildElements.OfType<Button>().Single(b => ButtonContent.TextOf(b) == text);
 
     private static void ClickButton(Button button) => button.HandleClick(button.Rectangle.Center);
 

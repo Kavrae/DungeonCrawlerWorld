@@ -6,6 +6,7 @@ using Presentation.UI.Chrome;
 using UIEngine.Fonts;
 using UIEngine.Rendering;
 using UIEngine.UI;
+using UIEngine.UI.Chrome;
 
 namespace Presentation.UI.Looting;
 
@@ -29,7 +30,7 @@ public sealed class EntityIconElement(
     {
         _entityId = entityId;
         _fixedVisual = null;
-        _glyphFontMeasurer = FontService.GetTextMeasurer(FontService.GetFont((int)(iconSize.Y * GameFontChrome.IconGlyphFontFraction)));
+        _glyphFontMeasurer = FontService.GetTextMeasurer(FontService.GetFont((int)(iconSize.Y * FontChrome.IconGlyphFontFraction)));
     }
 
     /// <summary>Shows a visual that belongs to no entity -- a terrain or structure cell's, as one picture.</summary>
@@ -37,7 +38,7 @@ public sealed class EntityIconElement(
     {
         _entityId = -1;
         _fixedVisual = spriteSheetService.Sprites.Resolve(visual);
-        _glyphFontMeasurer = FontService.GetTextMeasurer(FontService.GetFont((int)(iconSize.Y * GameFontChrome.IconGlyphFontFraction)));
+        _glyphFontMeasurer = FontService.GetTextMeasurer(FontService.GetFont((int)(iconSize.Y * FontChrome.IconGlyphFontFraction)));
     }
 
     public override void DrawContent(GameTime gameTime)

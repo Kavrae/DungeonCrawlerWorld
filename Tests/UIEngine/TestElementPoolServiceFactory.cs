@@ -6,7 +6,7 @@ using UIEngine.UI;
 
 namespace Tests.UIEngine;
 
-/// <summary>Builds an ElementPoolService with Window/Button/Dropdown/TextWindow/TextBox factories registered -- replaces what ElementPoolService's own constructor used to do, before that moved to ElementFactoryRegistry. Button is included here (not left for individual tests to register) since any test that creates a CanUserClose/CanUserMinimize window pulls one in via CloseBehavior/MinimizeRestoreBehavior; Dropdown likewise, since any test that constructs a DropdownController pulls one in via its own Initialize; HotbarSlotElement, since any test that hosts a HotbarContent pulls its slots in.</summary>
+/// <summary>Builds an ElementPoolService with Window/Button/Label/IconElement/Dropdown/Toggle/TextWindow/TextBox factories registered (Label and IconElement because buttons and toggles show their content through them, Toggle because a menu's checkbox rows are toggles) -- replaces what ElementPoolService's own constructor used to do, before that moved to ElementFactoryRegistry. Button is included here (not left for individual tests to register) since any test that creates a CanUserClose/CanUserMinimize window pulls one in via CloseBehavior/MinimizeRestoreBehavior; Dropdown likewise, since any test that constructs a DropdownController pulls one in via its own Initialize; HotbarSlotElement, since any test that hosts a HotbarContent pulls its slots in.</summary>
 internal static class TestElementPoolServiceFactory
 {
     /// <summary>Stand-in screen size for anything that would otherwise need a real GraphicsDevice.Viewport.Bounds -- unavailable headlessly. Matches PlayerHealthBarContentTests' own ScreenBounds constant.</summary>
@@ -20,7 +20,10 @@ internal static class TestElementPoolServiceFactory
         var services = TestElementServices.For(pool, fontService);
         pool.RegisterFactory(() => new Window(services));
         pool.RegisterFactory(() => new Button(services));
+        pool.RegisterFactory(() => new Label(services));
+        pool.RegisterFactory(() => new IconElement(services, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
         pool.RegisterFactory(() => new Dropdown(services));
+        pool.RegisterFactory(() => new Toggle(services));
         pool.RegisterFactory(() => createTextWindow?.Invoke(pool) ?? new TextWindow(services));
         pool.RegisterFactory(() => createTextBox?.Invoke(pool) ?? new TextBox(services));
         pool.RegisterFactory(() => new HotbarSlotElement(services));

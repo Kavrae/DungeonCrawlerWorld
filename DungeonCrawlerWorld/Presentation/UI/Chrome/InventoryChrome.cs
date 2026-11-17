@@ -13,7 +13,7 @@ public static class InventoryChrome
 
     public static Vector2 ButtonPosition = HealthWindowChrome.ButtonPosition + new Vector2(0, HealthWindowChrome.ButtonSize.Y) + ButtonGap;
 
-    /// <summary>Same as HealthWindowChrome.ButtonSize (HotbarContent.SlotSize), so the three HUD-trigger buttons (Health, Inventory, Ability Score) read as one consistent vertical stack, sized like the hotbar since each now also carries its own hotbar-style HotkeyLabel overlay.</summary>
+    /// <summary>Same as HealthWindowChrome.ButtonSize (HotbarContent.SlotSize), so the three HUD-trigger buttons (Health, Inventory, Ability Score) read as one consistent vertical stack, sized like the hotbar since each also carries a hotbar-style key label in its corner (Button.ShowKeyLabel).</summary>
     public static Vector2 ButtonSize = HotbarContent.SlotSize;
 
     /// <summary>Same value as HealthWindowChrome.WindowPosition today, but kept as its own independent field -- two separately-owned windows that happen to coincide, not one true duplicate.</summary>

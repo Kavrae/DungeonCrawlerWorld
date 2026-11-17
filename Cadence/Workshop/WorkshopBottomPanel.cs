@@ -60,11 +60,11 @@ public sealed class WorkshopBottomPanel(ElementServices services)
 
     private TabNavigator _navigator = null!;
     private ContextMenuController _contextMenus = null!;
-    private TextWindow _errorListTile = null!;
-    private TextWindow _usedByTile = null!;
-    private TextWindow _usesTile = null!;
-    private TextWindow _changesTile = null!;
-    private TextWindow _toPublishTile = null!;
+    private Button _errorListTile = null!;
+    private Button _usedByTile = null!;
+    private Button _usesTile = null!;
+    private Button _changesTile = null!;
+    private Button _toPublishTile = null!;
     private IReadOnlyList<ListViewRow> _pendingRows = [];
     private ListView _list = null!;
     private IReadOnlyList<ListViewRow> _problemRows = [];
@@ -134,17 +134,18 @@ public sealed class WorkshopBottomPanel(ElementServices services)
         ShowTab(ShownTab);
     }
 
-    private TextWindow CreateTile(string label, Action onClicked)
+    private Button CreateTile(string label, Action onClicked)
     {
         var size = new Vector2(1, TileHeight);
-        var tile = ElementPoolService.CreateElement<TextWindow>(this, new ElementOptions
+        var tile = ElementPoolService.CreateElement<Button>(this, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, GripHeight), Size = size, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Inset, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelContentColor },
-            Text = new TextOptions { Text = label, TextColor = WindowPalette.BodyTextColor },
+            Text = new TextOptions { TextColor = WindowPalette.BodyTextColor },
         });
         tile.ContentFont = _tileFont;
+        tile.SetText(label);
         tile.Clicked += _ => onClicked();
         AddChild(tile);
         return tile;
@@ -154,7 +155,7 @@ public sealed class WorkshopBottomPanel(ElementServices services)
     public void SetProblems(IReadOnlyList<WorkshopProblem> problems)
     {
         _problemRows = [.. problems.Select(problem => new ListViewRow([problem.Description, problem.Source], GlyphOf(problem.Severity), ColorOf(problem.Severity), problem))];
-        _errorListTile.UpdateText(problems.Count == 0 ? ErrorListTitle : $"{ErrorListTitle} ({problems.Count})");
+        _errorListTile.SetText(problems.Count == 0 ? ErrorListTitle : $"{ErrorListTitle} ({problems.Count})");
         LayOut();
         RefreshShownRows();
     }
@@ -164,8 +165,8 @@ public sealed class WorkshopBottomPanel(ElementServices services)
     {
         _usedByRows = RowsOf(usedBy);
         _usesRows = RowsOf(uses);
-        _usedByTile.UpdateText($"{UsedByTitle} ({usedBy.Count})");
-        _usesTile.UpdateText($"{UsesTitle} ({uses.Count})");
+        _usedByTile.SetText($"{UsedByTitle} ({usedBy.Count})");
+        _usesTile.SetText($"{UsesTitle} ({uses.Count})");
         LayOut();
         RefreshShownRows();
     }
@@ -187,9 +188,9 @@ public sealed class WorkshopBottomPanel(ElementServices services)
         _usedByRows = [];
         _usesRows = [];
         _changeRows = [];
-        _usedByTile.UpdateText(UsedByTitle);
-        _usesTile.UpdateText(UsesTitle);
-        _changesTile.UpdateText(ChangesTitle);
+        _usedByTile.SetText(UsedByTitle);
+        _usesTile.SetText(UsesTitle);
+        _changesTile.SetText(ChangesTitle);
         LayOut();
         RefreshShownRows();
     }
@@ -201,7 +202,7 @@ public sealed class WorkshopBottomPanel(ElementServices services)
         if (changes is null)
         {
             _changeRows = [];
-            _changesTile.UpdateText(ChangesTitle);
+            _changesTile.SetText(ChangesTitle);
             if (ShownTab == WorkshopBottomPanelTab.Changes)
             {
                 ShowTab(WorkshopBottomPanelTab.ErrorList);
@@ -214,7 +215,7 @@ public sealed class WorkshopBottomPanel(ElementServices services)
         _changeRows = changes.Changes.Count == 0
             ? [new ListViewRow([changes.NothingChangedText, string.Empty, string.Empty, string.Empty])]
             : [.. changes.Changes.Select(change => new ListViewRow([change.Field, change.Change, change.Baseline, change.Current], Tag: change))];
-        _changesTile.UpdateText(changes.Changes.Count == 0 ? ChangesTitle : $"{ChangesTitle} ({changes.Changes.Count})");
+        _changesTile.SetText(changes.Changes.Count == 0 ? ChangesTitle : $"{ChangesTitle} ({changes.Changes.Count})");
         var baselineChanged = _changesBaselineName != changes.BaselineName;
         _changesBaselineName = changes.BaselineName;
         LayOut();
@@ -234,7 +235,7 @@ public sealed class WorkshopBottomPanel(ElementServices services)
         _pendingRows = records.Count == 0
             ? [new ListViewRow([NothingToPublishText, string.Empty, string.Empty, string.Empty])]
             : [.. records.Select(record => new ListViewRow([record.Name, record.Table, record.Change, record.State], Tag: record))];
-        _toPublishTile.UpdateText(records.Count == 0 ? ToPublishTitle : $"{ToPublishTitle} ({records.Count})");
+        _toPublishTile.SetText(records.Count == 0 ? ToPublishTitle : $"{ToPublishTitle} ({records.Count})");
         LayOut();
         RefreshShownRows();
     }
@@ -323,9 +324,9 @@ public sealed class WorkshopBottomPanel(ElementServices services)
         _ => Color.SteelBlue,
     };
 
-    private static void StyleTile(TextWindow tile, bool isSelected)
+    private static void StyleTile(Button tile, bool isSelected)
     {
-        tile.BorderStyle = isSelected ? BorderStyle.Outset : BorderStyle.Inset;
+        tile.RestingBorderStyle = isSelected ? BorderStyle.Outset : BorderStyle.Inset;
         tile.SetContentColor(isSelected ? SelectedTileColor : WindowPalette.PanelContentColor);
         tile.TextColor = isSelected ? SelectedTileTextColor : WindowPalette.BodyTextColor;
     }
@@ -341,7 +342,7 @@ public sealed class WorkshopBottomPanel(ElementServices services)
     }
 
     /// <summary>Lays the visible tiles out left to right from x, returning where the next would go.</summary>
-    private float LayOutTiles(ReadOnlySpan<TextWindow> tiles, float x)
+    private float LayOutTiles(ReadOnlySpan<Button> tiles, float x)
     {
         foreach (var tile in tiles)
         {
@@ -350,7 +351,7 @@ public sealed class WorkshopBottomPanel(ElementServices services)
                 continue;
             }
 
-            var width = _tileFont.MeasureString(tile.OriginalText).X + TileHorizontalPadding * 2;
+            var width = _tileFont.MeasureString(tile.Text).X + TileHorizontalPadding * 2;
             tile.SetBounds(new Vector2(x, GripHeight), new Vector2(width, TileHeight));
             x += width;
         }

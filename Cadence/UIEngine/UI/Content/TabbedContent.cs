@@ -12,7 +12,7 @@ namespace UIEngine.UI.Content;
 /// scrolling body window beneath it whose IElementContent is swapped on tab switch (see
 /// SwitchTab) rather than keeping one child window per tab alive forever -- Element.Update
 /// recurses into every child regardless of IsVisible, so a one-window-per-tab design would tick
-/// every tab ever viewed on every frame. Each tab header is a real child TextWindow tile (not a
+/// every tab ever viewed on every frame. Each tab header is a real child Button tile (not a
 /// hand-drawn Rectangle) inside a CanUserScrollHorizontal header Window -- real children get
 /// scrolling, click routing, and absolute-position tracking for free from the normal Element
 /// pipeline, rather than each needing its own bespoke version (see the git history for the
@@ -66,7 +66,7 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
     /// is rebuilt fresh alongside the tiles and never reordered afterward, so TabIndex is always
     /// the one true source for "which tab does this tile activate."
     /// </summary>
-    private readonly List<(int TabIndex, TextWindow Tile)> _headerTiles = [];
+    private readonly List<(int TabIndex, Button Tile)> _headerTiles = [];
 
     private Window _hostWindow = null!;
     private Window _tabHeaderWindow = null!;
@@ -143,7 +143,7 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
         UpdateSearchFilterDebounce();
     }
 
-    /// <summary>Nothing to draw directly -- the tab strip is real child TextWindow tiles now (drawn through the normal child-element pass), and the active tab's own content renders the same way through _bodyWindow.</summary>
+    /// <summary>Nothing to draw directly -- the tab strip is real child Button tiles (drawn through the normal child-element pass), and the active tab's own content renders the same way through _bodyWindow.</summary>
     public void DrawContent(GameTime gameTime)
     {
     }
@@ -212,7 +212,7 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
         foreach (var (tabIndex, tile) in _headerTiles)
         {
             var isSelected = tabIndex == _activeTabIndex;
-            tile.BorderStyle = isSelected ? BorderStyle.Outset : BorderStyle.Inset;
+            tile.RestingBorderStyle = isSelected ? BorderStyle.Outset : BorderStyle.Inset;
             tile.SetContentColor(isSelected ? TabTileColor : WindowPalette.PanelContentColor);
             tile.TextColor = isSelected ? TabLabelColor : WindowPalette.BodyTextColor;
         }
@@ -276,15 +276,15 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
             var width = _font.MeasureString(tab.Label).X + TabHorizontalPadding * 2;
 
             var tileSize = new Vector2(width, TabHeaderHeight);
-            var tile = elementPoolService.CreateElement<TextWindow>(_tabHeaderWindow, new ElementOptions
+            var tile = elementPoolService.CreateElement<Button>(_tabHeaderWindow, new ElementOptions
             {
-                Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
                 Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, 0), Size = tileSize, MinimumSize = tileSize, MaximumSize = tileSize, DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Inset, ShowTitle = false, CanUserFocus = false },
                 Content = new ElementContentOptions { ContentColor = TabTileColor },
-                Text = new TextOptions { Text = tab.Label, TextColor = TabLabelColor },
+                Text = new TextOptions { TextColor = TabLabelColor },
             });
-            tile.ContentFont = _font; // Must match the font width was measured with above, or the label can wrap/clip against the tile's own fixed width.
+            tile.ContentFont = _font; // Must match the font width was measured with above, or the label can be cut against the tile's own fixed width.
+            tile.SetText(tab.Label);
             _tabHeaderWindow.AddChild(tile);
 
             var capturedIndex = tabIndex;

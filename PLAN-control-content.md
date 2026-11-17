@@ -9,7 +9,19 @@ Replaces the first draft (`PLAN-button-faces.md`: a fixed `ButtonFace` value and
 after review: a fixed menu of face kinds is the same limit in a new place, and a checkbox row is not a button.
 
 **Status:** written 2026-11-17 from a read of the code and the comparison below. Decisions 1-12 confirmed the same
-day. No code yet.
+day. Phase 1 built 2026-11-17 (`ChildGap`, `ChildCrossAlignment`, `FillsRemaining`; `Label`, `IconElement` replacing
+`ItemIconElement`), checked. Phase 2 built 2026-11-17 (`PressableElement`; `Button` and `Toggle` hold children; hover,
+press and tooltips through the nearest pressable; `Button.IsSelected`), checked. The shorthands are
+`Button.SetText`, `Button.SetIcon`, `Button.ShowKeyLabel` and `Toggle.SetLabel` (each adds or updates the child), and
+`Toggle.Configure` lost its label and `LabelPosition` (every use was East). `Dropdown` rows and filter
+chips drew through `LeftText`, `RightText`, `LeftAlign`, `CheckBoxState`, `LeadingIcon`, `IsHighlighted` and
+`IsMarked` until Phase 3 removed them. After Phase 2's check, from review: a selected `Button` (`IsSelected`, the Map
+tab's switches) stays inset rather than darkened; the tab tiles (the game's inventory tag tabs, the Workshop's tab
+strip and its command tiles, the bottom panel's tabs, the Debug tab's section, Live view and Reports tabs through
+`DebugTabElements.CreateTile`) are `Button`s, so they darken on hover, their open tab raised
+through `Button.RestingBorderStyle`; the Debug tab's copy buttons are gone (its read-only boxes copy). Phase 3 built 2026-11-17 (menu rows are `Button`s and flat-checkbox `Toggle`s, the menu drawing fills, highlight
+and mark behind them, widths from layout; chips and `RecordRow` from `IconElement`s and `Label`s; `Button` lost its row
+members), awaiting its check; IMPLEMENTATION-NOTES "Control content" and the CLAUDE.md UIEngine bullet written.
 
 ## What the code says today
 

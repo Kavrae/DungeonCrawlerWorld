@@ -138,7 +138,7 @@ public sealed class CurrencyRowContentTests
         goldElement.OnRightClicked!.Invoke(Point.Zero);
 
         Assert.IsTrue(contextMenuController.IsOpen);
-        var labels = contextMenuController.Menu.ChildElements.OfType<Button>().Select(button => button.LeftText).ToList();
+        var labels = contextMenuController.Menu.ChildElements.OfType<Button>().Select(button => MenuRows.LabelOf(button)).ToList();
         CollectionAssert.DoesNotContain(labels, "Give", "A shop only ever offers \"Give All\" -- see CurrencyRowContent.BuildCurrencyContextMenu's own ShopComponent check.");
         CollectionAssert.Contains(labels, "Give All");
         CollectionAssert.DoesNotContain(labels, "Take");
@@ -168,7 +168,7 @@ public sealed class CurrencyRowContentTests
         eventBus.Subscribe<ShopDealCompletedEvent>(e => published = e);
 
         goldElement.OnRightClicked!.Invoke(Point.Zero);
-        var giveAllButton = contextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == "Give All");
+        var giveAllButton = contextMenuController.Menu.ChildElements.OfType<Button>().Single(button => MenuRows.LabelOf(button) == "Give All");
         giveAllButton.HandleClick(giveAllButton.Rectangle.Center);
 
         Assert.IsNotNull(published);
@@ -190,7 +190,7 @@ public sealed class CurrencyRowContentTests
         eventBus.Subscribe<ShopDealCompletedEvent>(_ => publishedCount++);
 
         goldElement.OnRightClicked!.Invoke(Point.Zero);
-        var giveButton = contextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == "Give");
+        var giveButton = contextMenuController.Menu.ChildElements.OfType<Button>().Single(button => MenuRows.LabelOf(button) == "Give");
         giveButton.HandleClick(giveButton.Rectangle.Center);
 
         Assert.AreEqual(0, publishedCount);
@@ -202,7 +202,7 @@ public sealed class CurrencyRowContentTests
     {
         const int chestEntityId = 13;
         var (goldElement, componentManager, contextMenuController) = BuildForGiveTake(chestEntityId, chestEntityId);
-        Button Option(string label) => contextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == label);
+        Button Option(string label) => contextMenuController.Menu.ChildElements.OfType<Button>().Single(button => MenuRows.LabelOf(button) == label);
 
         goldElement.OnRightClicked!.Invoke(Point.Zero);
         Assert.IsFalse(Option("Take").Enabled);

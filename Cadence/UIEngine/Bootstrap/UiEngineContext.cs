@@ -50,7 +50,9 @@ public sealed class UiEngineContext(
 
         pool.RegisterFactory(() => new Window(services));
         pool.RegisterFactory(() => new TextWindow(services));
-        pool.RegisterFactory(() => new Button(services, sprites));
+        pool.RegisterFactory(() => new Label(services));
+        pool.RegisterFactory(() => new IconElement(services, sprites));
+        pool.RegisterFactory(() => new Button(services));
         pool.RegisterFactory(() => new TextBox(services, cursorTextContent, contextMenuController));
         pool.RegisterFactory(() => new NumericField(services, cursorTextContent, contextMenuController));
         pool.RegisterFactory(() => new ColorField(services, cursorTextContent, contextMenuController));

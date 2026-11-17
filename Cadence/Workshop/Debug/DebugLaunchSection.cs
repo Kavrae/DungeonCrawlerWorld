@@ -29,12 +29,7 @@ public sealed class DebugLaunchSection(DebugTabServices services, WorkshopDebugg
 
     private const string AllLabel = "All";
 
-    /// <summary>The clipboard icon, drawn as a glyph (the sprite manifest has no "Copy").</summary>
-    private const string CopyGlyph = "📋";
-
-    private const string CopySpriteName = "Copy";
     private const float ToggleListWidth = 240f;
-    private const float CopyButtonWidth = 28f;
     private const float RandomToggleWidth = 90f;
     private const float SeedFieldWidth = 130f;
     private const float UseLastSeedWidth = 120f;
@@ -48,8 +43,6 @@ public sealed class DebugLaunchSection(DebugTabServices services, WorkshopDebugg
 
     private TextBox _commandLine = null!;
     private TextBox _optionsFile = null!;
-    private Button _copyCommandLine = null!;
-    private Button _copyOptionsFile = null!;
     private TextWindow _headlessNote = null!;
     private TextBox _extraArguments = null!;
     private TextBox _saveName = null!;
@@ -92,10 +85,6 @@ public sealed class DebugLaunchSection(DebugTabServices services, WorkshopDebugg
     public string OptionsFileText => _optionsFile.OriginalText;
 
     public TextBox CommandLineBox => _commandLine;
-
-    public Button CopyCommandLineButton => _copyCommandLine;
-
-    public Button CopyOptionsFileButton => _copyOptionsFile;
 
     /// <summary>feature's checkbox; DiagnosticsFeatures.All is the All checkbox.</summary>
     public Toggle ToggleFor(DiagnosticsFeatures feature) => feature == DiagnosticsFeatures.All
@@ -181,11 +170,11 @@ public sealed class DebugLaunchSection(DebugTabServices services, WorkshopDebugg
         y += DebugTabChrome.RowHeight * ProblemLines + DebugTabChrome.RowGap;
 
         CreateHeading(ref y, width, "Play and Build and Play start the game with:");
-        (_commandLine, _copyCommandLine) = CreateCopyableRow(y, width, "the command line");
+        _commandLine = CreateReadOnlyRow(y, width);
         y += DebugTabChrome.RowHeight + DebugTabChrome.RowGap;
 
         CreateHeading(ref y, width, "Launch settings are saved for you in:");
-        (_optionsFile, _copyOptionsFile) = CreateCopyableRow(y, width, "the settings file's path");
+        _optionsFile = CreateReadOnlyRow(y, width);
         _optionsFile.SetText(debugging.OptionsFilePath);
         ShowOptions();
         Update();
@@ -198,8 +187,8 @@ public sealed class DebugLaunchSection(DebugTabServices services, WorkshopDebugg
         _extraArguments.SetSize(new Vector2(width, DebugTabChrome.RowHeight));
         _headlessNote.SetSize(new Vector2(width, DebugTabChrome.RowHeight));
         _problems.SetSize(new Vector2(width, DebugTabChrome.RowHeight * ProblemLines));
-        PlaceCopyableRow(_commandLine, _copyCommandLine, width);
-        PlaceCopyableRow(_optionsFile, _copyOptionsFile, width);
+        _commandLine.SetSize(new Vector2(width, DebugTabChrome.RowHeight));
+        _optionsFile.SetSize(new Vector2(width, DebugTabChrome.RowHeight));
     }
 
     /// <summary>Enables Use last seed while the last connected game reported a seed. UI thread, once per frame while the section is shown.</summary>
@@ -228,7 +217,8 @@ public sealed class DebugLaunchSection(DebugTabServices services, WorkshopDebugg
             Chrome = new ElementChromeOptions { ShowBorder = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
-        toggle.Configure(label, LabelPosition.East, isOn, DebugTabChrome.ToggleOn, WindowPalette.ControlBackground, WindowPalette.BodyTextColor, services.Fonts.GetFont(UIEngine.UI.Chrome.FontChrome.DefaultFontSize), onToggled);
+        toggle.Configure(isOn, DebugTabChrome.ToggleOn, WindowPalette.ControlBackground, onToggled);
+        toggle.SetLabel(label, services.Fonts.GetFont(UIEngine.UI.Chrome.FontChrome.DefaultFontSize), WindowPalette.BodyTextColor);
         Window.AddChild(toggle);
         x += width + DebugTabChrome.RowGap;
         return toggle;
@@ -249,44 +239,18 @@ public sealed class DebugLaunchSection(DebugTabServices services, WorkshopDebugg
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, y), Size = new Vector2(width, DebugTabChrome.RowHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true },
             Content = new ElementContentOptions { ContentColor = WindowPalette.ControlBackground },
-            Text = new TextOptions { Text = label, TextColor = WindowPalette.ControlLabelTextColor },
+            Text = new TextOptions { TextColor = WindowPalette.ControlLabelTextColor },
         });
+        button.SetText(label);
         button.Clicked += _ => onClicked();
         Window.AddChild(button);
         x += width + DebugTabChrome.RowGap;
         return button;
     }
 
-    /// <summary>A read-only text box the width of the section less a copy button at its right, which copies the box's text.</summary>
-    private (TextBox Box, Button CopyButton) CreateCopyableRow(float y, float width, string whatIsCopied)
-    {
-        var box = DebugTabElements.CreateReadOnlyBox(services, Window, new Vector2(0, y), new Vector2(TextBoxWidth(width), DebugTabChrome.RowHeight));
-
-        var copyButton = services.Pool.CreateElement<Button>(Window, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(width - CopyButtonWidth, y), Size = new Vector2(CopyButtonWidth, DebugTabChrome.RowHeight), DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = true },
-            Content = new ElementContentOptions { ContentColor = WindowPalette.ControlBackground },
-            Text = new TextOptions { Text = CopyGlyph, TextColor = WindowPalette.ControlLabelTextColor },
-            Button = new ButtonOptions { SpriteName = CopySpriteName },
-        });
-        copyButton.TooltipText = "Copy";
-        copyButton.Clicked += _ =>
-        {
-            services.CopyToClipboard(box.OriginalText);
-            services.Status.Show($"Copied {whatIsCopied}.");
-        };
-        Window.AddChild(copyButton);
-        return (box, copyButton);
-    }
-
-    private static void PlaceCopyableRow(TextBox box, Button copyButton, float width)
-    {
-        box.SetSize(new Vector2(TextBoxWidth(width), DebugTabChrome.RowHeight));
-        copyButton.SetRelativePosition(new Vector2(width - CopyButtonWidth, copyButton.RelativePosition.Y));
-    }
-
-    private static float TextBoxWidth(float width) => System.Math.Max(40, width - CopyButtonWidth - DebugTabChrome.RowGap);
+    /// <summary>A read-only text box the width of the section; its text is copied by selecting it (Ctrl+C or its menu).</summary>
+    private TextBox CreateReadOnlyRow(float y, float width) =>
+        DebugTabElements.CreateReadOnlyBox(services, Window, new Vector2(0, y), new Vector2(width, DebugTabChrome.RowHeight));
 
     private void OnFeaturesChanged()
     {

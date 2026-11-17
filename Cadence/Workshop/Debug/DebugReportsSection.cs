@@ -57,7 +57,7 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
     private static readonly Color RegressionColor = Color.IndianRed * 0.45f;
     private static readonly Color ImprovementColor = Color.LightGreen * 0.6f;
 
-    private readonly List<(LiveView? View, TextWindow Tile)> _tabTiles = [];
+    private readonly List<(LiveView? View, Button Tile)> _tabTiles = [];
     private readonly Dictionary<LiveView, TextWindow> _compareMessages = [];
     private readonly Dictionary<LiveView, ListView> _compareLists = [];
     private Task<IReadOnlyList<DiagnosticsReportEntry>>? _scan;
@@ -143,7 +143,7 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
     public LiveView? SelectedTab => _selectedTab;
 
     /// <summary>view's tile in the tab row; null for All.</summary>
-    public TextWindow TabTileFor(LiveView? view) => _tabTiles.First(entry => entry.View == view).Tile;
+    public Button TabTileFor(LiveView? view) => _tabTiles.First(entry => entry.View == view).Tile;
 
     public void Open(Rectangle bounds)
     {
@@ -713,8 +713,9 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, 0), Size = new Vector2(width, DebugTabChrome.RowHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true },
             Content = new ElementContentOptions { ContentColor = WindowPalette.ControlBackground },
-            Text = new TextOptions { Text = label, TextColor = WindowPalette.ControlLabelTextColor },
+            Text = new TextOptions { TextColor = WindowPalette.ControlLabelTextColor },
         });
+        button.SetText(label);
         button.Clicked += _ => onClicked();
         _browser.AddChild(button);
         x += width + ToolbarButtonGap;

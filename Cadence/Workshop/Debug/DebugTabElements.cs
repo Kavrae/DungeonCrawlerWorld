@@ -65,26 +65,27 @@ internal static class DebugTabElements
         return box;
     }
 
-    /// <summary>A switch tile: label on a raised or sunken face, styled by StyleTile; a click runs onClicked.</summary>
-    public static TextWindow CreateTile(DebugTabServices services, Window parent, Vector2 position, float width, string label, Action onClicked)
+    /// <summary>A switch tile: a button whose label sits on a raised or sunken face, styled by StyleTile, darkening on hover; a click runs onClicked.</summary>
+    public static Button CreateTile(DebugTabServices services, Window parent, Vector2 position, float width, string label, Action onClicked)
     {
         var size = new Vector2(width, DebugTabChrome.RowHeight);
-        var tile = services.Pool.CreateElement<TextWindow>(parent, new ElementOptions
+        var tile = services.Pool.CreateElement<Button>(parent, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = position, Size = size, MinimumSize = size, MaximumSize = size, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Inset, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelContentColor },
-            Text = new TextOptions { Text = label, TextColor = WindowPalette.BodyTextColor },
+            Text = new TextOptions { TextColor = WindowPalette.BodyTextColor },
         });
+        tile.SetText(label);
         tile.Clicked += _ => onClicked();
         parent.AddChild(tile);
         return tile;
     }
 
     /// <summary>Raises the selected tile on the control colour; sinks the others.</summary>
-    public static void StyleTile(TextWindow tile, bool isSelected)
+    public static void StyleTile(Button tile, bool isSelected)
     {
-        tile.BorderStyle = isSelected ? BorderStyle.Outset : BorderStyle.Inset;
+        tile.RestingBorderStyle = isSelected ? BorderStyle.Outset : BorderStyle.Inset;
         tile.SetContentColor(isSelected ? WindowPalette.ControlBackground : WindowPalette.PanelContentColor);
         tile.TextColor = isSelected ? Color.White : WindowPalette.BodyTextColor;
     }

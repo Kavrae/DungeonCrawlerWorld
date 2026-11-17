@@ -126,7 +126,7 @@ public sealed class SplitPaneAndListEditorTests
         editor.AddRequested += () => { items.Add("new"); Fill(); };
         Fill();
 
-        Button ButtonOf(int row, string label) => editor.ChildElements.OfType<Button>().Where(button => button.LeftText == label).ElementAt(row);
+        Button ButtonOf(int row, string label) => editor.ChildElements.OfType<Button>().Where(button => ButtonContent.TextOf(button) == label).ElementAt(row);
         Assert.IsFalse(ButtonOf(0, ListEditor.MoveUpLabel).Enabled);
         Assert.IsFalse(ButtonOf(2, ListEditor.MoveDownLabel).Enabled);
 
@@ -137,7 +137,7 @@ public sealed class SplitPaneAndListEditorTests
         CollectionAssert.AreEqual(new[] { "b", "a" }, items);
         Assert.AreEqual(2, editor.RowCount);
 
-        harness.Click(editor.ChildElements.OfType<Button>().Single(button => button.LeftText == "Add"));
+        harness.Click(editor.ChildElements.OfType<Button>().Single(button => ButtonContent.TextOf(button) == "Add"));
         CollectionAssert.AreEqual(new[] { "b", "a", "new" }, items);
     }
 }

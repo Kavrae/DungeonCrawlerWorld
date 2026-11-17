@@ -291,8 +291,8 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
             var button = elementPool.CreateElement<Button>(bar, new ElementOptions
             {
                 Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, 0), Size = new Vector2(width, CommandBarHeight), DisplayMode = ElementDisplayMode.Fixed },
-                Text = new TextOptions { Text = command.Label },
             });
+            button.SetText(command.Label);
             button.TooltipText = command.Tooltip;
             button.Enabled = command.IsEnabled;
             button.Clicked += _ => _pendingCommand = command.Run;
@@ -310,7 +310,8 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
                 Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = size, DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
                 Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false },
             });
-            toggle.Configure(option.Label, LabelPosition.East, option.IsOn(), FieldRow.ToggleOnColor, WindowPalette.EditableControlBackground, WindowPalette.ControlLabelTextColor, font, option.Changed);
+            toggle.Configure(option.IsOn(), FieldRow.ToggleOnColor, WindowPalette.EditableControlBackground, option.Changed);
+            toggle.SetLabel(option.Label, font, WindowPalette.ControlLabelTextColor);
             toggle.TooltipText = option.Tooltip;
             bar.AddChild(toggle);
             _viewOptionToggles.Add(toggle);
@@ -636,8 +637,8 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
             _newRecordButton = elementPool.CreateElement<Button>(_browserWindow, new ElementOptions
             {
                 Layout = new ElementLayoutOptions { RelativePosition = NewRecordButtonPosition(), Size = new Vector2(NewRecordButtonWidth, SearchBoxHeight), DisplayMode = ElementDisplayMode.Fixed },
-                Text = new TextOptions { Text = newRecordLabel },
             });
+            _newRecordButton.SetText(newRecordLabel);
             _newRecordButton.TooltipText = NewRecordTooltip;
             _newRecordButton.Clicked += _ => _newRecordRequested = true;
             _browserWindow.AddChild(_newRecordButton);
@@ -973,8 +974,8 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
         var clear = elementPool.CreateElement<Button>(_listWindow, new ElementOptions
         {
             Layout = new ElementLayoutOptions { Size = buttonSize, MinimumSize = buttonSize, MaximumSize = buttonSize, DisplayMode = ElementDisplayMode.Fixed },
-            Text = new TextOptions { Text = ListFilterButton.ClearFiltersLabel },
         });
+        clear.SetText(ListFilterButton.ClearFiltersLabel);
         clear.Clicked += _ => _clearFiltersRequested = true;
         _listWindow.AddChild(clear);
     }
@@ -989,7 +990,7 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
         }
 
         var rowColor = ReferenceEquals(record, _selectedRecord) ? SelectedRowColor : RowColor;
-        var row = RecordRow.Create(_context.UiEngine.ElementPoolService, _context.UiEngine.FontService, _listWindow, width, appearance, rowColor);
+        var row = RecordRow.Create(_context.UiEngine.ElementPoolService, _listWindow, width, appearance, rowColor);
 
         row.Clicked += _ => Select(record);
         row.OnRightClicked = position => OpenRecordMenu(record, position);

@@ -1,7 +1,5 @@
 using FontStashSharp;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
-using UIEngine.Fonts;
 using UIEngine.Rendering;
 using UIEngine.UI.Chrome;
 using UIEngine.UI.ColorPalettes;
@@ -9,113 +7,86 @@ using UIEngine.UI.ColorPalettes;
 namespace UIEngine.UI;
 
 /// <summary>
-/// A clickable, hoverable rectangle with left- and (optionally) right-aligned text -- e.g. a
-/// context-menu option's "Copy    Ctrl+C", or a title-bar chrome button. A plain pooled Element,
-/// attached either as a normal child (AddChild, for content-area use -- the ordinary Measure/
-/// Arrange pipeline positions it exactly like any other child) or via Window.AddTitleButton (for
-/// title-bar use -- constructed with parent: null and repositioned via PositionInHeader instead;
-/// see AddTitleButton's and PositionInHeader's own doc comments for why title buttons need that
-/// separate path). Both the hover highlight and the Outset/Inset press-bevel always apply,
-/// everywhere -- there is no per-instance toggle for either; IsHovered/IsPressed are both driven
-/// externally by UiInputController (see PressedButton/HoveredButton there), not self-polled.
-///
-/// spriteSheetService is optional -- null for the overwhelming majority of
-/// Buttons (title-bar chrome, context-menu rows), which never set ElementOptions.Button and so
-/// never reach the sprite-drawing branch of DrawContent below. Given by the host's Button
-/// factory, so a button that wants an icon (Folder's sprite-or-glyph treatment) opts in through
-/// ElementOptions.Button.SpriteName without every other consumer threading a service it never uses.
+/// An action: a pressable control with a raised bevel that sinks while pressed and darkens while hovered, showing
+/// whatever its children are. SetText, SetIcon and ShowKeyLabel add the common children in one call -- a label
+/// centred in the button, a sprite-or-glyph picture filling it, a key label in its top-left corner.
 /// </summary>
-public sealed class Button(ElementServices services, SpriteSheetService? spriteSheetService = null)
-    : Element(services)
+/// <remarks>
+/// Attached as an ordinary child (AddChild, laid out like any element) or to a window's title bar
+/// (Window.AddTitleButton, built with no parent and placed by PositionInHeader). Children may be laid out by its tiling
+/// as any element's are: a Dropdown row is a Horizontal button holding an icon, a label that fills and a hotkey.
+/// </remarks>
+public sealed class Button(ElementServices services)
+    : PressableElement(services)
 {
     /// <summary>What ContentFont is reset to on every Build, so a pooled button never keeps a font a previous user set.</summary>
     private readonly SpriteFontBase _defaultContentFont = services.FontService.GetFont(FontChrome.DefaultFontSize);
 
-    public SpriteFontBase ContentFont { get; set; } = services.FontService.GetFont(FontChrome.DefaultFontSize);
+    /// <summary>The label SetText added, updated by later calls; null until then.</summary>
+    private Label? _textLabel;
 
-    /// <summary>ContentFont's text measurer, looked up again only when ContentFont changes.</summary>
-    private FontStashTextMeasurer ContentTextMeasurer
-    {
-        get
-        {
-            if (_contentTextMeasurer is null || !ReferenceEquals(_contentTextMeasurer.Font, ContentFont))
-            {
-                _contentTextMeasurer = FontService.GetTextMeasurer(ContentFont);
-            }
-
-            return _contentTextMeasurer;
-        }
-    }
-
-    private FontStashTextMeasurer? _contentTextMeasurer;
-
-    public string LeftText { get; set; } = string.Empty;
-
-    public string? RightText { get; set; }
-
-    /// <summary>Defaults to WindowPalette.BodyTextColor (black) -- overridable via Text.TextColor, e.g. GridControl's sort tile needs white text against its own dark ContentColor.</summary>
-    public Color TextColor { get; set; }
-
-    /// <summary>
-    /// Forces left alignment even when RightText is empty -- Dropdown's own option rows set
-    /// this so they always read as a native left-aligned menu command, regardless of whether a
-    /// hotkey column happens to be present, rather than falling into the single-glyph
-    /// ink-centered look DrawContent otherwise uses for a title button ("X", "_", "O") when
-    /// RightText is empty. False by default (that ink-centered look), reset on every Build since
-    /// pooled Buttons are shared across both title-button and context-menu uses.
-    /// </summary>
-    public bool LeftAlign { get; set; }
-
-    public bool IsHovered { get; set; }
-
-    /// <summary>Draws the hover highlight without the pointer over it -- a Dropdown row Up/Down moved to.</summary>
-    public bool IsHighlighted { get; set; }
-
-    /// <summary>Draws an accent at the left edge -- a Dropdown row holding a DropdownField's current value.</summary>
-    public bool IsMarked { get; set; }
-
-    /// <summary>Draws a checkbox, checked or not, left of a left-aligned label -- a row of a list where several can be chosen; null (the default) for none.</summary>
-    public bool? CheckBoxState { get; set; }
-
-    /// <summary>The checkbox square's side.</summary>
-    public const float CheckBoxSide = 12f;
-
-    /// <summary>How much of a left-aligned label's width a checkbox takes: its side and the gap after it.</summary>
-    public const float CheckBoxWidth = CheckBoxSide + 6f;
-
-    /// <summary>A glyph drawn left of a left-aligned label, after the checkbox if there is one; null (the default) for none.</summary>
-    public GlyphIcon? LeadingIcon { get; set; }
-
-    /// <summary>How much of a left-aligned label's width a leading icon takes: its box and the gap after it.</summary>
-    public const float LeadingIconWidth = LeadingIconSide + 4f;
-
-    private const float LeadingIconSide = 16f;
-
-    private const float CheckMarkInset = 2f;
-    private const float CheckMarkThickness = 2f;
-
-    /// <summary>True while the mouse is held down over this button -- DrawContent swaps Outset/Inset while true, giving the pressed-in look. Set by UiInputController on press/release (see PressedButton).</summary>
-    public bool IsPressed { get; private set; }
-
-    /// <summary>A disabled button is never hovered, pressed or clicked as a button, rather than every caller having to remember to check Enabled itself; a press on it is taken and does nothing (Element.IsHitTestable).</summary>
-    protected override bool IsHitTestable => base.IsHitTestable && Enabled;
+    /// <summary>The picture SetIcon added, with what it shows, so a font change can redraw its glyph; null until then.</summary>
+    private (IconElement Icon, string? SpriteName, string Glyph)? _icon;
 
     private BorderStyle _restingBorderStyle;
 
-    /// <summary>Set via ElementOptions.Button.SpriteName -- null (the default) means this button draws its ordinary Left/RightText, never the sprite-or-glyph icon branch below. Reset on every Build, same as every other field here, so a pooled-and-reused Button can't carry a stale icon from its previous consumer.</summary>
-    /// <summary>The icon ElementOptions.Button.SpriteName names, resolved when the button is built; null for none.</summary>
-    private SpriteView? _sprite;
+    /// <summary>The font SetText's label and SetIcon's glyph are drawn in.</summary>
+    public SpriteFontBase ContentFont
+    {
+        get;
+        set
+        {
+            field = value;
+            _textLabel?.SetFont(value);
+            if (_icon is { } icon)
+            {
+                icon.Icon.Configure(icon.SpriteName, icon.Glyph, TextColor, value);
+            }
+        }
+    } = services.FontService.GetFont(FontChrome.DefaultFontSize);
 
-    /// <summary>Whether this button draws an icon (a sprite, or LeftText as its glyph when the manifest has none) rather than plain text.</summary>
-    private bool _hasSpriteIcon;
+    /// <summary>The colour SetText's label and SetIcon's glyph are drawn in: Text.TextColor, else WindowPalette.BodyTextColor.</summary>
+    public Color TextColor
+    {
+        get;
+        set
+        {
+            field = value;
+            _textLabel?.TextColor = value;
+            if (_icon is { } icon)
+            {
+                icon.Icon.Configure(icon.SpriteName, icon.Glyph, value, ContentFont);
+            }
+        }
+    }
 
-    /// <summary>Set via ElementOptions.Button.HotkeyLabel -- see its own doc comment. Reset every Build, same as _sprite.</summary>
-    private string? _hotkeyLabel;
+    /// <summary>Whether the button darkens itself while hovered; true unless its holder draws which of its buttons is current itself (a Dropdown).</summary>
+    public bool ShowsHoverHighlight { get; set; }
 
-    /// <summary>Only fetched when _hotkeyLabel is actually set (the overwhelming majority of Buttons never set HotkeyLabel) -- sized off this button's own OriginalSize.Y.</summary>
-    private SpriteFontBase? _hotkeyLabelFont;
+    /// <summary>Holds the button sunken (Inset) while on, as a switch that is on -- the Map tab's grid switch, its chosen layer and neighborhood.</summary>
+    public bool IsSelected
+    {
+        get;
+        set
+        {
+            field = value;
+            ApplyBorderStyle();
+        }
+    }
 
-    private readonly TextSizeCache _rightTextSize = new();
+    /// <summary>The bevel the button shows while neither pressed nor selected: Chrome.BorderStyle, else Outset. A tab strip raises its open tab by setting it.</summary>
+    public BorderStyle RestingBorderStyle
+    {
+        get => _restingBorderStyle;
+        set
+        {
+            _restingBorderStyle = value;
+            ApplyBorderStyle();
+        }
+    }
+
+    /// <summary>The text SetText shows, or empty when it hasn't been called.</summary>
+    public string Text => _textLabel?.Text ?? string.Empty;
 
     public override void Build(Element? parent, ElementOptions options)
     {
@@ -127,195 +98,98 @@ public sealed class Button(ElementServices services, SpriteSheetService? spriteS
 
         _contentState.BackgroundColor = options.Content?.ContentColor ?? WindowPalette.PanelContentColor;
 
+        _textLabel = null;
+        _icon = null;
         ContentFont = _defaultContentFont;
-        LeftText = options.Text?.Text ?? string.Empty;
-        RightText = null;
         TextColor = options.Text?.TextColor ?? WindowPalette.BodyTextColor;
         Enabled = true;
-        IsHovered = false;
-        IsHighlighted = false;
-        IsMarked = false;
-        CheckBoxState = null;
-        LeadingIcon = null;
-        IsPressed = false;
-        LeftAlign = false;
-        _sprite = spriteSheetService?.Sprites.FirstOrNull(options.Button?.SpriteName);
-        _hasSpriteIcon = options.Button?.SpriteName is not null;
-
-        _hotkeyLabel = options.Button?.HotkeyLabel;
-        _hotkeyLabelFont = _hotkeyLabel is not null ? FontService.GetFont((int)(OriginalSize.Y * FontChrome.ButtonHotkeyLabelFontFraction)) : null;
+        ShowsHoverHighlight = true;
+        IsSelected = false;
 
         _restingBorderStyle = options.Chrome?.BorderStyle ?? BorderStyle.Outset;
-        BorderStyle = _restingBorderStyle;
+        ApplyBorderStyle();
     }
 
-    /// <summary>
-    /// Always shows Inset (sunken) while pressed, restoring the resting style on release --
-    /// Element.Draw reads BorderStyle directly for its border pass, so this is the only hook
-    /// needed for the pressed-in look without Button overriding Draw itself. Pressed always
-    /// means Inset specifically, not "whatever the resting style isn't": a raised (Outset)
-    /// button pressing inward to Inset is the standard convention, but a button whose resting
-    /// style is already Inset (e.g. GridControl's sort tile, sunken like the row's other
-    /// tiles) must stay Inset while held too -- swapping it to Outset would read as popping
-    /// up/releasing at exactly the moment it's being pressed down, backwards from what the
-    /// gesture means.
-    /// </summary>
-    public void SetPressed(bool isPressed)
+    /// <summary>Shows text centred in the button, in ContentFont and TextColor (grey while disabled); a later call changes the text shown.</summary>
+    public Label SetText(string text)
     {
-        IsPressed = isPressed;
-        BorderStyle = isPressed ? BorderStyle.Inset : _restingBorderStyle;
+        if (_textLabel is { } label)
+        {
+            label.SetText(text);
+            return label;
+        }
+
+        label = ElementPoolService.CreateElement<Label>(this, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, DisplayMode = ElementDisplayMode.Fill },
+            Text = new TextOptions { Text = text, TextColor = TextColor },
+        });
+        label.IsCentered = true;
+        label.SetFont(ContentFont);
+        _textLabel = label;
+        AddChild(label);
+        return label;
     }
 
+    /// <summary>Shows spriteName's sprite filling the button, or glyph centred in ContentFont and TextColor when the manifest has no such sprite; greyed while disabled.</summary>
+    public IconElement SetIcon(string? spriteName, string glyph)
+    {
+        var icon = ElementPoolService.CreateElement<IconElement>(this, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, DisplayMode = ElementDisplayMode.Fill, IsTransparent = true },
+        });
+        icon.Configure(spriteName, glyph, TextColor, ContentFont);
+        _icon = (icon, spriteName, glyph);
+        AddChild(icon);
+        return icon;
+    }
+
+    /// <summary>Shows key, outlined, in the button's top-left corner over whatever else it shows -- the key that also opens what the button opens; faded while disabled.</summary>
+    public Label ShowKeyLabel(string key)
+    {
+        var label = ElementPoolService.CreateElement<Label>(this, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = KeyLabelPadding - BorderInset },
+            Text = new TextOptions { Text = key, TextColor = ContrastTextRenderer.FillColor },
+        });
+        label.IsOutlined = true;
+        label.SetFont(FontService.GetFont((int)(OriginalSize.Y * FontChrome.ButtonHotkeyLabelFontFraction)));
+        AddChild(label);
+        return label;
+    }
+
+    /// <summary>Where a key label sits from the button's outer top-left corner.</summary>
+    private static readonly Vector2 KeyLabelPadding = new(4f, 2f);
+
+    protected override void OnPressedChanged() => ApplyBorderStyle();
+
+    /// <summary>Inset (sunken) while pressed or selected, the resting style otherwise -- a button already resting sunken stays sunken while held, never popping up as it is pressed.</summary>
+    private void ApplyBorderStyle() =>
+        BorderStyle = IsPressed || IsSelected ? BorderStyle.Inset : _restingBorderStyle;
+
     /// <summary>
-    /// Positions this button relative to a header host's own AbsolutePosition rather than the
-    /// generic parent-content-relative Arrange formula -- the header-relative equivalent of what
-    /// SetRelativePosition/MeasureAndArrange do for an ordinary parented child (see
-    /// Window.AddTitleButton's own doc comment for why title buttons need this separate path).
-    /// The only caller is Window.RepositionTitleButtons; a content-area button (added via
-    /// AddChild) is positioned by the ordinary pipeline instead and never calls this. Only the
-    /// AbsolutePosition source genuinely differs from the generic path (a header host position
-    /// instead of a parent) -- everything downstream of that (content size, every Rectangle) is
-    /// identical work, so it's delegated to the same RecalculateFixedSize/RecalculateRectangles
-    /// the generic Measure/Arrange pipeline itself uses, rather than re-deriving that math here.
+    /// Places this title button relative to its window's header rather than a parent's content area, then lays out what it
+    /// shows; the only caller is Window.RepositionTitleButtons (see Window.AddTitleButton).
     /// </summary>
     internal void PositionInHeader(Vector2 relativePosition, Vector2 headerHostAbsolutePosition)
     {
         _geometry.RelativePosition = relativePosition;
-        RecalculateFixedSize(); // Keeps CurrentSize/ContentSize current -- idempotent, since a title button's own OriginalSize never changes after Build.
+        RecalculateFixedSize();
 
         _geometry.AbsolutePosition = headerHostAbsolutePosition + relativePosition;
-        // No header of its own (HeaderInsetHeight is 0), unlike RecalculateAbsolutePositions' general
-        // case. ChildContentPadding is always Vector2.Zero here too (a title button has no
-        // children), so BackgroundAbsolutePosition/AbsolutePosition coincide -- still both set
-        // explicitly, matching RecalculateAbsolutePositions' own split, since HandleClick's content
-        // hit-test reads BackgroundRectangle (derived from BackgroundAbsolutePosition), not Rectangle.
         _contentState.BackgroundAbsolutePosition = _geometry.AbsolutePosition + BorderInset;
         _contentState.AbsolutePosition = _contentState.BackgroundAbsolutePosition + ChildContentPadding;
 
         RecalculateRectangles();
+        LayOutChildrenInPlace();
     }
 
-    /// <summary>Translucent dark overlay for the hover highlight -- darkens whatever ContentColor this button actually has (WindowPalette.PanelContentColor by default) rather than a fixed replacement color, so it still reads correctly if a caller ever sets a custom ContentColor. Deliberately not WindowPalette.HighlightColor (a gold tint meant for content rows sitting on a light background) -- a button's own resting look is already a mid-gray raised bevel, where a gold tint reads oddly; a straightforward darkening matches how a pressed/hovered physical button looks.</summary>
-    private static readonly Color HoverOverlayColor = WindowPalette.HoverDark;
-
-    /// <summary>
-    /// Horizontal breathing room around LeftText/RightText when both are present -- DrawLeftAligned/
-    /// DrawRightAligned otherwise sit flush against the row's own edges, fine for a single
-    /// ink-centered glyph (see the RightText-empty branch below) but visibly cramped for a
-    /// two-column context-menu row. Internal, not private: Dropdown.MeasureWidth sizes its
-    /// rows off this same constant, rather than guessing its own separate padding value that
-    /// could silently drift out of sync with what actually gets drawn.
-    /// </summary>
-    internal const float HorizontalTextInset = 4f;
-
-    /// <summary>How wide IsMarked's accent is -- inside HorizontalTextInset, so it never reaches the text.</summary>
-    private const int MarkerWidth = 3;
-
+    /// <summary>The hover highlight over the button's own fill, under what it shows.</summary>
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = Render.Batch;
-
-        if (IsHovered || IsHighlighted)
+        if (IsHovered && ShowsHoverHighlight)
         {
-            spriteBatch.FillRectangle(LocalContentRectangle, HoverOverlayColor);
+            Render.Batch.FillRectangle(ToContentLocal(_contentState.BackgroundRectangle), WindowPalette.HoverDark);
         }
-
-        if (IsMarked)
-        {
-            spriteBatch.FillRectangle(new Rectangle(0, 0, MarkerWidth, LocalContentRectangle.Height), WindowPalette.FocusAccentColor);
-        }
-
-        var textColor = Enabled ? TextColor : Color.Gray;
-
-        // Icon mode -- LeftText/RightText's own draw below is for a plain text-only Button
-        // (title-bar chrome, context-menu rows); a caller that opted into ElementOptions.Button.
-        // SpriteName instead gets the same sprite-or-glyph icon Folder's own header draws,
-        // centered across the whole content area, with LeftText read as the fallback glyph if
-        // the sprite name isn't found in the manifest (or spriteSheetService was
-        // never wired -- see this class's own doc comment on why it's optional).
-        if (_hasSpriteIcon && spriteSheetService is not null)
-        {
-            var spriteTint = Enabled ? Color.White : Color.Gray;
-            SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, _sprite, ContentTextMeasurer, LeftText, textColor, Vector2.Zero, ContentSize, spriteTint);
-        }
-        else if (string.IsNullOrEmpty(RightText) && !LeftAlign)
-        {
-            // No hotkey column and no explicit left-align request -- ink-centered, the same
-            // look every title button ("X", "_", "O") has always had. DrawLeftAligned's
-            // box-based (not ink-based) vertical centering reads visibly low for a single short
-            // glyph in a small square button -- see LabelRenderer's own doc comment on why
-            // MeasureString's line box is a poor stand-in for a glyph's actual rendered ink.
-            if (!string.IsNullOrEmpty(LeftText))
-            {
-                LabelRenderer.DrawCentered(spriteBatch, ContentTextMeasurer, LeftText, Vector2.Zero, ContentSize, textColor);
-            }
-        }
-        else
-        {
-            // A hotkey column is present, or LeftAlign was explicitly requested (a context-menu
-            // option row) -- left/right split instead, inset by HorizontalTextInset so neither
-            // column sits flush against the row's edges.
-            var textFootprintPosition = new Vector2(HorizontalTextInset, 0);
-            var textFootprintSize = ContentSize - new Vector2(HorizontalTextInset * 2, 0);
-            if (CheckBoxState is { } isChecked)
-            {
-                DrawCheckBox(spriteBatch, isChecked);
-                textFootprintPosition.X += CheckBoxWidth;
-                textFootprintSize.X -= CheckBoxWidth;
-            }
-
-            if (LeadingIcon is { } icon)
-            {
-                if (icon.Glyph.Length > 0)
-                {
-                    var iconColor = Enabled ? icon.Color : Color.Gray;
-                    LabelRenderer.DrawCentered(spriteBatch, ContentTextMeasurer, icon.Glyph, new Vector2(textFootprintPosition.X, 0), new Vector2(LeadingIconSide, ContentSize.Y), iconColor);
-                }
-
-                textFootprintPosition.X += LeadingIconWidth;
-                textFootprintSize.X -= LeadingIconWidth;
-            }
-
-            if (!string.IsNullOrEmpty(LeftText))
-            {
-                LabelRenderer.DrawLeftAligned(spriteBatch, ContentFont, LeftText, textFootprintPosition, textFootprintSize, textColor);
-            }
-
-            if (!string.IsNullOrEmpty(RightText))
-            {
-                LabelRenderer.DrawRightAligned(spriteBatch, ContentFont, RightText, _rightTextSize.SizeOf(ContentFont, RightText).X, textFootprintPosition, textFootprintSize, textColor);
-            }
-        }
-
-        DrawHotkeyLabel(spriteBatch);
-    }
-
-    /// <summary>The square of a checkbox row, drawn left of the text: white, with a flat border and, when checked, a cross.</summary>
-    private void DrawCheckBox(SpriteEffectBatch spriteBatch, bool isChecked)
-    {
-        var side = (int)CheckBoxSide;
-        var box = new Rectangle((int)HorizontalTextInset, (int)((ContentSize.Y - CheckBoxSide) / 2f), side, side);
-        var opacity = Enabled ? 1f : 0.5f;
-        spriteBatch.FillRectangle(box, Color.White * opacity);
-        var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(box, BorderThickness.Uniform(Vector2.One));
-        BorderRenderer.Draw(spriteBatch, BorderStyle.Flat, WindowPalette.BorderColor * opacity, top, bottom, left, right);
-        if (isChecked)
-        {
-            CrossRenderer.Draw(spriteBatch, new Vector2(box.X, box.Y), new Vector2(box.Width, box.Height), CheckMarkInset, CheckMarkThickness, WindowPalette.BodyTextColor * opacity);
-        }
-    }
-
-    /// <summary>Top-left corner, over whatever else DrawContent just drew -- see HotkeyLabel's own doc comment. Anchored to AbsolutePosition (the button's whole rectangle, outside the border inset), not ContentAbsolutePosition, with the same padding and the same Enabled-driven alpha every other part of this button's draw already uses.</summary>
-    private static readonly Vector2 HotkeyLabelPadding = new(4f, 2f);
-
-    private void DrawHotkeyLabel(SpriteEffectBatch spriteBatch)
-    {
-        if (_hotkeyLabel is null || _hotkeyLabelFont is null)
-        {
-            return;
-        }
-
-        var position = ToContentLocal(AbsolutePosition) + HotkeyLabelPadding;
-        ContrastTextRenderer.Draw(spriteBatch, _hotkeyLabelFont, _hotkeyLabel, position, Enabled ? 1f : 0.5f);
     }
 }

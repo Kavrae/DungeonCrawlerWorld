@@ -116,8 +116,8 @@ public sealed class ModalDialog(ElementServices services)
             var button = ElementPoolService.CreateElement<Button>(this, new ElementOptions
             {
                 Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, _request.BodySize.Y + BodyGap), Size = new Vector2(buttonWidths[buttonIndex], ButtonHeight), DisplayMode = ElementDisplayMode.Fixed },
-                Text = new TextOptions { Text = _request.Buttons[buttonIndex].Label },
             });
+            button.SetText(_request.Buttons[buttonIndex].Label);
             button.Clicked += _ => _pendingChoice = capturedIndex;
             AddChild(button);
             _buttons.Add(button);

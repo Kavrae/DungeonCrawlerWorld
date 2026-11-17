@@ -6,7 +6,7 @@ namespace UIEngine.UI;
 
 /// <summary>
 /// One extra line drawn below a Tooltip's wrapped body text -- LeftText flush left, RightText
-/// flush right (mirrors Button's own LeftText/RightText row shape), both in Color. RightText empty
+/// flush right, both in Color. RightText empty
 /// draws as a plain single-column line (a refusal, say). MiddleText, when non-empty,
 /// draws left-aligned in a third column between the two -- a range column in a table, say -- at a shared column start computed across every
 /// row in the block that uses one, so the ranges line up regardless of each row's own LeftText

@@ -149,8 +149,8 @@ public sealed class FieldSectionHeader(ElementServices services)
             var button = ElementPoolService.CreateElement<Button>(this, new ElementOptions
             {
                 Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = new Vector2(WidthOf(_buttonLabels[index]), 1), DisplayMode = ElementDisplayMode.Fixed },
-                Text = new TextOptions { Text = _buttonLabels[index] },
             });
+            button.SetText(_buttonLabels[index]);
             button.Enabled = _buttonsEnabled[index];
             button.Clicked += _ => _pendingRequest = () => ButtonClicked?.Invoke(capturedIndex);
             AddChild(button);
@@ -160,8 +160,8 @@ public sealed class FieldSectionHeader(ElementServices services)
         _revertButton = ElementPoolService.CreateElement<Button>(this, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = new Vector2(ButtonWidth, ButtonHeight), DisplayMode = ElementDisplayMode.Fixed },
-            Text = new TextOptions { Text = RevertLabel },
         });
+        _revertButton.SetText(RevertLabel);
         _revertButton.Clicked += _ => _pendingRequest = () => RevertRequested?.Invoke();
         AddChild(_revertButton);
         _revertButton.IsVisible = false;

@@ -122,9 +122,10 @@ public sealed class GridControl(ElementServices services)
             // carry over to an actual button, which needs a rest/pressed distinction to show.
             Chrome = new ElementChromeOptions { ShowBorder = true },
             Content = new ElementContentOptions { ContentColor = ControlColor },
-            Text = new TextOptions { Text = _sortOptionLabels[_sortOptionIndex], TextColor = WindowPalette.ControlLabelTextColor },
+            Text = new TextOptions { TextColor = WindowPalette.ControlLabelTextColor },
         });
         _sortButton.ContentFont = _font; // Must match the font width was measured with, or the label can wrap/clip against the tile's own fixed width.
+        _sortButton.SetText(_sortOptionLabels[_sortOptionIndex]);
         _sortButton.Clicked += _ => CycleSortOption();
         AddChild(_sortButton);
         x += _sortButton.CurrentSize.X + ControlGap;
@@ -139,7 +140,8 @@ public sealed class GridControl(ElementServices services)
                 Chrome = new ElementChromeOptions { ShowBorder = false, CanUserFocus = false },
                 Content = new ElementContentOptions { ContentColor = Color.Transparent },
             });
-            toggle.Configure(label, LabelPosition.East, defaultOn, ToggleOnColor, ControlColor, WindowPalette.ControlLabelTextColor, _font, onToggled);
+            toggle.Configure(defaultOn, ToggleOnColor, ControlColor, onToggled);
+            toggle.SetLabel(label, _font, WindowPalette.ControlLabelTextColor);
             AddChild(toggle);
             x += toggleWidth + ControlGap;
         }
@@ -184,7 +186,7 @@ public sealed class GridControl(ElementServices services)
     private void CycleSortOption()
     {
         _sortOptionIndex = (_sortOptionIndex + 1) % _sortOptionLabels.Count;
-        _sortButton.LeftText = _sortOptionLabels[_sortOptionIndex];
+        _sortButton.SetText(_sortOptionLabels[_sortOptionIndex]);
         SortOptionCycled?.Invoke(_sortOptionIndex);
     }
 

@@ -393,8 +393,8 @@ public abstract class ContentEditingTab<T, TPreview> : RecordBrowserTab<ContentR
         var button = Context.UiEngine.ElementPoolService.CreateElement<Button>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { Size = new Vector2(font.MeasureString(CompareLabel).X + TitleButtonTextPadding, FieldSectionHeader.ButtonHeight) },
-            Text = new TextOptions { Text = CompareLabel },
         });
+        button.SetText(CompareLabel);
         button.TooltipText = CompareTooltip;
         button.Clicked += _ => OpenComparePreviews();
         PreviewWindow.AddTitleButton(button);

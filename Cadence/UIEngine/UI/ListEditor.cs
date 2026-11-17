@@ -178,8 +178,8 @@ public sealed class ListEditor(ElementServices services)
         var button = ElementPoolService.CreateElement<Button>(this, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = new Vector2(RowButtonWidth, _rowHeight), DisplayMode = ElementDisplayMode.Fixed },
-            Text = new TextOptions { Text = label },
         });
+        button.SetText(label);
         button.Enabled = enabled;
         button.Clicked += _ => _pendingRequest = request;
         AddChild(button);

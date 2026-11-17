@@ -1,3 +1,4 @@
+using Tests.UIEngine;
 using Engine.ECS.Components;
 using Engine.Math;
 using Presentation.Input;
@@ -1256,7 +1257,7 @@ public sealed class MapWindowTests
         // Blocking corpse.
         Assert.HasCount(3, rows);
         var lootButton = (Button)rows[1];
-        Assert.AreEqual("Loot", lootButton.LeftText);
+        Assert.AreEqual("Loot", MenuRows.LabelOf(lootButton));
         Assert.IsTrue(lootButton.Enabled);
     }
 
@@ -1271,7 +1272,7 @@ public sealed class MapWindowTests
         mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(99, 101, 0)));
 
         var lootButton = (Button)mapWindow.ContextMenuController.Menu.ChildElements[1];
-        Assert.AreEqual("Loot", lootButton.LeftText);
+        Assert.AreEqual("Loot", MenuRows.LabelOf(lootButton));
         Assert.IsTrue(lootButton.Enabled);
     }
 
@@ -1313,7 +1314,7 @@ public sealed class MapWindowTests
         mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition));
 
         var lootButton = (Button)mapWindow.ContextMenuController.Menu.ChildElements[1];
-        Assert.AreEqual("Loot (reserved)", lootButton.LeftText);
+        Assert.AreEqual("Loot (reserved)", MenuRows.LabelOf(lootButton));
         Assert.IsFalse(lootButton.Enabled);
     }
 
@@ -1329,8 +1330,8 @@ public sealed class MapWindowTests
         {
             mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition));
 
-            var lootButton = mapWindow.ContextMenuController.Menu.ChildElements.OfType<Button>().First(button => button.LeftText.StartsWith("Loot", StringComparison.Ordinal));
-            Assert.AreEqual("Loot", lootButton.LeftText);
+            var lootButton = mapWindow.ContextMenuController.Menu.ChildElements.OfType<Button>().First(button => MenuRows.LabelOf(button).StartsWith("Loot", StringComparison.Ordinal));
+            Assert.AreEqual("Loot", MenuRows.LabelOf(lootButton));
             Assert.IsTrue(lootButton.Enabled);
         }
         finally
@@ -1442,7 +1443,7 @@ public sealed class MapWindowTests
         PlaceChest(world, componentManager, chestPosition);
 
         mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, chestPosition));
-        var takeAll = mapWindow.ContextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == "Take All");
+        var takeAll = mapWindow.ContextMenuController.Menu.ChildElements.OfType<Button>().Single(button => MenuRows.LabelOf(button) == "Take All");
         Assert.IsTrue(takeAll.Enabled);
         takeAll.HandleClick(takeAll.Rectangle.Center);
 
@@ -1461,7 +1462,7 @@ public sealed class MapWindowTests
 
         mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, chestPosition));
 
-        Assert.IsFalse(mapWindow.ContextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == "Take All").Enabled);
+        Assert.IsFalse(mapWindow.ContextMenuController.Menu.ChildElements.OfType<Button>().Single(button => MenuRows.LabelOf(button) == "Take All").Enabled);
         Assert.IsFalse(mapWindow.TryTakeAll(ChestEntityId));
         Assert.IsEmpty(takenFrom);
     }
@@ -1478,11 +1479,11 @@ public sealed class MapWindowTests
         PlaceCorpse(world, componentManager, corpsePosition);
 
         mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, chestPosition));
-        Assert.IsFalse(mapWindow.ContextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == "Take All").Enabled);
+        Assert.IsFalse(mapWindow.ContextMenuController.Menu.ChildElements.OfType<Button>().Single(button => MenuRows.LabelOf(button) == "Take All").Enabled);
         Assert.IsFalse(mapWindow.TryTakeAll(ChestEntityId));
 
         mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition));
-        Assert.IsFalse(mapWindow.ContextMenuController.Menu.ChildElements.OfType<Button>().Any(button => button.LeftText == "Take All"));
+        Assert.IsFalse(mapWindow.ContextMenuController.Menu.ChildElements.OfType<Button>().Any(button => MenuRows.LabelOf(button) == "Take All"));
     }
 
     private const int ShopEntityId = 3;
@@ -1509,7 +1510,7 @@ public sealed class MapWindowTests
         var rows = mapWindow.ContextMenuController.Menu.ChildElements;
         Assert.HasCount(3, rows, "[0] header, [1] Shop, [2] Inspect -- no Loot for a shop.");
         var shopButton = (Button)rows[1];
-        Assert.AreEqual("Shop", shopButton.LeftText);
+        Assert.AreEqual("Shop", MenuRows.LabelOf(shopButton));
         Assert.IsTrue(shopButton.Enabled);
     }
 
@@ -1549,7 +1550,7 @@ public sealed class MapWindowTests
         var rows = mapWindow.ContextMenuController.Menu.ChildElements;
         Assert.HasCount(3, rows, "[0] header, [1] Loot, [2] Inspect -- no Shop for a destroyed one.");
         var lootButton = (Button)rows[1];
-        Assert.AreEqual("Loot", lootButton.LeftText);
+        Assert.AreEqual("Loot", MenuRows.LabelOf(lootButton));
     }
 
     [TestMethod]
@@ -1574,7 +1575,7 @@ public sealed class MapWindowTests
         var rows = mapWindow.ContextMenuController.Menu.ChildElements;
         Assert.HasCount(3, rows); // [0] header, [1] Loot, [2] Inspect.
         var inspectButton = (Button)rows[2];
-        Assert.AreEqual("Inspect", inspectButton.LeftText);
+        Assert.AreEqual("Inspect", MenuRows.LabelOf(inspectButton));
     }
 
     [TestMethod]
@@ -1592,7 +1593,7 @@ public sealed class MapWindowTests
         var rows = mapWindow.ContextMenuController.Menu.ChildElements;
         Assert.HasCount(2, rows); // [0] header, [1] Inspect.
         var inspectButton = (Button)rows[1];
-        Assert.AreEqual("Inspect", inspectButton.LeftText);
+        Assert.AreEqual("Inspect", MenuRows.LabelOf(inspectButton));
         // Disabled -- ActionLockGate.IsBlocked treats "no ActionLockComponent at all" (this
         // test never merges one for the player) the same as "locked," matching every other
         // ActionLockGate consumer's own convention.

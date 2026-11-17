@@ -436,8 +436,9 @@ public sealed class TradeWindow(
             Layout = new ElementLayoutOptions { RelativePosition = position, Size = size, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true },
             Content = new ElementContentOptions { ContentColor = WindowPalette.ControlBackground },
-            Text = new TextOptions { Text = text, TextColor = WindowPalette.ControlLabelTextColor },
+            Text = new TextOptions { TextColor = WindowPalette.ControlLabelTextColor },
         });
+        button.SetText(text);
         AddChild(button);
         return button;
     }
