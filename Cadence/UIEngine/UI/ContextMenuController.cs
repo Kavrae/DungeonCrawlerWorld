@@ -17,7 +17,8 @@ public sealed class ContextMenuController(DropdownController dropdowns)
     /// <summary>The live popup itself.</summary>
     internal Element Menu => Dropdowns.Menu;
 
-    public void Open(Vector2 cursorPosition, IReadOnlyList<DropdownOption> options) => Dropdowns.OpenAt(cursorPosition, options);
+    /// <summary>Opens options at the cursor, indenting the options under each heading when indentsUnderHeadings.</summary>
+    public void Open(Vector2 cursorPosition, IReadOnlyList<DropdownOption> options, bool indentsUnderHeadings = false) => Dropdowns.OpenAt(cursorPosition, options, indentsUnderHeadings);
 
     public void Close() => Dropdowns.Close();
 }

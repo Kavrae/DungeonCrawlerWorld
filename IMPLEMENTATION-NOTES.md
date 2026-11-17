@@ -2118,13 +2118,39 @@ types, so a future Magic Menu gets them free. Frame counts always shown as secon
 
 ### Context menu
 
-- `ContextMenu`/`ContextMenuController`: shared popup; each right-click source supplies its own
-  `ContextMenuOption` list (shared mechanics, distributed content).
-- `AdvancedMapContextMenu`: right-clicking a tile stacks every occupant's + terrain's own option group
-  under a header row; the same generic `Element.OnRightClicked` hook drives 4 more menus (Window
-  Close/Close All, Notification popup, NotificationSummary, Inventory item Give/Take).
-- Still open: TextBox context menu wiring, "Bind To..." sub-menu (needs cascading sub-menus) -- see
-  TODO.md.
+- `DropdownController` (UIEngine) opens every list: a right-click's context menu through `ContextMenuController`
+  (`OpenAt`, at the cursor) and a field's choices (`OpenBelow`). Each source supplies its own `DropdownOption` list
+  (shared mechanics, distributed content). One list is open at a time; opening another closes it and its submenus.
+- The map's right-click menu (`MapWindow.TryOpenEntityContextMenuAt`) stacks every occupant's option group under a
+  heading with its name, then the structure's and terrain's names, then Admin Mode's neighborhood and "Tile (x, y)"
+  groups. The same `Element.OnRightClicked` hook drives the other menus (Window Close/Close All, notifications, an
+  inventory item's options, the hotbar, currency).
+- **Headings and indentation** (`PLAN-context-menu-cleanup.md`): a heading is a plain label row, not bold. A menu
+  opened with `indentsUnderHeadings` (`ContextMenuController.Open`, `DropdownController.OpenAt`, `Dropdown.Show`; off
+  by default, never for a list under a field) moves every option after a heading in by `Dropdown.HeadingIndent`. The
+  whole row moves -- checkbox, icon, label and hotkey -- because the indent is the row's `Element.ContentIndent`
+  (`ElementHierarchyOptions.ContentIndent`): where its tiled children start, before `LeadingTileInset`, and where
+  `Toggle` draws its checkbox. The row itself stays full width, so its fill and highlight do too. The map's menu
+  indents; the browser filter menus don't.
+- **Submenus open beside their menu.** An option built by `DropdownOption.Opening` (">" in its hotkey column) opens
+  its options as a second `Dropdown` beside the row that chose it, the parent staying open with that row highlighted
+  (`Dropdown.OpenSubmenuIndex`). `DropdownController.PlaceBeside`: against the parent's right edge with its first row
+  level with the opening row, against the left edge when the right would leave the screen, moved up (never flipped) at
+  the bottom; a submenu taller than the screen scrolls. Any depth (Admin Mode's "Grant loot box" is three levels).
+  - What opens one: choosing its row -- a click, Enter, or Right. No hover-to-open.
+  - What closes one: choosing its row again, choosing another submenu row in the same parent (which opens that one
+    instead), a press on the parent off its options (a heading, empty space), the parent scrolling, Left, or Escape --
+    each closes the menus below that parent and returns the highlight to the row. Escape on the root closes it. An
+    ordinary option runs and closes every menu; a checkbox option turns and keeps them open. A press outside every
+    menu closes them all (the controller is the one `ILightDismissable`; every open menu counts as inside), and a right
+    press closes them and goes on.
+  - Keys go to the deepest menu (`HandleNavigationKey`). Left and Right are taken only when they close or open a
+    submenu, so a field's text box under its list keeps them.
+  - The root is one `Dropdown` kept for the controller's life. A submenu is taken from the element pool when it opens
+    and added to the `ContextMenu` layer last, so it draws and is hit above its parent. A closed submenu is hidden at
+    once and taken out of the layer and returned to the pool when the next menu opens -- never inside the click that
+    closed it, which may still be running in one of its rows. Opening one rebuilds only it, never the menu whose row
+    was chosen, so nothing waits a frame.
 
 ### Inspection V2 / Player selection menu
 
@@ -3686,7 +3712,8 @@ with SwiftUI's menu (a checkbox row is a toggle in a menu).
   built WrapContent, then all fixed at the widest (`Element.SetFixedSize`), so widths come from layout -- there is no
   `MeasureWidth`, and the controller shows the menu before placing it by its real size. Which row is current is the
   menu's to know: its rows are transparent and draw no hover (`Button.ShowsHoverHighlight` false), and `Dropdown.DrawContent`
-  draws the row fills, the highlight and the mark behind them (`HighlightedIndex`, `MarkedIndex`, `OptionRows`).
+  draws the row fills, the highlight and the mark behind them (`HighlightedIndex`, `MarkedIndex`, `OptionRows`). A row
+  under a heading in a menu that indents is indented through its `ContentIndent` (see "Context menu").
 - **Chips** are the same: a WrapContent button holding an icon, a label and the "X", then fixed at `ChipHeight`; the row
   of chips is as tall as the lines they took. **`RecordRow`** is a Horizontal row of an `IconElement`, a filling name
   `Label` and the symbols.

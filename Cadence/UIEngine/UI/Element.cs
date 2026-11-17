@@ -167,8 +167,16 @@ public class Element(ElementServices services)
     /// <summary>Whether this element takes the main-axis space its tiled parent's other children leave.</summary>
     public bool FillsRemaining => _geometry.FillsRemaining;
 
-    /// <summary>Space at the start of the tiling axis this element keeps for what it draws itself before its tiled children (a toggle's checkbox); none by default.</summary>
+    private float _contentIndent;
+
+    /// <summary>Space at the start of the tiling axis before everything this element shows -- what it draws itself (a toggle's checkbox) and its tiled children alike; none unless set.</summary>
+    public float ContentIndent => _contentIndent;
+
+    /// <summary>Space at the start of the tiling axis this element keeps for what it draws itself before its tiled children (a toggle's checkbox), after ContentIndent; none by default.</summary>
     protected virtual float LeadingTileInset => 0f;
+
+    /// <summary>Where the first tiled child starts on the tiling axis: past ContentIndent and LeadingTileInset.</summary>
+    private float FirstTileOffset => _contentIndent + LeadingTileInset;
 
     protected List<Element> _children = [];
     public IReadOnlyList<Element> ChildElements => _children;
@@ -586,6 +594,7 @@ public class Element(ElementServices services)
         _canContainChildren = hierarchy?.CanContainChildren ?? false;
         _childrenTileMode = hierarchy?.ChildrenTileMode ?? ChildElementTileMode.Floating;
         _childGap = hierarchy?.ChildGap ?? 0f;
+        _contentIndent = hierarchy?.ContentIndent ?? 0f;
         _childCrossAlignment = hierarchy?.ChildCrossAlignment ?? ChildCrossAlignment.Start;
         _hasAddedFillsRemainingChild = false;
         _children = [];
@@ -1651,7 +1660,7 @@ public class Element(ElementServices services)
     private Vector2 ChildrenExtent()
     {
         var extent = Vector2.Zero;
-        var nextTileOffset = _childrenTileMode == ChildElementTileMode.Floating ? 0f : LeadingTileInset;
+        var nextTileOffset = _childrenTileMode == ChildElementTileMode.Floating ? 0f : FirstTileOffset;
         foreach (var childElement in _children)
         {
             if (!childElement.IsVisible)
@@ -1874,7 +1883,7 @@ public class Element(ElementServices services)
     private float RemainingMainAxisSpace(Element filler, float mainAxisContentSize)
     {
         var isHorizontal = _childrenTileMode == ChildElementTileMode.Horizontal;
-        var usedSpace = LeadingTileInset;
+        var usedSpace = FirstTileOffset;
         Element? previousVisibleChild = null;
         foreach (var childElement in _children)
         {
@@ -2144,7 +2153,7 @@ public class Element(ElementServices services)
         // ContentPadding, to avoid double-applying it here too.
         var isHorizontal = _childrenTileMode == ChildElementTileMode.Horizontal;
         var crossAxisContentSize = isHorizontal ? _contentState.Size.Y : _contentState.Size.X;
-        var nextTileOffset = LeadingTileInset;
+        var nextTileOffset = FirstTileOffset;
 
         foreach (var childElement in _children)
         {

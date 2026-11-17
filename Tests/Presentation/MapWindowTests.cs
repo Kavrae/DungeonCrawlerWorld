@@ -1289,6 +1289,7 @@ public sealed class MapWindowTests
         Assert.IsTrue(mapWindow.ContextMenuController.IsOpen, "Still shown -- just disabled -- so the player sees why nothing happens rather than the menu silently omitting it.");
         var lootButton = (Button)mapWindow.ContextMenuController.Menu.ChildElements[1]; // [0] is the entity's own name header.
         Assert.IsFalse(lootButton.Enabled);
+        Assert.AreEqual(Dropdown.HeadingIndent, lootButton.ContentIndent, "The map's menu indents each occupant's options under its name.");
     }
 
     private const int LootOwnerEntityId = 7;

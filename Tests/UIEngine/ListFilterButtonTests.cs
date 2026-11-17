@@ -65,6 +65,7 @@ public sealed class ListFilterButtonTests
         Assert.AreEqual(ListFilterButton.ClearFiltersLabel, MenuRows.LabelOf(Row(harness, ClearRow)));
         Assert.IsFalse(Row(harness, ClearRow).Enabled);
         Assert.AreEqual(ListFilterButton.DefaultLabel, button.DrawnLabel);
+        Assert.IsTrue(harness.Dropdowns.Menu.OptionRows.OfType<PressableElement>().All(row => row.ContentIndent == 0f), "A filter menu doesn't indent its choices under their headings.");
     }
 
     [TestMethod]

@@ -10,11 +10,12 @@ namespace Presentation.UI;
 /// <remarks>Adds its entries unconditionally; the caller decides whether Admin Mode is on.</remarks>
 public sealed class AdminContextMenuOptions(AdminTools adminTools)
 {
-    /// <summary>Appends the tile's admin entries: the neighborhood under it with "Regenerate", "Spawn here", "Build stone wall" or "Remove wall", and "Teleport here".</summary>
+    /// <summary>Appends the tile's admin entries: the neighborhood under it with "Regenerate", then a heading naming the tile with "Spawn here", "Build stone wall" or "Remove wall", and "Teleport here".</summary>
     public void AddTileOptions(List<DropdownOption> options, Vector3Int tilePosition)
     {
         AddNeighborhoodGroup(options, Neighborhoods.CellOf(tilePosition.X), Neighborhoods.CellOf(tilePosition.Y));
 
+        options.Add(DropdownOption.Header($"Tile ({tilePosition.X}, {tilePosition.Y})"));
         options.Add(DropdownOption.Opening("Spawn here", SpawnChoices(tilePosition)));
         AddWallOption(options, tilePosition);
 

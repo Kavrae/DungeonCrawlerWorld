@@ -27,10 +27,10 @@ public sealed record DropdownOption(string Label, string? HotkeyText, bool Enabl
     /// <summary>What the row says when hovered; null for nothing.</summary>
     public string? TooltipText { get; init; }
 
-    /// <summary>The options choosing this one replaces the menu with, in place of running OnSelect -- a submenu. Null for an ordinary option.</summary>
+    /// <summary>The options choosing this one opens beside the menu, in place of running OnSelect -- a submenu. Null for an ordinary option.</summary>
     public IReadOnlyList<DropdownOption>? Submenu { get; init; }
 
-    /// <summary>An option that opens submenu in the menu's place, marked as leading somewhere (see Dropdown.SubmenuMarker). Disabled when submenu has nothing to choose.</summary>
+    /// <summary>An option that opens submenu beside its menu, marked as leading somewhere (see Dropdown.SubmenuMarker). Disabled when submenu has nothing to choose.</summary>
     public static DropdownOption Opening(string label, IReadOnlyList<DropdownOption> submenu) =>
         new(label, Dropdown.SubmenuMarker, Enabled: submenu.Count > 0, OnSelect: static () => { }) { Submenu = submenu };
 }

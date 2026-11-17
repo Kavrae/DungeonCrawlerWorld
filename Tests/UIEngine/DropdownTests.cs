@@ -236,6 +236,101 @@ public sealed class DropdownTests
     }
 
     [TestMethod]
+    public void AnOptionUnderAHeading_StartsIndented_AndEveryRowStaysAsWideAsTheWidest()
+    {
+        var harness = new ControlTestHarness();
+
+        harness.Dropdowns.OpenAt(new Vector2(300, 200), indentsUnderHeadings: true, options:
+        [
+            new DropdownOption("Before any heading", null, Enabled: true, static () => { }),
+            DropdownOption.Header("Group"),
+            new DropdownOption("Under it", null, Enabled: true, static () => { }),
+        ]);
+
+        var before = Row(harness, 0);
+        var under = Row(harness, 2);
+        var beforeLabel = before.ChildElements.OfType<Label>().Single(label => label.FillsRemaining);
+        var underLabel = under.ChildElements.OfType<Label>().Single(label => label.FillsRemaining);
+        Assert.AreEqual(beforeLabel.Rectangle.Left + (int)Dropdown.HeadingIndent, underLabel.Rectangle.Left);
+        Assert.AreEqual(before.Rectangle.Left, under.Rectangle.Left, "The row itself stays full width; only its content is indented.");
+        Assert.AreEqual(before.Rectangle.Width, under.Rectangle.Width);
+    }
+
+    [TestMethod]
+    public void ACheckboxOptionUnderAHeading_IndentsItsCheckboxAndIconAndLabel_ByTheSameStep()
+    {
+        var harness = new ControlTestHarness();
+        var star = new GlyphIcon("*", Color.Red);
+
+        harness.Dropdowns.OpenAt(new Vector2(300, 200), indentsUnderHeadings: true, options:
+        [
+            new DropdownOption("Before any heading", null, Enabled: true, static () => { }) { IsChecked = false, Icon = star },
+            DropdownOption.Header("Group"),
+            new DropdownOption("Under it", null, Enabled: true, static () => { }) { IsChecked = true, Icon = star },
+        ]);
+
+        var before = (Toggle)Row(harness, 0);
+        var under = (Toggle)Row(harness, 2);
+        var indent = (int)Dropdown.HeadingIndent;
+        Assert.AreEqual(before.CheckboxRectangle().X + indent, under.CheckboxRectangle().X);
+        Assert.AreEqual(before.ChildElements.OfType<IconElement>().Single().Rectangle.Left + indent, under.ChildElements.OfType<IconElement>().Single().Rectangle.Left);
+        Assert.AreEqual(before.ChildElements.OfType<Label>().Single(label => label.FillsRemaining).Rectangle.Left + indent, under.ChildElements.OfType<Label>().Single(label => label.FillsRemaining).Rectangle.Left);
+    }
+
+    [TestMethod]
+    public void AHeading_IsNotBold_AndStartsWhereAnOptionBeforeAnyHeadingDoes()
+    {
+        var harness = new ControlTestHarness();
+
+        harness.Dropdowns.OpenAt(new Vector2(300, 200), indentsUnderHeadings: true, options:
+        [
+            new DropdownOption("Before any heading", null, Enabled: true, static () => { }),
+            DropdownOption.Header("Group"),
+            new DropdownOption("Under it", null, Enabled: true, static () => { }),
+        ]);
+
+        var heading = harness.Dropdowns.Menu.ChildElements[1].ChildElements.OfType<Label>().Single();
+        Assert.AreEqual("Group", heading.Text);
+        Assert.IsFalse(heading.IsBold);
+        var beforeLabel = Row(harness, 0).ChildElements.OfType<Label>().Single(label => label.FillsRemaining);
+        Assert.AreEqual(beforeLabel.Rectangle.Left, heading.Rectangle.Left);
+    }
+
+    [TestMethod]
+    public void TheIndent_WidensAMenuWhoseWidestOptionIsUnderAHeading()
+    {
+        var harness = new ControlTestHarness();
+        DropdownOption widest = new("Select everything there is", null, Enabled: true, static () => { });
+        DropdownOption narrow = new("Cut", null, Enabled: true, static () => { });
+
+        harness.Dropdowns.OpenAt(new Vector2(300, 200), [widest, DropdownOption.Header("A"), narrow], indentsUnderHeadings: true);
+        var widthWithWidestFirst = harness.Dropdowns.Menu.Rectangle.Width;
+
+        harness.Dropdowns.OpenAt(new Vector2(300, 200), [narrow, DropdownOption.Header("A"), widest], indentsUnderHeadings: true);
+
+        Assert.AreEqual(widthWithWidestFirst + (int)Dropdown.HeadingIndent, harness.Dropdowns.Menu.Rectangle.Width);
+    }
+
+    [TestMethod]
+    public void AMenuThatDoesNotIndent_StartsAnOptionUnderAHeadingWhereOneBeforeAnyHeadingStarts()
+    {
+        var harness = new ControlTestHarness();
+
+        harness.Dropdowns.OpenAt(new Vector2(300, 200),
+        [
+            new DropdownOption("Before any heading", null, Enabled: true, static () => { }) { IsChecked = false },
+            DropdownOption.Header("Group"),
+            new DropdownOption("Under it", null, Enabled: true, static () => { }) { IsChecked = false },
+        ]);
+
+        var before = (Toggle)Row(harness, 0);
+        var under = (Toggle)Row(harness, 2);
+        Assert.AreEqual(0f, under.ContentIndent);
+        Assert.AreEqual(before.CheckboxRectangle().X, under.CheckboxRectangle().X);
+        Assert.AreEqual(before.ChildElements.OfType<Label>().Single(label => label.FillsRemaining).Rectangle.Left, under.ChildElements.OfType<Label>().Single(label => label.FillsRemaining).Rectangle.Left);
+    }
+
+    [TestMethod]
     public void MovingThePointerOffTheMenu_ClearsTheHighlightItGave_ButNotOneUpDownGave()
     {
         var harness = new ControlTestHarness();

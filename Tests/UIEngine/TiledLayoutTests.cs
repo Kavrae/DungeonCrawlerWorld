@@ -144,4 +144,24 @@ public sealed class TiledLayoutTests
         Assert.AreEqual(MathF.Ceiling(naturalWidth), name.CurrentSize.X);
         Assert.AreEqual(20 + Gap + name.CurrentSize.X, row.ContentSize.X);
     }
+
+    [TestMethod]
+    public void AContentIndent_StartsTheFirstTiledChildPastIt_AndAWrapContentRowGrowsByIt()
+    {
+        const float Indent = 12f;
+        var pool = CreatePool();
+        var row = pool.CreateElement<Window>(null, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Horizontal, ChildGap = Gap, ContentIndent = Indent },
+            Layout = new ElementLayoutOptions { MaximumSize = new Vector2(800, 600), DisplayMode = ElementDisplayMode.WrapContent },
+        });
+        row.ContentPadding = Vector2.Zero;
+        row.Initialize();
+        var first = AddBox(pool, row, new Vector2(20, 20));
+        var second = AddBox(pool, row, new Vector2(30, 20));
+
+        Assert.AreEqual(Indent, first.RelativePosition.X);
+        Assert.AreEqual(Indent + 20 + Gap, second.RelativePosition.X);
+        Assert.AreEqual(Indent + 20 + Gap + 30, row.ContentSize.X);
+    }
 }

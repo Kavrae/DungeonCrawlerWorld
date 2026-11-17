@@ -13,4 +13,7 @@ public sealed class ElementHierarchyOptions
 
     /// <summary>Where tiled children sit across the tiling axis; Start when unset.</summary>
     public ChildCrossAlignment? ChildCrossAlignment { get; init; }
+
+    /// <summary>Space at the start of the tiling axis before everything the element shows -- what it draws itself and its tiled children; none when unset.</summary>
+    public float? ContentIndent { get; init; }
 }

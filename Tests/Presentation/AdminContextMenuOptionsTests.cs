@@ -14,21 +14,23 @@ public sealed class AdminContextMenuOptionsTests
         GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(20, 20, 3)), TestContent.Layers, sessionSeed: 1, initialEntityCapacity: 100, initialComponentCapacity: 50);
 
     [TestMethod]
-    public void AddTileOptions_OffersTheNeighborhoodGroupSpawnHereBuildStoneWallAndTeleportHere()
+    public void AddTileOptions_OffersTheNeighborhoodGroup_ThenTheTileGroupOfSpawnHereBuildStoneWallAndTeleportHere()
     {
         var adminContextMenuOptions = new AdminContextMenuOptions(TestAdminTools.Create());
         List<DropdownOption> options = [];
 
-        adminContextMenuOptions.AddTileOptions(options, new Vector3Int(5, 5, 0));
+        adminContextMenuOptions.AddTileOptions(options, new Vector3Int(5, 6, 0));
 
         Assert.IsTrue(options[0].IsHeader);
         StringAssert.StartsWith(options[0].Label, "Neighborhood (0, 0)");
         StringAssert.StartsWith(options[1].Label, "Regenerate");
-        Assert.AreEqual("Spawn here", options[2].Label);
-        Assert.IsNotEmpty(options[2].Submenu!);
-        StringAssert.StartsWith(options[3].Label, "Build stone wall");
-        Assert.AreEqual("Teleport here", options[4].Label);
-        Assert.HasCount(5, options);
+        Assert.IsTrue(options[2].IsHeader);
+        Assert.AreEqual("Tile (5, 6)", options[2].Label);
+        Assert.AreEqual("Spawn here", options[3].Label);
+        Assert.IsNotEmpty(options[3].Submenu!);
+        StringAssert.StartsWith(options[4].Label, "Build stone wall");
+        Assert.AreEqual("Teleport here", options[5].Label);
+        Assert.HasCount(6, options);
     }
 
     [TestMethod]

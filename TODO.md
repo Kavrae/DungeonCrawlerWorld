@@ -409,18 +409,6 @@ line, the executable's displayed product name if shown anywhere -- reads "The Al
 folders, assemblies, namespaces, types (`WorkshopShell`, `Cadence/Workshop`, `DungeonCrawlerWorld.Workshop.exe`) and
 CLAUDE.md's references stay "Workshop". Put the name in one constant the shell reads, so it changes in one place.
 
-#### Context menu cleanup: submenus beside their menu, options indented under headings
-
-Menus (`Dropdown`, opened through `DropdownController`) built from controls since `PLAN-control-content.md`; these
-change how they read:
-- A submenu opens beside its parent menu, the parent staying open, instead of replacing it (today choosing a submenu
-  option rebuilds the one shared `Dropdown` with the submenu's options). Placed edge-aware next to the row that opened
-  it, flipping to the other side when the screen has no room; closing the submenu returns to the parent, and a light
-  dismiss outside both closes both. Needs more than one menu instance (the controller holds one today).
-- Options under a heading (`DropdownOption.IsHeader`) are indented, so which heading an option belongs to reads from
-  its place.
-- Headings are no longer bold (`Label.IsBold` in `Dropdown.AddHeaderRow`): the indentation now tells them apart.
-
 #### Selectable read-only text
 
 Read-only limits editing, never copying: read-only text can be selected and copied like any text box's. First user:
@@ -3370,14 +3358,11 @@ end-state UI. Build this before lifting that exemption. Game over is one state o
 menu, session states, floor transitions" (Game, Medium): the simulation stops, the map stays drawn
 behind the screen, and "new run" goes through the same session teardown and rebuild as a floor change.
 
-#### TextBox context menu wiring, and "Bind To..." sub-menu
+#### "Bind To..." on an inventory item
 
-Context menu mechanism + AdvancedMapContextMenu landed (`IMPLEMENTATION-NOTES.md`). Still open:
-TextBox's Cut/Copy/Paste/Select All (currently keyboard-only) via the same `ContextMenu` mechanism; and
-an inventory item's "Bind To..." (hotbar slot picker) -- needs a genuinely new capability, cascading
-sub-menus (an option carrying a nested option list, opened east of the clicked row, a second managed
-`ContextMenu` instance, and updating the outside-click check to cover both popups). Neither of
-AdvancedMapContextMenu's five landed menus needed this.
+An inventory item's right-click menu offers "Bind To >", a submenu of hotbar slots, binding the item to the chosen
+slot -- the same binding a drag onto the hotbar makes (`HotbarBindingDropHandler`), so the option calls that path.
+Submenus beside their menu are built (IMPLEMENTATION-NOTES "Context menu": `DropdownOption.Opening`).
 
 #### Player stats v1
 

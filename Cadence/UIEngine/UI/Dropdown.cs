@@ -1,6 +1,5 @@
 using FontStashSharp;
 using Microsoft.Xna.Framework;
-using UIEngine.Fonts;
 using UIEngine.Rendering;
 using UIEngine.UI.Chrome;
 using UIEngine.UI.ColorPalettes;
@@ -12,8 +11,9 @@ namespace UIEngine.UI;
 /// "Loot", a TextBox's Cut/Copy/Paste/Select All), or a DropdownField's choices under the field. Always top-level
 /// (parent null), same reasoning as Tooltip (see its own doc comment): a child is measured within its parent's
 /// content area, fine for content meant to stay inside its parent but
-/// wrong for a popup meant to float outside it. One persistent, pooled instance shared across
-/// every caller (see DropdownController, the only thing that ever calls Show/Hide) -- each
+/// wrong for a popup meant to float outside it. One persistent, pooled instance per menu level shared across
+/// every caller -- the root list and each submenu beside it (see DropdownController, the only thing that ever calls
+/// Show/Hide) -- each
 /// Show rebuilds its rows fresh from whatever option list this call was given, the same
 /// "shared mechanics, distributed content" split Tooltip's own ShowNear already uses (positioning/
 /// layering mechanics live here; what the options actually are is entirely the caller's business).
@@ -43,6 +43,9 @@ public sealed class Dropdown(ElementServices services)
     /// <summary>Room either side of a row's content, so neither column sits against the row's edges.</summary>
     private const float RowTextInset = 4f;
 
+    /// <summary>How much further in an option under a heading starts than the heading, so which heading it belongs to reads from its place.</summary>
+    public const float HeadingIndent = 12f;
+
     /// <summary>An option icon's box, and the gap after it.</summary>
     private const float LeadingIconSide = 16f;
 
@@ -55,9 +58,6 @@ public sealed class Dropdown(ElementServices services)
     public const string SubmenuMarker = ">";
 
     private readonly SpriteFontBase _font = services.FontService.GetFont(FontChrome.DefaultFontSize);
-
-    /// <summary>A submenu chosen this frame, shown on the next Update rather than from inside the click that chose it -- showing rebuilds every row, including the one whose click is still being handled.</summary>
-    private IReadOnlyList<DropdownOption>? _pendingSubmenu;
 
     /// <summary>The row control per option, null for a header -- indexed like the options Show was given.</summary>
     private readonly List<PressableElement?> _optionRows = [];
@@ -72,9 +72,32 @@ public sealed class Dropdown(ElementServices services)
     private float _shownMinimumWidth;
     private float _shownMaximumHeight = float.MaxValue;
     private int _shownMarkedIndex = -1;
+    private bool _shownIndentsUnderHeadings;
 
-    /// <summary>Shows a submenu the way the menu itself was opened (DropdownController), so it lands edge-aware at the same place. Set by the controller; while unset, a submenu opens at this menu's own top-left.</summary>
-    public Action<IReadOnlyList<DropdownOption>>? OpenSubmenu { get; set; }
+    private int _openSubmenuIndex = -1;
+
+    /// <summary>Where this menu was scrolled when its submenu opened, so scrolling it afterwards can close the submenu.</summary>
+    private Vector2 _scrollOffsetAtSubmenuOpen;
+
+    /// <summary>Opens a submenu beside the option at the given index (DropdownController) -- true when a key chose it. A menu with none set ignores submenu options.</summary>
+    internal Action<int, IReadOnlyList<DropdownOption>, bool>? SubmenuChosen { get; set; }
+
+    /// <summary>Closes the menu after an ordinary option ran -- with its submenus and parents (DropdownController); hides only this menu while unset.</summary>
+    internal Action? OptionChosen { get; set; }
+
+    /// <summary>Closes the menus below this one (DropdownController) -- choosing the row whose submenu is open again, a press on this menu off its options (a heading, empty space), or this menu scrolling.</summary>
+    internal Action? CloseSubmenus { get; set; }
+
+    /// <summary>The option whose submenu is open beside this menu, drawn highlighted while it is; -1 for none.</summary>
+    public int OpenSubmenuIndex
+    {
+        get => _openSubmenuIndex;
+        internal set
+        {
+            _openSubmenuIndex = value;
+            _scrollOffsetAtSubmenuOpen = ScrollOffset;
+        }
+    }
 
     /// <summary>The option Up/Down or the pointer last moved to, or -1 for none.</summary>
     public int HighlightedIndex => _highlightedIndex;
@@ -94,9 +117,10 @@ public sealed class Dropdown(ElementServices services)
     /// <param name="minimumWidth">The narrowest the menu may be -- a DropdownField's own width, so its list is never narrower than the field.</param>
     /// <param name="maximumHeight">The tallest the list may be before it scrolls.</param>
     /// <param name="markedIndex">The option drawn with the marker and highlighted first, or -1 for none.</param>
-    public void Show(Vector2 topLeft, IReadOnlyList<DropdownOption> options, float minimumWidth = 0f, float maximumHeight = float.MaxValue, int markedIndex = -1)
+    /// <param name="indentsUnderHeadings">Whether every option after a heading is indented (HeadingIndent), so which heading it belongs to reads from its place.</param>
+    public void Show(Vector2 topLeft, IReadOnlyList<DropdownOption> options, float minimumWidth = 0f, float maximumHeight = float.MaxValue, int markedIndex = -1, bool indentsUnderHeadings = false)
     {
-        BuildRows(topLeft, options, minimumWidth, maximumHeight, markedIndex);
+        BuildRows(topLeft, options, minimumWidth, maximumHeight, markedIndex, indentsUnderHeadings);
         ScrollTo(Vector2.Zero);
         SetHighlight(IsChoosable(markedIndex) ? markedIndex : -1);
         IsVisible = true;
@@ -115,17 +139,19 @@ public sealed class Dropdown(ElementServices services)
     {
         var scroll = ScrollOffset;
         var highlightedIndex = _highlightedIndex;
-        BuildRows(AbsolutePosition, options, _shownMinimumWidth, _shownMaximumHeight, _shownMarkedIndex);
+        BuildRows(AbsolutePosition, options, _shownMinimumWidth, _shownMaximumHeight, _shownMarkedIndex, _shownIndentsUnderHeadings);
         ScrollTo(scroll);
         SetHighlight(IsChoosable(highlightedIndex) ? highlightedIndex : -1);
     }
 
-    private void BuildRows(Vector2 topLeft, IReadOnlyList<DropdownOption> options, float minimumWidth, float maximumHeight, int markedIndex)
+    private void BuildRows(Vector2 topLeft, IReadOnlyList<DropdownOption> options, float minimumWidth, float maximumHeight, int markedIndex, bool indentsUnderHeadings)
     {
         _pendingOptions = null;
         _shownMinimumWidth = minimumWidth;
         _shownMaximumHeight = maximumHeight;
         _shownMarkedIndex = markedIndex;
+        _shownIndentsUnderHeadings = indentsUnderHeadings;
+        _openSubmenuIndex = -1;
         ElementPoolService.CloseAllChildren(this);
         _optionRows.Clear();
         _options.Clear();
@@ -140,6 +166,7 @@ public sealed class Dropdown(ElementServices services)
         SetBounds(topLeft, MaximumSize);
         var rows = new List<Element>(options.Count);
         var hasIcons = HasIcons(options);
+        var isUnderHeading = false;
         var y = 0f;
         for (var optionIndex = 0; optionIndex < options.Count; optionIndex++)
         {
@@ -148,11 +175,12 @@ public sealed class Dropdown(ElementServices services)
             {
                 rows.Add(AddHeaderRow(option, y));
                 _optionRows.Add(null);
+                isUnderHeading = indentsUnderHeadings;
                 y += HeaderRowHeight;
                 continue;
             }
 
-            var row = AddOptionRow(option, optionIndex, y, hasIcons);
+            var row = AddOptionRow(option, optionIndex, y, hasIcons, isUnderHeading);
             rows.Add(row);
             _optionRows.Add(row);
             y += RowHeight;
@@ -176,7 +204,7 @@ public sealed class Dropdown(ElementServices services)
         SetBounds(topLeft, MeasureOuterSize(width, System.Math.Min(rowsHeight, maximumHeight), scrolls));
     }
 
-    /// <summary>A heading: its label in bold, inset like an option's, on the panel colour.</summary>
+    /// <summary>A heading: its label inset like an option's, on the panel colour; the options under it are indented when the menu indents.</summary>
     private Window AddHeaderRow(DropdownOption option, float y)
     {
         var header = ElementPoolService.CreateElement<Window>(this, new ElementOptions
@@ -189,17 +217,16 @@ public sealed class Dropdown(ElementServices services)
         header.ContentPadding = new Vector2(RowTextInset, 0);
         AddChild(header);
 
-        var label = AddRowLabel(header, option.Label, fillsRemaining: false, spacingAfter: 0f);
-        label.IsBold = true;
+        AddRowLabel(header, option.Label, fillsRemaining: false, spacingAfter: 0f);
         return header;
     }
 
-    /// <summary>An option's row: a Button, or a Toggle with a flat checkbox for a checkbox option, holding its icon (when any option has one), its label taking the row's width, and its hotkey or count at the right end.</summary>
-    private PressableElement AddOptionRow(DropdownOption option, int optionIndex, float y, bool hasIcons)
+    /// <summary>An option's row: a Button, or a Toggle with a flat checkbox for a checkbox option, holding its icon (when any option has one), its label taking the row's width, and its hotkey or count at the right end -- everything in it indented when it is under a heading in a menu that indents.</summary>
+    private PressableElement AddOptionRow(DropdownOption option, int optionIndex, float y, bool hasIcons, bool isUnderHeading)
     {
         var rowOptions = new ElementOptions
         {
-            Hierarchy = new ElementHierarchyOptions { ChildrenTileMode = ChildElementTileMode.Horizontal, ChildCrossAlignment = ChildCrossAlignment.Center },
+            Hierarchy = new ElementHierarchyOptions { ChildrenTileMode = ChildElementTileMode.Horizontal, ChildCrossAlignment = ChildCrossAlignment.Center, ContentIndent = isUnderHeading ? HeadingIndent : 0f },
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, y), DisplayMode = ElementDisplayMode.WrapContent, IsTransparent = true },
             Chrome = new ElementChromeOptions { ShowBorder = false, CanUserFocus = false },
         };
@@ -257,13 +284,19 @@ public sealed class Dropdown(ElementServices services)
         return label;
     }
 
-    /// <summary>Runs the option at optionIndex: opens its submenu, or turns a checkbox row and leaves the list open with its scroll and highlight where they are, or runs it and closes.</summary>
-    private void Choose(int optionIndex)
+    /// <summary>Runs the option at optionIndex: opens its submenu beside this menu (closes it when it is already open), or turns a checkbox row and leaves the list open with its scroll and highlight where they are, or runs it and closes.</summary>
+    private void Choose(int optionIndex, bool fromKey = false)
     {
         var option = _options[optionIndex];
         if (option.Submenu is { } submenu)
         {
-            _pendingSubmenu = submenu;
+            if (optionIndex == _openSubmenuIndex)
+            {
+                CloseSubmenus?.Invoke();
+                return;
+            }
+
+            SubmenuChosen?.Invoke(optionIndex, submenu, fromKey);
             return;
         }
 
@@ -280,6 +313,12 @@ public sealed class Dropdown(ElementServices services)
         }
 
         option.OnSelect();
+        if (OptionChosen is { } optionChosen)
+        {
+            optionChosen();
+            return;
+        }
+
         Hide();
     }
 
@@ -312,8 +351,31 @@ public sealed class Dropdown(ElementServices services)
             return false;
         }
 
-        Choose(_highlightedIndex);
+        Choose(_highlightedIndex, fromKey: true);
         return true;
+    }
+
+    /// <summary>Opens the highlighted option's submenu as Enter on it would. Returns whether the highlighted option has one.</summary>
+    public bool OpenHighlightedSubmenu()
+    {
+        if (!IsChoosable(_highlightedIndex) || _options[_highlightedIndex].Submenu is null)
+        {
+            return false;
+        }
+
+        Choose(_highlightedIndex, fromKey: true);
+        return true;
+    }
+
+    /// <summary>Its submenu closed: the row that had opened it is highlighted, as if Up/Down had moved there.</summary>
+    internal void ReturnFromSubmenu()
+    {
+        if (_openSubmenuIndex >= 0)
+        {
+            SetHighlight(_openSubmenuIndex);
+        }
+
+        _openSubmenuIndex = -1;
     }
 
     private bool IsChoosable(int optionIndex) => optionIndex >= 0 && optionIndex < _options.Count && _options[optionIndex] is { IsHeader: false, Enabled: true };
@@ -361,8 +423,19 @@ public sealed class Dropdown(ElementServices services)
     public void Hide()
     {
         IsVisible = false;
-        _pendingSubmenu = null;
+        _openSubmenuIndex = -1;
         _pendingOptions = null;
+    }
+
+    /// <summary>A click that reached the menu itself landed off its options (a heading, empty space): it closes any submenu open beside this menu.</summary>
+    protected override bool OnContentClickAction(Point mousePosition)
+    {
+        if (_openSubmenuIndex >= 0)
+        {
+            CloseSubmenus?.Invoke();
+        }
+
+        return true;
     }
 
     public override void Update(GameTime gameTime)
@@ -376,21 +449,13 @@ public sealed class Dropdown(ElementServices services)
 
         FollowPointer();
 
-        if (_pendingSubmenu is { } submenu)
+        if (_openSubmenuIndex >= 0 && ScrollOffset != _scrollOffsetAtSubmenuOpen)
         {
-            _pendingSubmenu = null;
-            if (OpenSubmenu is { } open)
-            {
-                open(submenu);
-            }
-            else
-            {
-                Show(AbsolutePosition, submenu);
-            }
+            CloseSubmenus?.Invoke();
         }
     }
 
-    /// <summary>Behind the rows: each option row's fill, the hover highlight on the highlighted row, and the accent at the marked row's left edge.</summary>
+    /// <summary>Behind the rows: each option row's fill, the hover highlight on the highlighted row and on the row whose submenu is open, and the accent at the marked row's left edge.</summary>
     public override void DrawContent(GameTime gameTime)
     {
         base.DrawContent(gameTime);
@@ -405,7 +470,7 @@ public sealed class Dropdown(ElementServices services)
 
             var rowRectangle = new Rectangle((int)row.RelativePosition.X, (int)row.RelativePosition.Y, (int)row.CurrentSize.X, (int)row.CurrentSize.Y);
             spriteBatch.FillRectangle(rowRectangle, WindowPalette.PanelContentColor);
-            if (rowIndex == _highlightedIndex)
+            if (rowIndex == _highlightedIndex || rowIndex == _openSubmenuIndex)
             {
                 spriteBatch.FillRectangle(rowRectangle, WindowPalette.HoverDark);
             }

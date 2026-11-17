@@ -1218,7 +1218,7 @@ public sealed class UiInputControllerTests
         Assert.IsFalse(contextMenuController.IsOpen, "Selecting an option should close the menu.");
     }
 
-    /// <summary>Choosing an option that opens a submenu replaces the menu with it on the next update, rather than running anything or closing -- and the submenu's own options then run as usual.</summary>
+    /// <summary>Choosing an option that opens a submenu opens it beside the menu at once, the menu staying as it was -- and the submenu's own options then run as usual, closing both.</summary>
     [TestMethod]
     public void ClickSubmenuOption_ThenClickItsOption_InvokesTheSubmenuOption()
     {
@@ -1241,16 +1241,16 @@ public sealed class UiInputControllerTests
         }
 
         Click(contextMenuController.Menu.ChildElements[1]);
-        Assert.IsTrue(contextMenuController.IsOpen, "Choosing a submenu keeps the menu open.");
-        Assert.HasCount(2, contextMenuController.Menu.ChildElements, "Not swapped yet -- that waits for the menu's next update.");
-
-        contextMenuController.Menu.Update(new GameTime());
-        Assert.HasCount(submenu.Count, contextMenuController.Menu.ChildElements);
+        Assert.HasCount(2, contextMenuController.Dropdowns.OpenMenus, "Choosing a submenu opens it beside the menu.");
+        Assert.HasCount(2, contextMenuController.Menu.ChildElements, "The menu itself is unchanged.");
+        var submenuMenu = contextMenuController.Dropdowns.OpenMenus[1];
+        Assert.HasCount(submenu.Count, submenuMenu.ChildElements);
         Assert.AreEqual(0, picked);
 
-        Click(contextMenuController.Menu.ChildElements[1]);
+        Click(submenuMenu.ChildElements[1]);
         Assert.AreEqual(1, picked);
-        Assert.IsFalse(contextMenuController.IsOpen, "An ordinary option still closes the menu.");
+        Assert.IsFalse(contextMenuController.IsOpen, "An ordinary option closes the menu and its submenu.");
+        Assert.IsFalse(submenuMenu.IsVisible);
     }
 
     [TestMethod]

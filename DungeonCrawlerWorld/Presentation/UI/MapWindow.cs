@@ -507,7 +507,7 @@ public sealed class MapWindow : Window, IContentDropTarget
 
         if (options.Count > 0)
         {
-            _contextMenuController.Open(new Vector2(mousePosition.X, mousePosition.Y), options);
+            _contextMenuController.Open(new Vector2(mousePosition.X, mousePosition.Y), options, indentsUnderHeadings: true);
         }
     }
 

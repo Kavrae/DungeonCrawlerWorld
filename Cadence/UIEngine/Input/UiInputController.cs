@@ -435,7 +435,7 @@ public sealed class UiInputController
         _pointerState.HoveredElement = _hoveredInteraction.Element;
     }
 
-    /// <summary>Up, Down and Enter pressed this frame go to an open dropdown before the focused element sees them -- a TextBox under a DropdownField's list must not also move its caret. Returns whether one did.</summary>
+    /// <summary>Up, Down and Enter pressed this frame go to an open dropdown before the focused element sees them -- a TextBox under a DropdownField's list must not also move its caret -- and Left and Right when they open or close a submenu. Returns whether one did.</summary>
     private bool RouteNavigationKeysToOpenDropdown(KeyboardState keyboardState)
     {
         if (_dropdownController is not { IsOpen: true } dropdownController)
@@ -455,7 +455,7 @@ public sealed class UiInputController
         return tookKey;
     }
 
-    private static readonly Keys[] DropdownNavigationKeys = [Keys.Up, Keys.Down, Keys.Enter];
+    private static readonly Keys[] DropdownNavigationKeys = [Keys.Up, Keys.Down, Keys.Enter, Keys.Left, Keys.Right];
 
     /// <summary>
     /// Routes the whole keyboard state to whichever element is focused, once per frame (see
@@ -588,10 +588,10 @@ public sealed class UiInputController
             // must take priority even over an already-open menu window's own TopmostMenuWindow
             // short-circuit (CloseTopmostClosableWindow), which would otherwise close the
             // whole menu window instead of just dismissing a context menu opened from
-            // something inside it.
+            // something inside it. With submenus open, only the deepest closes.
             if (_dropdownController is { IsOpen: true } dropdownController)
             {
-                dropdownController.Close();
+                dropdownController.CloseDeepest();
                 return;
             }
 

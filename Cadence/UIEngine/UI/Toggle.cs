@@ -91,7 +91,7 @@ public sealed class Toggle(ElementServices services)
 
         label = ElementPoolService.CreateElement<Label>(this, new ElementOptions
         {
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2((int)(CheckboxSize + LabelGap), 0), DisplayMode = ElementDisplayMode.Fill },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2((int)(ContentIndent + CheckboxSize + LabelGap), 0), DisplayMode = ElementDisplayMode.Fill },
             Text = new TextOptions { Text = text, TextColor = color },
         });
         label.DisabledTextColor = color * DisabledOpacity;
@@ -166,10 +166,10 @@ public sealed class Toggle(ElementServices services)
         }
     }
 
-    /// <summary>The checkbox square at the content's left edge, centred vertically, its side set by CheckboxStyle.</summary>
-    private Rectangle CheckboxRectangle()
+    /// <summary>The checkbox square at the content's left edge past ContentIndent, centred vertically, its side set by CheckboxStyle.</summary>
+    internal Rectangle CheckboxRectangle()
     {
         var side = CheckboxStyle == ToggleCheckboxStyle.Flat ? FlatCheckboxSize : CheckboxSize;
-        return new Rectangle(0, (int)((ContentSize.Y - side) / 2f), (int)side, (int)side);
+        return new Rectangle((int)ContentIndent, (int)((ContentSize.Y - side) / 2f), (int)side, (int)side);
     }
 }
