@@ -197,6 +197,9 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
         MoveCaretTo(insertIndex + 1);
     }
 
+    /// <summary>A focused text box keeps every key it is pressed with: its own keys (OnHotkeysAction) are the caret's and the text's, and none goes on to what holds it.</summary>
+    protected override bool OnKeyPressAction(Keys key) => true;
+
     protected override void OnHotkeysAction(KeyboardState keyboardState, KeyboardState previousKeyboardState)
     {
         var ctrlHeld = keyboardState.IsKeyDown(Keys.LeftControl) || keyboardState.IsKeyDown(Keys.RightControl);

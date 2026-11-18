@@ -58,12 +58,15 @@ public sealed class MultiChoiceField(ElementServices services, DropdownControlle
         return true;
     }
 
-    protected override void OnKeyPressAction(Keys key)
+    protected override bool OnKeyPressAction(Keys key)
     {
         if (key is Keys.Space or Keys.Enter or Keys.Down && !IsListOpen)
         {
             OpenList();
+            return true;
         }
+
+        return base.OnKeyPressAction(key);
     }
 
     protected internal override void OnClosed()

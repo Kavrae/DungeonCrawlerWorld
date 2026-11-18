@@ -200,7 +200,11 @@ public sealed class UiInputControllerTests
         {
         }
 
-        public void HandleKeyPress(Keys key) => PressedKeys.Add(key);
+        public bool HandleKeyPress(Keys key)
+        {
+            PressedKeys.Add(key);
+            return true;
+        }
         public void HandleHotkeys(KeyboardState keyboardState, KeyboardState previousKeyboardState) => HotkeyCallCount++;
         public void HandleTextInput(char character) => TypedCharacters.Add(character);
     }

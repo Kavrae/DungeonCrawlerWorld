@@ -20,7 +20,7 @@ public sealed record ListViewRow(IReadOnlyList<string> Cells, string? IconGlyph 
 /// <summary>
 /// Rows under column headers -- the Error List, Dependents, a record picker. Clicking a sortable header sorts by it, and
 /// again reverses it; a click selects a row and a second click on it within the double-click window activates it, as do
-/// Enter and a double-click. Focused, Up/Down/Home/End move the selection. The header stays put while the rows scroll, and
+/// Enter and a double-click. Focused, Up/Down, Page Up/Down and Home/End move the selection (ListKeyNavigation). The header stays put while the rows scroll, and
 /// the row under the pointer is highlighted.
 /// </summary>
 /// <remarks>
@@ -367,32 +367,28 @@ public sealed class ListView(ElementServices services)
         }
     }
 
-    protected override void OnKeyPressAction(Keys key)
+    /// <summary>The list's moves (ListKeyNavigation), a page being the rows the list shows at once; Enter activates the selected row.</summary>
+    protected override bool OnKeyPressAction(Keys key)
     {
-        if (_order.Length == 0)
+        if (key == Keys.Enter && SelectedRow is { } activated)
         {
-            return;
+            RowActivated?.Invoke(activated);
+            return true;
         }
 
         var current = SelectedRow is { } selected ? Array.IndexOf(_order, IndexOfRow(selected)) : -1;
-        switch (key)
+        var rowsPerPage = (int)((ContentSize.Y - HeaderHeight) / RowHeight);
+        if (!ListKeyNavigation.TryMove(key, current, _order.Length, rowsPerPage, out var target))
         {
-            case Keys.Down:
-                Select(_rows[_order[System.Math.Min(current + 1, _order.Length - 1)]]);
-                break;
-            case Keys.Up:
-                Select(_rows[_order[System.Math.Max(current - 1, 0)]]);
-                break;
-            case Keys.Home:
-                Select(_rows[_order[0]]);
-                break;
-            case Keys.End:
-                Select(_rows[_order[^1]]);
-                break;
-            case Keys.Enter when SelectedRow is { } activated:
-                RowActivated?.Invoke(activated);
-                break;
+            return base.OnKeyPressAction(key);
         }
+
+        if (target >= 0)
+        {
+            Select(_rows[_order[target]]);
+        }
+
+        return true;
     }
 
     public override void DrawContent(GameTime gameTime)

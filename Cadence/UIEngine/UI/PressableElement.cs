@@ -42,12 +42,19 @@ public abstract class PressableElement(ElementServices services) : Element(servi
     protected virtual void OnPressedChanged() { }
 
     /// <summary>Space activates a focused, enabled control.</summary>
-    protected override void OnKeyPressAction(Keys key)
+    protected override bool OnKeyPressAction(Keys key)
     {
-        if (key == Keys.Space && Enabled)
+        if (key != Keys.Space)
+        {
+            return base.OnKeyPressAction(key);
+        }
+
+        if (Enabled)
         {
             OnActivated();
         }
+
+        return true;
     }
 
     /// <summary>What the keyboard activation does; nothing by default, since a Button never takes focus.</summary>

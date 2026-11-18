@@ -3,6 +3,7 @@ using Builders.Browsing;
 using Builders.References;
 using Engine.Content;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Input;
 using UIEngine.UI;
 using UIEngine.UI.ColorPalettes;
 using UIEngine.UI.Fields;
@@ -246,7 +247,7 @@ public abstract class ContentEditingTab<T, TPreview> : RecordBrowserTab<ContentR
                 : new RecordCommand("Disable", disableRefusal ?? "Keep it whole in master but never load it -- asking first what to do about whatever names it.", disableRefusal is null, () => Disable(document)),
             new RecordCommand("Duplicate", "Make a copy under a new Guid.", true, () => Duplicate(document)),
             CompareCommand,
-            new RecordCommand("Delete", deleteRefusal is { } refusal ? $"Can't delete: {refusal}" : document.IsInMaster ? "Take it out of master on the next publish; Ctrl+Z brings it back." : "Take the draft away; Ctrl+Z brings it back.", deleteRefusal is null, () => Delete(document)),
+            new RecordCommand("Delete", deleteRefusal is { } refusal ? $"Can't delete: {refusal}" : document.IsInMaster ? "Take it out of master on the next publish; Ctrl+Z brings it back." : "Take the draft away; Ctrl+Z brings it back.", deleteRefusal is null, () => Delete(document)) { Key = Keys.Delete },
         ];
     }
 

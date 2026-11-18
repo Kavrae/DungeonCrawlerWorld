@@ -1659,7 +1659,7 @@ public sealed class UiInputController
         }
 
         var tabStops = new List<Element>();
-        CollectTabStops(focused.RootElement, tabStops);
+        focused.RootElement.CollectTabStops(tabStops);
         var index = tabStops.IndexOf(focused);
         if (tabStops.Count < 2 || index < 0)
         {
@@ -1672,32 +1672,12 @@ public sealed class UiInputController
         return true;
     }
 
-    /// <summary>Every tab stop under element, in tree order, through visible, unminimized elements only.</summary>
-    private static void CollectTabStops(Element element, List<Element> tabStops)
-    {
-        if (!element.IsVisible)
-        {
-            return;
-        }
-
-        if (element.IsTabStop)
-        {
-            tabStops.Add(element);
-        }
-
-        if (element.DisplayMode == ElementDisplayMode.Minimized)
-        {
-            return;
-        }
-
-        foreach (var child in element.ChildElements)
-        {
-            CollectTabStops(child, tabStops);
-        }
-    }
-
-    /// <summary>Forwards every key newly pressed this frame to whichever element holds focus. Tab is excluded since it's already claimed above for focus-cycling.</summary>
-    /// <remarks>Skipped when the keyboard is unchanged since last frame -- nothing can be newly pressed then, and GetPressedKeys allocates an array every call.</remarks>
+    /// <summary>Offers every key newly pressed this frame to whichever element holds focus, then, while it isn't taken, to each of its ancestors, nearest first. Tab is excluded since it's already claimed above for focus-cycling.</summary>
+    /// <remarks>
+    /// While a dropdown list is open no key goes past the focused element: the open list has the keyboard, so nothing
+    /// around it acts on a key meant for it. Skipped when the keyboard is unchanged since last frame -- nothing can be
+    /// newly pressed then, and GetPressedKeys allocates an array every call.
+    /// </remarks>
     private void RouteKeyPressesToFocusedElement(KeyboardState keyboardState)
     {
         if (_focusedElement is null || keyboardState == _previousKeyboardState)
@@ -1707,9 +1687,18 @@ public sealed class UiInputController
 
         foreach (var key in keyboardState.GetPressedKeys())
         {
-            if (key != Keys.Tab && _previousKeyboardState.IsKeyUp(key))
+            if (key == Keys.Tab || _previousKeyboardState.IsKeyDown(key))
             {
-                _focusedElement.HandleKeyPress(key);
+                continue;
+            }
+
+            var bubbles = _dropdownController is not { IsOpen: true };
+            for (var element = _focusedElement; element is not null; element = bubbles ? element.ParentElement : null)
+            {
+                if (element.HandleKeyPress(key))
+                {
+                    break;
+                }
             }
         }
     }

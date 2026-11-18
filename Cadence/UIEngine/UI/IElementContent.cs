@@ -22,8 +22,8 @@ public interface IElementContent
     /// <summary>Implementations needing the batch read it off the host window passed to Initialize -- hostWindow.Render.Batch (UiRenderService), the same service every element draws with.</summary>
     void DrawContent(GameTime gameTime);
 
-    /// <summary>Default-implemented as a no-op so existing content types don't need to change.</summary>
-    void HandleKeyPress(Keys key) { }
+    /// <summary>A key pressed while the host window or something in it holds focus; returns whether it was taken (see Element.OnKeyPressAction). Takes nothing by default.</summary>
+    bool HandleKeyPress(Keys key) => false;
 
     /// <summary>Default-implemented as a no-op so existing content types don't need to change.</summary>
     void HandleHotkeys(KeyboardState keyboardState, KeyboardState previousKeyboardState) { }

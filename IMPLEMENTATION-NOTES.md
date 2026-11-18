@@ -3722,6 +3722,31 @@ with SwiftUI's menu (a checkbox row is a toggle in a menu).
 - **Tabs are buttons.** The game's `TabbedContent`, the Workshop's tab strip, its command tiles and bottom panel, and the
   Debug tab's switches (`DebugTabElements.CreateTile`) are `Button`s, so they darken on hover with every other control.
 
+### Keys for lists and the Workshop browser (2026-11-17)
+
+A browser's list and its inspector take keys, as gestures for what a click or a command already does.
+
+- **A key press bubbles.** `Element.OnKeyPressAction` returns whether it took the key; `UiInputController` offers a newly
+  pressed key to the focused element, then to each ancestor, nearest first, until one takes it -- the DOM's and WPF's
+  keydown. The default runs `Element.OnKeyPressed` (a settable owner hook, like `OnRightClicked`, cleared on close), so a
+  window takes keys for everything in it without a subclass. A focused `TextBox` takes every key (its own are hotkeys:
+  caret, Delete, Home, End), and while a dropdown list is open no key goes past the focused element, so nothing behind
+  the list or the filter menu acts on a key meant for it. A control takes only its own (Space for a pressable;
+  Space/Enter/Down to open a dropdown, multi-choice or filter button) and returns `base` otherwise.
+  `IElementContent.HandleKeyPress` returns whether its content took the key.
+- **One rule for a list's moves**: `ListKeyNavigation.TryMove` (UIEngine) -- Up/Down a row, Page Up/Down a page, Home/End
+  to either end, stopping at the ends; from no selection Down, Page Down and Home go to the first row, Up, Page Up and
+  End to the last. `ListView` (the Sprites tab's entries, the bottom panel) and the record browser both use it.
+- **The browser** (`RecordBrowserTab`): its list window is focusable and a click or right-click on a row focuses it;
+  the browser window's `OnKeyPressed` takes the moves over the records the list holds (never a heading, the pinned row
+  or the empty-list message; a page is the rows the list shows), Insert as New does (a tab with `NewRecordLabel`), and
+  a selected record's command by `RecordCommand.Key` -- run as its button runs it, or, disabled, its tooltip (the
+  refusal) on the status line. Only Delete has a key (`ContentEditingTab`), so a deleted record's Restore takes none; the
+  key shows beside the option in the row's menu ("Del"). The search box keeps its keys, being a text box.
+- **The inspector**: its window's `OnKeyPressed` takes Home and End, focusing its first or last tab stop
+  (`Element.CollectTabStops`, the order Tab walks, shared with `UiInputController`) and bringing it into view -- from a
+  focused toggle or dropdown in it, or the inspector itself; a focused text box keeps them for its caret.
+
 ### Component writes: write scopes and struct updaters (2026-11-03, scopes 2026-11-06)
 
 - **Two forms, one notification.** Every in-place write is versioned and observed, whichever form makes it.

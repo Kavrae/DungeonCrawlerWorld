@@ -709,27 +709,6 @@ already updates. Investigate the pros and cons of adding events.
 
 ### Low Priority
 
-#### Workshop: keys for a browser's list and its inspector
-
-A browser's list (`RecordBrowserTab`: Items, Actions, Auras, Map) is driven only by the mouse. While the list (or the
-browser window) has focus:
-- **Up and Down** select the previous or next listed record, skipping headings, the pinned row's place and the
-  empty-list row, bringing it into view (`Element.BringIntoView`) and showing it everywhere a click does
-  (`RecordBrowserTab.Select`); Page Up/Down move the same way a page at a time.
-- **Delete** deletes the selected record -- exactly what its Delete command does (`ContentEditingTab.CommandsFor`:
-  refused, with the command's own reason on the status line, where Delete is disabled; Restore is not Delete's key).
-- **Insert** makes a new record, exactly as the New button does (`CreateNewRecord`), in a tab that has one.
-
-While the selected record's inspector has focus:
-- **Home** focuses its first control that takes focus (`Element.IsTabStop`), **End** its last, each brought into view
-  -- the inspector's own order, the one Tab walks.
-
-None of these reaches the list while a text box, the filter menu or another dropdown has the key: a focused text box
-keeps Home, End, Delete and Insert for its caret, and the open `Dropdown` already takes Up/Down first. A key is a
-gesture for a command that already exists, so it goes through that command's own path and "can I" answer, never a
-copy ("Whenever several inputs can do one action, they share one path"). The Sprites tab's entry list and `ListView`
-should take Up/Down the same way, through one shared rule rather than a copy per list.
-
 #### Workshop: tidy the Controls tab
 
 `ControlGalleryTab` (`Cadence/Workshop`) grew one row per control as each was added, in no order, and is hard to read:

@@ -1031,10 +1031,40 @@ public class Element(ElementServices services)
         return new Rectangle(screenRectangle.X - (int)origin.X, screenRectangle.Y - (int)origin.Y, screenRectangle.Width, screenRectangle.Height);
     }
 
-    /// <summary>Routes a key newly pressed this frame to this window while it holds focus -- see UiInputController.RouteKeyPressesToFocusedWindow.</summary>
-    internal void HandleKeyPress(Keys key) => OnKeyPressAction(key);
+    /// <summary>Offers a key newly pressed this frame to this element, while it or a descendant holds focus; returns whether it took it -- see UiInputController.RouteKeyPressesToFocusedElement.</summary>
+    internal bool HandleKeyPress(Keys key) => OnKeyPressAction(key);
 
-    protected virtual void OnKeyPressAction(Keys key) { }
+    /// <summary>A key newly pressed while this element or a descendant holds focus; returns whether it was taken. A key the focused element doesn't take is offered to each ancestor in turn, nearest first.</summary>
+    /// <remarks>Runs OnKeyPressed by default; an override that takes nothing calls base, so the owner's handler still runs.</remarks>
+    protected virtual bool OnKeyPressAction(Keys key) => OnKeyPressed is { } onKeyPressed && onKeyPressed(key);
+
+    /// <summary>What the element's owner does with a key pressed while focus is on the element or inside it, returning whether it took the key; null for nothing.</summary>
+    /// <remarks>A settable hook like OnRightClicked, cleared when the element closes.</remarks>
+    public Func<Keys, bool>? OnKeyPressed { get; set; }
+
+    /// <summary>Every tab stop (IsTabStop) in this element's tree, itself included, in tree order -- the order Tab walks -- through visible, unminimized elements only.</summary>
+    public void CollectTabStops(List<Element> tabStops)
+    {
+        if (!IsVisible)
+        {
+            return;
+        }
+
+        if (IsTabStop)
+        {
+            tabStops.Add(this);
+        }
+
+        if (DisplayMode == ElementDisplayMode.Minimized)
+        {
+            return;
+        }
+
+        foreach (var child in ChildElements)
+        {
+            child.CollectTabStops(tabStops);
+        }
+    }
 
     /// <summary>
     /// Routes the whole keyboard state to this window once per frame while it holds focus --
@@ -2570,6 +2600,7 @@ public class Element(ElementServices services)
     protected internal virtual void OnClosed()
     {
         OnRightClicked = null;
+        OnKeyPressed = null;
     }
 
     /// <summary>True from the moment Close starts until the element is back in its pool.</summary>

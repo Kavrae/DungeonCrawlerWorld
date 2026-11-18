@@ -228,7 +228,7 @@ public class Window : Element
 
     public override void DrawContent(GameTime gameTime) => _content?.DrawContent(gameTime);
 
-    protected override void OnKeyPressAction(Keys key) => _content?.HandleKeyPress(key);
+    protected override bool OnKeyPressAction(Keys key) => _content?.HandleKeyPress(key) == true || base.OnKeyPressAction(key);
 
     protected override void OnHotkeysAction(KeyboardState keyboardState, KeyboardState previousKeyboardState) => _content?.HandleHotkeys(keyboardState, previousKeyboardState);
 

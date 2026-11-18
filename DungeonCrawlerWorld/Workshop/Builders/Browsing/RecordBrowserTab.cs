@@ -1,5 +1,6 @@
 using Engine.Utilities;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Input;
 using UIEngine.UI;
 using UIEngine.UI.ColorPalettes;
 using UIEngine.UI.Fields;
@@ -18,7 +19,11 @@ public readonly record struct RecordRowAppearance(string Name, string? SpriteNam
 }
 
 /// <summary>Something a tab does to one record (Publish, Delete): a button over the inspector and an option on the record's right-click menu, both running Run; Tooltip says what it does, or why it can't.</summary>
-public sealed record RecordCommand(string Label, string Tooltip, bool IsEnabled, Action Run);
+public sealed record RecordCommand(string Label, string Tooltip, bool IsEnabled, Action Run)
+{
+    /// <summary>The key that runs it while the browser has focus, shown beside its menu option; null for none. Pressed while it is disabled, the status line says why (Tooltip).</summary>
+    public Keys? Key { get; init; }
+}
 
 /// <summary>A switch in how a tab shows its records ("Changes only"): a checkbox at the right end of the command bar, never a command on a record; IsOn reads its state, Changed sets it.</summary>
 public sealed record RecordViewOption(string Label, string Tooltip, Func<bool> IsOn, Action<bool> Changed);
@@ -354,7 +359,116 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
             return;
         }
 
-        _context.ContextMenuController.Open(new Vector2(position.X, position.Y), [.. commands.Select(command => new DropdownOption(command.Label, null, command.IsEnabled, () => _pendingCommand = command.Run))]);
+        _context.ContextMenuController.Open(new Vector2(position.X, position.Y), [.. commands.Select(command => new DropdownOption(command.Label, KeyLabelOf(command.Key), command.IsEnabled, () => _pendingCommand = command.Run))]);
+    }
+
+    private static string? KeyLabelOf(Keys? key) => key switch
+    {
+        null => null,
+        Keys.Delete => "Del",
+        Keys.Insert => "Ins",
+        { } other => other.ToString(),
+    };
+
+    /// <summary>
+    /// A key pressed while the browser (its list, or anything in it but the search box) has focus: the list's moves
+    /// (ListKeyNavigation) over the listed records, a page the rows the list shows at once; a selected record's command
+    /// by its key (RecordCommand.Key), as its button runs it, or why it can't on the status line; Insert, New.
+    /// </summary>
+    private bool OnBrowserKeyPressed(Keys key)
+    {
+        if (key == Keys.Insert)
+        {
+            if (NewRecordLabel is null)
+            {
+                return false;
+            }
+
+            _newRecordRequested = true;
+            return true;
+        }
+
+        return TryRunCommandKey(key) || TryMoveSelection(key);
+    }
+
+    private bool TryRunCommandKey(Keys key)
+    {
+        if (_selectedRecord is not { } record)
+        {
+            return false;
+        }
+
+        foreach (var command in CommandsFor(record))
+        {
+            if (command.Key != key)
+            {
+                continue;
+            }
+
+            if (command.IsEnabled)
+            {
+                _pendingCommand = command.Run;
+            }
+            else
+            {
+                _context.Status.Show(command.Tooltip);
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Moves the selection over the records the list holds, in the order shown -- never onto a heading, the pinned row or the empty-list message -- bringing the newly selected row into view.</summary>
+    private bool TryMoveSelection(Keys key)
+    {
+        var firstListedRow = _pinnedRecord is null ? 0 : 1;
+        var listedCount = _rows.Count - firstListedRow;
+        var selectedIndex = -1;
+        for (var index = firstListedRow; index < _rows.Count; index++)
+        {
+            if (ReferenceEquals(_rows[index].Record, _selectedRecord))
+            {
+                selectedIndex = index - firstListedRow;
+                break;
+            }
+        }
+
+        var rowsPerPage = (int)(_listWindow.ContentSize.Y / RowHeight);
+        if (!ListKeyNavigation.TryMove(key, selectedIndex, listedCount, rowsPerPage, out var target))
+        {
+            return false;
+        }
+
+        if (target >= 0 && target != selectedIndex)
+        {
+            Select(_rows[firstListedRow + target].Record);
+            BringSelectedRowIntoView();
+        }
+
+        return true;
+    }
+
+    /// <summary>A key pressed while the inspector or a control in it has focus: Home focuses its first tab stop, End its last, in the order Tab walks, brought into view.</summary>
+    private bool OnInspectorKeyPressed(Keys key)
+    {
+        if (key is not (Keys.Home or Keys.End) || _inspectorWindow is not { } inspector)
+        {
+            return false;
+        }
+
+        var tabStops = new List<Element>();
+        inspector.CollectTabStops(tabStops);
+        if (tabStops.Count == 0)
+        {
+            return true;
+        }
+
+        var target = key == Keys.Home ? tabStops[0] : tabStops[^1];
+        _context.FocusElement(target);
+        target.BringIntoView();
+        return true;
     }
 
     /// <summary>Rebuilds the browser's rows, keeping the selection -- after a record's name or marker changed.</summary>
@@ -595,6 +709,7 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
         });
         _browserWindow.Initialize();
+        _browserWindow.OnKeyPressed = OnBrowserKeyPressed;
         _context.Layers.Add(UiLayer.Base, _browserWindow);
 
         _searchBox = elementPool.CreateElement<TextBox>(_browserWindow, new ElementOptions
@@ -648,7 +763,7 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, ListTop()), Size = ListSize(), DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserScrollVertical = true, CanUserFocus = false },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserScrollVertical = true, CanUserFocus = true },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
         });
         _browserWindow.AddChild(_listWindow);
@@ -760,6 +875,7 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
         });
         _inspectorWindow.Initialize();
+        _inspectorWindow.OnKeyPressed = OnInspectorKeyPressed;
         _context.Layers.Add(UiLayer.Base, _inspectorWindow);
         LayOutInspector(area);
     }
@@ -992,8 +1108,16 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
         var rowColor = ReferenceEquals(record, _selectedRecord) ? SelectedRowColor : RowColor;
         var row = RecordRow.Create(_context.UiEngine.ElementPoolService, _listWindow, width, appearance, rowColor);
 
-        row.Clicked += _ => Select(record);
-        row.OnRightClicked = position => OpenRecordMenu(record, position);
+        row.Clicked += _ =>
+        {
+            _context.FocusElement(_listWindow);
+            Select(record);
+        };
+        row.OnRightClicked = position =>
+        {
+            _context.FocusElement(_listWindow);
+            OpenRecordMenu(record, position);
+        };
         return row;
     }
 

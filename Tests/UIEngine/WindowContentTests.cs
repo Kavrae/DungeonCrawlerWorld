@@ -28,7 +28,11 @@ public sealed class WindowContentTests
         public void Initialize(Window hostWindow) => InitializedWith = hostWindow;
         public void Update(GameTime gameTime) => UpdateCount++;
         public void DrawContent(GameTime gameTime) => DrawContentCount++;
-        public void HandleKeyPress(Keys key) => PressedKeys.Add(key);
+        public bool HandleKeyPress(Keys key)
+        {
+            PressedKeys.Add(key);
+            return true;
+        }
         public void HandleHotkeys(KeyboardState keyboardState, KeyboardState previousKeyboardState) => HandleHotkeysCount++;
         public void HandleTextInput(char character) => TypedCharacters.Add(character);
     }
