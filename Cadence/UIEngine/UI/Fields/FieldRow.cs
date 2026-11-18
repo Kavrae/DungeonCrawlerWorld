@@ -232,6 +232,7 @@ public sealed class FieldRow(ElementServices services)
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = new Vector2(FieldSectionHeader.ButtonWidth, FieldSectionHeader.ButtonHeight), DisplayMode = ElementDisplayMode.Fixed },
         });
         _revertButton.SetText(RevertLabel);
+        _revertButton.TakesTabFocus = false;
         _revertButton.Clicked += _ => _revertRequested = true;
         AddChild(_revertButton);
         _revertButton.IsVisible = false;

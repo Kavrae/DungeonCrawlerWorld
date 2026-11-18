@@ -24,6 +24,13 @@ public sealed class IconElement(ElementServices services, SpriteSheetService spr
 
     public Color GlyphColor => _glyphColor;
 
+    public override void Build(Element? parent, ElementOptions options)
+    {
+        base.Build(parent, options);
+
+        CanUserFocus = false;
+    }
+
     /// <summary>Shows spriteName's sprite when the manifest has it, else glyph in glyphColor, sized for an icon iconSize across.</summary>
     public void Configure(string? spriteName, string glyph, Color glyphColor, Vector2 iconSize) =>
         Configure(spriteName, glyph, glyphColor, FontService.GetFont((int)(iconSize.Y * FontChrome.IconGlyphFontFraction)));

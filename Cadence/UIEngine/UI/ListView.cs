@@ -3,6 +3,7 @@ using Engine.Utilities;
 using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
+using SDL3;
 using UIEngine.Fonts;
 using UIEngine.Input;
 using UIEngine.Rendering;
@@ -20,7 +21,7 @@ public sealed record ListViewRow(IReadOnlyList<string> Cells, string? IconGlyph 
 /// <summary>
 /// Rows under column headers -- the Error List, Dependents, a record picker. Clicking a sortable header sorts by it, and
 /// again reverses it; a click selects a row and a second click on it within the double-click window activates it, as do
-/// Enter and a double-click. Focused, Up/Down, Page Up/Down and Home/End move the selection (ListKeyNavigation). The header stays put while the rows scroll, and
+/// Enter and a double-click. Focused, Up/Down, Page Up/Down and Home/End move the selection (ListKeyNavigation) and Ctrl+C copies the selected row. The header stays put while the rows scroll, and
 /// the row under the pointer is highlighted.
 /// </summary>
 /// <remarks>
@@ -364,6 +365,18 @@ public sealed class ListView(ElementServices services)
 
                 return;
             }
+        }
+    }
+
+    /// <summary>The text Ctrl+C puts on the clipboard for row: its cells in column order, a tab between each.</summary>
+    public static string ClipboardTextOf(ListViewRow row) => string.Join('\t', row.Cells);
+
+    protected override void OnHotkeysAction(KeyboardState keyboardState, KeyboardState previousKeyboardState)
+    {
+        var isControlHeld = keyboardState.IsKeyDown(Keys.LeftControl) || keyboardState.IsKeyDown(Keys.RightControl);
+        if (isControlHeld && SelectedRow is { } selected && WasKeyPressed(keyboardState, previousKeyboardState, Keys.C))
+        {
+            SDL.SDL_SetClipboardText(ClipboardTextOf(selected));
         }
     }
 

@@ -30,7 +30,10 @@ public sealed class SplitPane(ElementServices services)
 {
     public const float SplitterThickness = 5f;
 
+    private const int SplitterLineThickness = 1;
+
     private static readonly Color SplitterColor = WindowPalette.ControlBackground;
+    private static readonly Color SplitterLineColor = Color.Black;
 
     private SplitOrientation _orientation;
     private SplitSizedPane _sizedPane;
@@ -148,6 +151,14 @@ public sealed class SplitPane(ElementServices services)
 
     protected override void OnPointerDragEndedAction() => _dragStartSizedPaneSize = null;
 
-    public override void DrawContent(GameTime gameTime) =>
-        Render.Batch.FillRectangle(ToContentLocal(SplitterRectangle), SplitterColor);
+    /// <summary>The splitter's fill with a black line down its middle, so it reads as the edge to drag.</summary>
+    public override void DrawContent(GameTime gameTime)
+    {
+        var splitter = ToContentLocal(SplitterRectangle);
+        Render.Batch.FillRectangle(splitter, SplitterColor);
+        var line = _orientation == SplitOrientation.SideBySide
+            ? new Rectangle(splitter.X + (splitter.Width - SplitterLineThickness) / 2, splitter.Y, SplitterLineThickness, splitter.Height)
+            : new Rectangle(splitter.X, splitter.Y + (splitter.Height - SplitterLineThickness) / 2, splitter.Width, SplitterLineThickness);
+        Render.Batch.FillRectangle(line, SplitterLineColor);
+    }
 }

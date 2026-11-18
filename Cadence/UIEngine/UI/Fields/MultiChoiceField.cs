@@ -16,7 +16,7 @@ namespace UIEngine.UI.Fields;
 public sealed class MultiChoiceField(ElementServices services, DropdownController dropdowns)
     : Element(services)
 {
-    private const float HorizontalTextInset = 4f;
+    private static float HorizontalTextInset => WindowChrome.ControlTextInset;
 
     private readonly SpriteFontBase _font = services.FontService.GetFont(FontChrome.DefaultFontSize);
     private readonly SortedSet<int> _chosen = [];
@@ -36,6 +36,13 @@ public sealed class MultiChoiceField(ElementServices services, DropdownControlle
     public bool IsListOpen => dropdowns.IsOpen && ReferenceEquals(dropdowns.Owner, this);
 
     public override bool IsTabStop => Enabled;
+
+    public override void Build(Element? parent, ElementOptions options)
+    {
+        base.Build(parent, options);
+
+        _canContainChildren = false;
+    }
 
     public void Configure(IReadOnlyList<string> choices, IEnumerable<int> chosenIndices)
     {

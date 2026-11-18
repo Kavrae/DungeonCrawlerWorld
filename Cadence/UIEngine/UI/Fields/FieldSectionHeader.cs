@@ -152,6 +152,7 @@ public sealed class FieldSectionHeader(ElementServices services)
             });
             button.SetText(_buttonLabels[index]);
             button.Enabled = _buttonsEnabled[index];
+            button.TakesTabFocus = false;
             button.Clicked += _ => _pendingRequest = () => ButtonClicked?.Invoke(capturedIndex);
             AddChild(button);
             _buttons.Add(button);
@@ -162,6 +163,7 @@ public sealed class FieldSectionHeader(ElementServices services)
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = new Vector2(ButtonWidth, ButtonHeight), DisplayMode = ElementDisplayMode.Fixed },
         });
         _revertButton.SetText(RevertLabel);
+        _revertButton.TakesTabFocus = false;
         _revertButton.Clicked += _ => _pendingRequest = () => RevertRequested?.Invoke();
         AddChild(_revertButton);
         _revertButton.IsVisible = false;

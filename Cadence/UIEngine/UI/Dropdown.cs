@@ -343,6 +343,21 @@ public sealed class Dropdown(ElementServices services)
         }
     }
 
+    /// <summary>Highlights the first choosable option, or the last when toLast, scrolling it into view.</summary>
+    public void MoveHighlightToEnd(bool toLast)
+    {
+        for (var step = 0; step < _options.Count; step++)
+        {
+            var candidate = toLast ? _options.Count - 1 - step : step;
+            if (IsChoosable(candidate))
+            {
+                SetHighlight(candidate);
+                ScrollOptionIntoView(candidate);
+                return;
+            }
+        }
+    }
+
     /// <summary>Chooses the highlighted option as a click on it would. Returns whether one was highlighted.</summary>
     public bool ChooseHighlighted()
     {

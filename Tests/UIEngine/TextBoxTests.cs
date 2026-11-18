@@ -262,20 +262,20 @@ public sealed class TextBoxTests
 
         var options = textBox.BuildContextMenuOptions();
 
-        Assert.HasCount(4, options);
-        Assert.AreEqual("Cut", options[0].Label);
-        Assert.AreEqual("Ctrl+X", options[0].HotkeyText);
-        Assert.IsFalse(options[0].Enabled);
-        Assert.AreEqual("Copy", options[1].Label);
-        Assert.AreEqual("Ctrl+C", options[1].HotkeyText);
-        Assert.IsFalse(options[1].Enabled);
-        Assert.AreEqual("Paste", options[2].Label);
-        Assert.AreEqual("Ctrl+V", options[2].HotkeyText);
+        Assert.HasCount(6, options);
+        Assert.AreEqual("Cut", options[2].Label);
+        Assert.AreEqual("Ctrl+X", options[2].HotkeyText);
+        Assert.IsFalse(options[2].Enabled);
+        Assert.AreEqual("Copy", options[3].Label);
+        Assert.AreEqual("Ctrl+C", options[3].HotkeyText);
+        Assert.IsFalse(options[3].Enabled);
+        Assert.AreEqual("Paste", options[4].Label);
+        Assert.AreEqual("Ctrl+V", options[4].HotkeyText);
         // Paste's Enabled deliberately not asserted here -- it reads the real OS clipboard
         // (SDL_HasClipboardText), which this test has no business overwriting or depending on.
-        Assert.AreEqual("Select All", options[3].Label);
-        Assert.AreEqual("Ctrl+A", options[3].HotkeyText);
-        Assert.IsFalse(options[3].Enabled, "Nothing to select in an empty box.");
+        Assert.AreEqual("Select All", options[5].Label);
+        Assert.AreEqual("Ctrl+A", options[5].HotkeyText);
+        Assert.IsFalse(options[5].Enabled, "Nothing to select in an empty box.");
     }
 
     [TestMethod]
@@ -309,8 +309,8 @@ public sealed class TextBoxTests
         Assert.AreEqual("fixed", textBox.OriginalText);
 
         var options = textBox.BuildContextMenuOptions();
-        Assert.IsFalse(options[0].Enabled, "Cut");
-        Assert.IsFalse(options[2].Enabled, "Paste");
+        Assert.IsFalse(options[2].Enabled, "Cut");
+        Assert.IsFalse(options[4].Enabled, "Paste");
     }
 
     [TestMethod]
@@ -331,10 +331,10 @@ public sealed class TextBoxTests
 
         var options = textBox.BuildContextMenuOptions();
 
-        Assert.IsFalse(options[0].Enabled, "Cut");
-        Assert.IsTrue(options[1].Enabled, "Copy");
-        Assert.IsFalse(options[2].Enabled, "Paste");
-        Assert.IsTrue(options[3].Enabled, "Select All");
+        Assert.IsFalse(options[2].Enabled, "Cut");
+        Assert.IsTrue(options[3].Enabled, "Copy");
+        Assert.IsFalse(options[4].Enabled, "Paste");
+        Assert.IsTrue(options[5].Enabled, "Select All");
     }
 
     [TestMethod]
@@ -347,9 +347,9 @@ public sealed class TextBoxTests
 
         var options = textBox.BuildContextMenuOptions();
 
-        Assert.IsTrue(options[0].Enabled, "Cut");
-        Assert.IsTrue(options[1].Enabled, "Copy");
-        Assert.IsTrue(options[3].Enabled, "Select All -- non-empty text.");
+        Assert.IsTrue(options[2].Enabled, "Cut");
+        Assert.IsTrue(options[3].Enabled, "Copy");
+        Assert.IsTrue(options[5].Enabled, "Select All -- non-empty text.");
     }
 
     [TestMethod]

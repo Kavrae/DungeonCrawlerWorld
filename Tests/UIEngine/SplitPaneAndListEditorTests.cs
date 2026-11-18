@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using UIEngine.UI;
+using UIEngine.UI.Chrome;
 
 namespace Tests.UIEngine;
 
@@ -77,11 +78,11 @@ public sealed class SplitPaneAndListEditorTests
         });
 
         Fill(1);
-        Assert.IsFalse(editor.ShowVerticalScrollbar);
+        Assert.IsFalse(editor.ShowsRowScrollbar);
         Fill(8);
 
-        Assert.IsTrue(editor.ShowVerticalScrollbar);
-        var expectedWidth = editor.ContentSize.X - ListEditor.RowButtonWidth * 3 - 2f * 3;
+        Assert.IsTrue(editor.ShowsRowScrollbar);
+        var expectedWidth = editor.ContentSize.X - WindowChrome.ScrollbarThickness - ListEditor.RowButtonWidth * 3 - 2f * 3;
         foreach (var content in editor.RowContents)
         {
             Assert.AreEqual(expectedWidth, content.CurrentSize.X);
@@ -126,7 +127,7 @@ public sealed class SplitPaneAndListEditorTests
         editor.AddRequested += () => { items.Add("new"); Fill(); };
         Fill();
 
-        Button ButtonOf(int row, string label) => editor.ChildElements.OfType<Button>().Where(button => ButtonContent.TextOf(button) == label).ElementAt(row);
+        Button ButtonOf(int row, string label) => editor.RowButtons.Where(button => ButtonContent.TextOf(button) == label).ElementAt(row);
         Assert.IsFalse(ButtonOf(0, ListEditor.MoveUpLabel).Enabled);
         Assert.IsFalse(ButtonOf(2, ListEditor.MoveDownLabel).Enabled);
 
@@ -137,7 +138,55 @@ public sealed class SplitPaneAndListEditorTests
         CollectionAssert.AreEqual(new[] { "b", "a" }, items);
         Assert.AreEqual(2, editor.RowCount);
 
-        harness.Click(editor.ChildElements.OfType<Button>().Single(button => ButtonContent.TextOf(button) == "Add"));
+        harness.Click(editor.AddButton);
         CollectionAssert.AreEqual(new[] { "b", "a", "new" }, items);
+    }
+
+    [TestMethod]
+    public void AListEditorsButtons_SubmitTheFocusedRowsTypedText_BeforeAsking()
+    {
+        var harness = new ControlTestHarness();
+        var items = new List<string> { "a", "b" };
+        ListEditor editor = null!;
+        var rowTextBoxes = new List<TextBox>();
+        void Fill()
+        {
+            rowTextBoxes.Clear();
+            editor.SetRows(items.Count, (content, index) =>
+            {
+                var textBox = harness.Pool.CreateElement<TextBox>(content, new ElementOptions
+                {
+                    Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = content.ContentSize, DisplayMode = ElementDisplayMode.Fixed },
+                    Text = new TextOptions { Text = items[index] },
+                });
+                content.AddChild(textBox);
+                textBox.TextSubmitted += text => items[index] = text;
+                rowTextBoxes.Add(textBox);
+            });
+        }
+
+        editor = harness.AddRoot<ListEditor>(new Vector2(50, 50), new Vector2(300, 200), list => list.Configure(rowHeight: 24));
+        editor.MoveRequested += (from, to) => { (items[from], items[to]) = (items[to], items[from]); Fill(); };
+        Fill();
+
+        harness.Click(rowTextBoxes[0]);
+        harness.Type("z");
+        harness.Click(editor.RowButtons.Where(button => ButtonContent.TextOf(button) == ListEditor.MoveDownLabel).First());
+
+        Assert.HasCount(2, items);
+        Assert.AreEqual("b", items[0]);
+        StringAssert.Contains(items[1], "z");
+    }
+
+    [TestMethod]
+    public void AListEditorsAddButton_StaysBelowTheRows_WhenTheyScroll()
+    {
+        var harness = new ControlTestHarness();
+        var editor = harness.AddRoot<ListEditor>(new Vector2(50, 50), new Vector2(300, 100), list => list.Configure(rowHeight: 24));
+        editor.SetRows(8, (_, _) => { });
+
+        Assert.IsTrue(editor.ShowsRowScrollbar);
+        Assert.IsTrue(editor.ContentRectangle.Contains(editor.AddButton.Rectangle));
+        Assert.IsTrue(editor.RowContents.All(content => content.ParentElement != editor));
     }
 }

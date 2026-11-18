@@ -259,8 +259,8 @@ public sealed class DropdownController(ElementPoolService elementPoolService, Ui
 
     public void Dismiss() => Close();
 
-    /// <summary>Up/Down move the deepest open menu's highlight and Enter chooses it; Right opens the highlighted option's submenu and Left closes the deepest submenu. Returns whether the key was the dropdown's; nothing is when none is open.</summary>
-    /// <remarks>Enter with nothing highlighted in a list opened under an owner is the owner's (a searchable field resolves what was typed); a context menu keeps it. Left and Right are taken only when they open or close a submenu, so a field's text box under its list keeps them otherwise.</remarks>
+    /// <summary>Up/Down move the deepest open menu's highlight, Home/End move it to the first or last option, and Enter chooses it; Right opens the highlighted option's submenu and Left closes the deepest submenu. Returns whether the key was the dropdown's; nothing is when none is open.</summary>
+    /// <remarks>Enter with nothing highlighted in a list opened under an owner is the owner's (a searchable field resolves what was typed); a context menu keeps it. Left and Right are taken only when they open or close a submenu, so a field's text box under its list keeps them otherwise; Home and End are never taken from a text box owning the list.</remarks>
     internal bool HandleNavigationKey(Keys key)
     {
         if (!IsOpen)
@@ -276,6 +276,12 @@ public sealed class DropdownController(ElementPoolService elementPoolService, Ui
                 return true;
             case Keys.Up:
                 deepest.MoveHighlight(-1);
+                return true;
+            case Keys.Home when Owner is not TextBox:
+                deepest.MoveHighlightToEnd(toLast: false);
+                return true;
+            case Keys.End when Owner is not TextBox:
+                deepest.MoveHighlightToEnd(toLast: true);
                 return true;
             case Keys.Enter:
                 return deepest.ChooseHighlighted() || Owner is null;

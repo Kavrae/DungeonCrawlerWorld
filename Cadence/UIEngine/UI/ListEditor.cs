@@ -5,13 +5,15 @@ namespace UIEngine.UI;
 
 /// <summary>
 /// The rows of an editable list -- each row's content beside its own move up, move down and remove buttons, and an add
-/// button under the last. The owner fills each row's content and owns the list: a button asks (AddRequested,
+/// button under them all. The owner fills each row's content and owns the list: a button asks (AddRequested,
 /// RemoveRequested, MoveRequested), the owner changes its data and calls SetRows again.
 /// </summary>
 /// <remarks>
 /// A request is raised on the update after the click, never inside it, since the owner answering it rebuilds every row
-/// -- including the button whose click is still being handled. Scrolls when the rows outgrow it. Configure before
-/// Initialize, the usual contract.
+/// -- including the button whose click is still being handled. Before it is raised, a text box focused in a row is
+/// submitted (TextBox.Submit), so what was typed reaches the owner rather than being lost to the rebuild. The rows scroll
+/// when they outgrow the editor; the add button stays below them, always shown. Configure before Initialize, the usual
+/// contract.
 /// </remarks>
 public sealed class ListEditor(ElementServices services)
     : Element(services)
@@ -33,12 +35,20 @@ public sealed class ListEditor(ElementServices services)
     private bool _isRebuildingRows;
 
     private readonly List<(Window Content, Button MoveUp, Button MoveDown, Button Remove)> _rows = [];
-    private Button? _addButton;
+    private Window _rowsHost = null!;
 
     public int RowCount => _rowCount;
 
     /// <summary>The content host of each row, in order.</summary>
     public IEnumerable<Window> RowContents => _rows.Select(row => row.Content);
+
+    /// <summary>Every row's buttons, row by row: its move up, move down and remove.</summary>
+    public IEnumerable<Button> RowButtons => _rows.SelectMany(row => new[] { row.MoveUp, row.MoveDown, row.Remove });
+
+    public Button AddButton { get; private set; } = null!;
+
+    /// <summary>Whether the rows are taller than the space above the add button, so they scroll.</summary>
+    public bool ShowsRowScrollbar => _rowsHost.ShowVerticalScrollbar;
 
     public event Action? AddRequested;
 
@@ -58,15 +68,26 @@ public sealed class ListEditor(ElementServices services)
         _filledRowContentWidth = 0f;
         _isRebuildingRows = false;
         _rows.Clear();
-        _addButton = null;
     }
 
     public override void Initialize()
     {
         base.Initialize();
 
-        CanUserScrollVertical = true;
-        ContentResized += _ => OnContentResized();
+        _rowsHost = ElementPoolService.CreateElement<Window>(this, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = Vector2.One, DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false, CanUserScrollVertical = true },
+        });
+        _rowsHost.ContentPadding = Vector2.Zero;
+        AddChild(_rowsHost);
+
+        AddButton = CreateButton(this, _addLabel, enabled: true, () => AddRequested?.Invoke());
+
+        ContentResized += _ => LayOutRowsHostAndAddButton();
+        _rowsHost.ContentResized += _ => OnRowsHostResized();
+        LayOutRowsHostAndAddButton();
         RebuildRows();
     }
 
@@ -79,6 +100,13 @@ public sealed class ListEditor(ElementServices services)
         _rowCount = count;
         _fillRow = fillRow;
         RebuildRows();
+    }
+
+    private void LayOutRowsHostAndAddButton()
+    {
+        var addButtonTop = System.Math.Max(0f, ContentSize.Y - _rowHeight);
+        _rowsHost.SetBounds(Vector2.Zero, new Vector2(ContentSize.X, System.Math.Max(1f, addButtonTop - RowGap)));
+        AddButton.SetBounds(new Vector2(0, addButtonTop), new Vector2(AddButtonWidth, _rowHeight));
     }
 
     private void RebuildRows()
@@ -99,28 +127,26 @@ public sealed class ListEditor(ElementServices services)
 
     private void RebuildRowsWithoutRefilling()
     {
-        ElementPoolService.CloseAllChildren(this);
+        ElementPoolService.CloseAllChildren(_rowsHost);
         _rows.Clear();
 
         for (var rowIndex = 0; rowIndex < _rowCount; rowIndex++)
         {
             var capturedIndex = rowIndex;
-            var content = ElementPoolService.CreateElement<Window>(this, new ElementOptions
+            var content = ElementPoolService.CreateElement<Window>(_rowsHost, new ElementOptions
             {
                 Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
                 Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = new Vector2(1, _rowHeight), DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
                 Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             });
             content.ContentPadding = Vector2.Zero;
-            AddChild(content);
+            _rowsHost.AddChild(content);
 
-            var moveUp = AddRowButton(MoveUpLabel, enabled: rowIndex > 0, () => MoveRequested?.Invoke(capturedIndex, capturedIndex - 1));
-            var moveDown = AddRowButton(MoveDownLabel, enabled: rowIndex < _rowCount - 1, () => MoveRequested?.Invoke(capturedIndex, capturedIndex + 1));
-            var remove = AddRowButton(RemoveLabel, enabled: true, () => RemoveRequested?.Invoke(capturedIndex));
+            var moveUp = CreateButton(_rowsHost, MoveUpLabel, enabled: rowIndex > 0, () => MoveRequested?.Invoke(capturedIndex, capturedIndex - 1));
+            var moveDown = CreateButton(_rowsHost, MoveDownLabel, enabled: rowIndex < _rowCount - 1, () => MoveRequested?.Invoke(capturedIndex, capturedIndex + 1));
+            var remove = CreateButton(_rowsHost, RemoveLabel, enabled: true, () => RemoveRequested?.Invoke(capturedIndex));
             _rows.Add((content, moveUp, moveDown, remove));
         }
-
-        _addButton = AddRowButton(_addLabel, enabled: true, () => AddRequested?.Invoke());
     }
 
     /// <summary>Fills every row's content at the width it has now, remembering that width so a later change refills it.</summary>
@@ -134,7 +160,7 @@ public sealed class ListEditor(ElementServices services)
     }
 
     /// <summary>Lays the rows out again, and refills their content when its width changed -- what the owner built was sized to the old one.</summary>
-    private void OnContentResized()
+    private void OnRowsHostResized()
     {
         if (_isRebuildingRows)
         {
@@ -155,34 +181,34 @@ public sealed class ListEditor(ElementServices services)
         FillRows();
     }
 
-    /// <summary>The rows' height with the add button under them.</summary>
-    private float RowsHeight => (_rowCount + 1) * (_rowHeight + RowGap);
+    private float RowsHeight => _rowCount * (_rowHeight + RowGap);
 
     /// <summary>
-    /// The width of a row's content: what the buttons leave of the width with no scrollbar, less the scrollbar's when the
-    /// rows are taller than the editor -- decided from the rows themselves, so a row is sized for the scrollbar before it
-    /// appears rather than after.
+    /// The width of a row's content: what the buttons leave of the rows' width with no scrollbar, less the scrollbar's when
+    /// the rows are taller than the space they have -- decided from the rows themselves, so a row is sized for the
+    /// scrollbar before it appears rather than after.
     /// </summary>
     private float RowContentWidth
     {
         get
         {
-            var widthWithoutScrollbar = ContentSize.X + ScrollbarGutterSize.X;
-            var scrollbarWidth = RowsHeight > ContentSize.Y + ScrollbarGutterSize.Y ? WindowChrome.ScrollbarThickness : 0f;
+            var shownScrollbarWidth = _rowsHost.ShowVerticalScrollbar ? WindowChrome.ScrollbarThickness : 0f;
+            var widthWithoutScrollbar = _rowsHost.ContentSize.X + shownScrollbarWidth;
+            var scrollbarWidth = RowsHeight > _rowsHost.ContentSize.Y ? WindowChrome.ScrollbarThickness : 0f;
             return System.Math.Max(1f, widthWithoutScrollbar - scrollbarWidth - RowButtonWidth * 3 - RowGap * 3);
         }
     }
 
-    private Button AddRowButton(string label, bool enabled, Action request)
+    private Button CreateButton(Element parent, string label, bool enabled, Action request)
     {
-        var button = ElementPoolService.CreateElement<Button>(this, new ElementOptions
+        var button = ElementPoolService.CreateElement<Button>(parent, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = new Vector2(RowButtonWidth, _rowHeight), DisplayMode = ElementDisplayMode.Fixed },
         });
         button.SetText(label);
         button.Enabled = enabled;
         button.Clicked += _ => _pendingRequest = request;
-        AddChild(button);
+        parent.AddChild(button);
         return button;
     }
 
@@ -202,8 +228,6 @@ public sealed class ListEditor(ElementServices services)
                 x += RowButtonWidth + RowGap;
             }
         }
-
-        _addButton?.SetBounds(new Vector2(0, _rows.Count * (_rowHeight + RowGap)), new Vector2(AddButtonWidth, _rowHeight));
     }
 
     public override void Update(GameTime gameTime)
@@ -213,7 +237,26 @@ public sealed class ListEditor(ElementServices services)
         if (_pendingRequest is { } request)
         {
             _pendingRequest = null;
+            FindFocusedTextBox(_rowsHost)?.Submit();
             request();
         }
+    }
+
+    private static TextBox? FindFocusedTextBox(Element element)
+    {
+        foreach (var child in element.ChildElements)
+        {
+            if (child is TextBox { IsFocused: true } focusedTextBox)
+            {
+                return focusedTextBox;
+            }
+
+            if (FindFocusedTextBox(child) is { } focusedDescendant)
+            {
+                return focusedDescendant;
+            }
+        }
+
+        return null;
     }
 }

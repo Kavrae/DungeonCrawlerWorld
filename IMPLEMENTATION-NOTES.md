@@ -3747,6 +3747,73 @@ A browser's list and its inspector take keys, as gestures for what a click or a 
   (`Element.CollectTabStops`, the order Tab walks, shared with `UiInputController`) and bringing it into view -- from a
   focused toggle or dropdown in it, or the inspector itself; a focused text box keeps them for its caret.
 
+### The Workshop Controls tab (2026-11-17)
+
+`ControlGalleryTab` (`Cadence/Workshop`) holds one of each UIEngine control, each wired to the status line, for trying a
+control before an editor uses it. A control added to UIEngine gets a row here.
+
+- **Groups**, each opened by a `TextDivider` heading: Text entry (text boxes, numbers, colour, free-text choice), Choice
+  (buttons, dropdowns, searchable and multi-choice, toggles, `ToggleList`), Lists (`ListView`, `ListEditor`), Layout
+  (`SplitPane`, a tiled row showing `ChildGap`/`ChildCrossAlignment`/`FillsRemaining`, a line `TextDivider`, `Folder`,
+  `FieldSectionHeader`, `FieldRow`s), Feedback (a hover `TooltipText`, the context menu with headings, a disabled row, a
+  checkbox row and a submenu, `FractionBarElement` with -/+ buttons, `ModalDialog`), Filtering (`ListFilterButton` over a
+  basket of fruit with `ListFilterChips` under it, `GridControl`).
+- **Look**: the panel is `WindowPalette.PanelBackgroundColor`, as an editor's inspector is, because `FieldRow` and
+  `FieldSectionHeader` draw their labels in `ControlLabelTextColor` (white), which vanished on the old light panel;
+  captions are that colour too, and an editable control is `EditableControlBackground` under `BodyTextColor`, as
+  `FieldRow` creates its own. A `TextWindow`'s default content colour is the dark panel's, so a text box created without
+  one draws black text on near-black.
+- **Sizes**: one row is `FieldRow.RowHeight` and the caption column `FieldRow.LabelColumnWidth`, so the field rows line up
+  with the captions; a taller control is a whole number of rows. A `Folder` opens downward over nothing: the rows under
+  its icon are kept free for its entries.
+- `Workshop.Tests/ControlGalleryTabTests` opens the tab through a real `UiInputController` and clicks a few rows.
+- **Control fixes found here** (UIEngine, so every user has them):
+  - A field's text starts `WindowChrome.ControlTextInset` (3) in from its content edge on both sides: `TextWindow`'s
+    `LinePadding`, `DropdownField` and `MultiChoiceField`. The two choice fields hold no children, so they build with
+    `CanContainChildren` false: a caller asking for a container no longer adds `ContentPadding` before their text.
+  - A `Toggle`'s label is drawn from its left edge, never centred in the space after the checkbox (a `ToggleList`'s labels
+    started wherever their width put them).
+  - `ListView`: Ctrl+C, focused, copies the selected row, its cells joined by tabs (`ListView.ClipboardTextOf`).
+  - `ListEditor`: the rows scroll in a host of their own and the add button sits below it, always shown; a text box
+    focused in a row is submitted (`TextBox.Submit`, Enter's event) before a button's request is raised, so the rebuild
+    never loses what was typed -- the owner keeps it from `TextSubmitted`.
+  - `SplitPane`: a 1-pixel black line down the splitter's middle, so it reads as the edge to drag.
+
+### Keyboard and editing basics for UIEngine controls (2026-11-17)
+
+From a comparison with standard toolkits; what is still open is the TODO "UIEngine controls: what standard
+toolkits have that ours don't". `Tests/UIEngine/KeyboardControlTests` covers each.
+
+- **TextBox**: Ctrl+Z undo, Ctrl+Y and Ctrl+Shift+Z redo, and Undo/Redo in its context menu. An edit is kept as
+  the text, caret and selection before it (`TextEditSnapshot`, 100 steps); typing, or deleting, again where the
+  last edit of that kind left the caret continues the same step, so a word undoes at once. Every edit goes
+  through `BeginEdit`/`EndEdit`; an edit that changed nothing keeps nothing. `SetText` clears the history (a
+  value from outside). Page Up/Page Down move a page of lines in a multiline box and to the start or end of a
+  single line, repeating while held; Ctrl+Home/End were already there. `MaximumLength` limits typing, Shift+Enter
+  and pasting (a paste is cut short), never `SetText`. `MaskCharacter` draws and measures `ShownText` -- the mask
+  repeated, index for index with `OriginalText`, so caret, selection and wrapping need nothing else; word rules
+  read it too, so a masked box is one word, and it never copies or cuts. `TrailingReservedWidth` keeps a strip at
+  the right free of text for a derived box (the number field's spinner).
+- **Button**: a tab stop while enabled (`TakesTabFocus`, which the inspector's row and section buttons turn off so
+  Tab keeps going field to field); a click still never focuses it. Focused, Enter or Space presses it (`Press`,
+  through `Element.RaiseClicked`) and it draws the focus mark. `Label` and `IconElement` no longer take focus, so
+  focusing a control lands on the control, not its label.
+- **ModalDialog**: `ModalDialogRequest.DefaultButtonIndex`, drawn bold, chosen by Enter. A key goes to the topmost
+  menu window first while focus is outside every menu window (`UiInputController.RouteKeyPressesToFocusedElement`),
+  so Enter reaches a dialog nothing in has focus yet; a focused text box keeps Enter (it submits).
+- **Toggle**: `IsIndeterminate` (`SetIndeterminate`, a bar in the checkbox); a click on it turns it on, `SetIsOn`
+  ends it. `ToggleList`'s All is on when every item is, off when none is, indeterminate otherwise.
+- **DropdownField**: closed, Space or Enter opens it and Up/Down choose the previous or next option (clamped,
+  raising `SelectionChanged`); Down no longer opens it. In any open list Home/End highlight the first or last
+  choosable option (`Dropdown.MoveHighlightToEnd`), except under a text box owner, which keeps them for its caret.
+- **NumericField**: focused, Up/Down step (repeating), Home sets the minimum and End the maximum (with Shift they
+  select text); optional spinner buttons (`Configure(..., showsSpinnerButtons: true)`) step from their top and
+  bottom halves. A step reads what is typed first, wheel included.
+- **Tooltips on keyboard focus**: the element Tab moved focus to shows its `TooltipText` under itself after the
+  hover delay, while the pointer rests on nothing with a tooltip of its own (`UiInputController.UpdateElementTooltip`).
+- The Controls tab shows each: a limited and a password text box, a number field with spinners, the button's
+  tooltip by Tab, ToggleList's indeterminate All, and the dialog's bold Replace.
+
 ### Component writes: write scopes and struct updaters (2026-11-03, scopes 2026-11-06)
 
 - **Two forms, one notification.** Every in-place write is versioned and observed, whichever form makes it.

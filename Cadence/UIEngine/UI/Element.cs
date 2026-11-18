@@ -1476,6 +1476,9 @@ public class Element(ElementServices services)
         siblings.Add(this);
     }
 
+    /// <summary>Raises Clicked as a click on the content would, for a control activated from the keyboard.</summary>
+    protected void RaiseClicked() => Clicked?.Invoke(this);
+
     private bool HandleContentClick(Point mousePosition)
     {
         var handled = OnContentClickAction(mousePosition);

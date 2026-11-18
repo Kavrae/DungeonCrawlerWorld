@@ -15,6 +15,26 @@ Global), each split High/Medium/Low priority. Landed work lives in `IMPLEMENTATI
 
 ### High Priority
 
+#### UIEngine controls: what standard toolkits have that ours don't
+
+Compared against WPF, WinForms, Qt and HTML form controls (2026-11-17). Landed from that comparison: text
+box undo/redo, paging, maximum length and mask; Enter on buttons and a dialog default button; an
+indeterminate toggle; dropdown Up/Down while closed and Home/End in the list; number-field spinner and
+keys; tooltips on keyboard focus (IMPLEMENTATION-NOTES "Keyboard and editing basics for UIEngine
+controls"). Still open:
+- **TextBox**: IME composition (a candidate window for languages typed through one) and spell-check.
+- **Button**: access keys (Alt+letter, the letter underlined).
+- **DropdownField**: type-ahead (a letter jumps to the next option starting with it), in the list and while closed.
+- **ListView**: Ctrl/Shift multi-select, resizing a column by dragging its header edge, reordering columns, and type-ahead.
+- **ListEditor**: drag to reorder, and keys (Ctrl+Up/Down to move the focused row, Delete to remove it).
+- **SplitPane**: moving the splitter from the keyboard, collapsing a pane with a double-click on it, and remembering its size.
+- **Folder**: opening and closing from the keyboard (Enter/Space on a focused icon), and an open/close animation.
+- **ModalDialog**: keeping Tab inside the dialog while it is open (check whether focus can leave it), and focusing its first control when it opens.
+- **Tooltip**: a setting for how long it stays shown.
+- **MultiChoiceField**: Up/Down while closed have no meaning for several choices -- decide whether Down should still open it (it does today).
+- **Missing controls**: radio buttons (a ToggleList with one choice), a slider, a progress bar and busy indicator (FractionBarElement half covers progress), a tree view, a tab strip as a control of its own, a date and time picker, a status bar, and a toolbar overflow menu.
+- **Across every control**: an accessibility layer (screen readers -- nothing exists), focus reachable everywhere by keyboard (a window can be finished without the mouse: WCAG 2.1.1), scaling with high-DPI and a user font-size setting (sizes are pixel constants: `RowHeight`, `WindowChrome`), and per-state styles in a theme (colours are static palette fields).
+
 #### Class exceptions: runtime class grants
 
 NPC classes come from spawn rules and fit two fixed class slots. The player's don't: a first class on
@@ -708,15 +728,6 @@ already updates. Investigate the pros and cons of adding events.
   would get simpler or cheaper. The outcome may be "keep polling".
 
 ### Low Priority
-
-#### Workshop: tidy the Controls tab
-
-`ControlGalleryTab` (`Cadence/Workshop`) grew one row per control as each was added, in no order, and is hard to read:
-captions and controls share colours that blend into the panel, and sizes vary row to row. Add every UIEngine control
-it is missing (`Toggle`, `ToggleList`, `TextBox`, `GridControl`, `Folder`, `FractionBarElement`, `TextDivider`,
-`Tooltip` on hover, the context menu, and the filter controls as each lands), sort them into headed groups (text
-entry, choice, lists, layout, feedback, filtering), give every caption and control readable colours from
-`WindowPalette` and one row height and caption width, and keep each wired to the status line.
 
 #### Partial module replacement
 

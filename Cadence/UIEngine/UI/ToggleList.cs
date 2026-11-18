@@ -10,8 +10,9 @@ public sealed record ToggleListItem(string Label, bool IsOn);
 
 /// <summary>A column of checkboxes, optionally headed by an "All" checkbox that the others sit indented under.</summary>
 /// <remarks>
-/// All is ticked exactly when every item is: ticking or unticking it does the same to every item, and ticking or unticking
-/// an item ticks or unticks All to match. Changed is raised once per click, after every checkbox shows the result; a caller
+/// All is ticked when every item is, unticked when none is, and indeterminate (a bar) when only some are: ticking or
+/// unticking it does the same to every item, an indeterminate All ticking them all, and ticking or unticking an item
+/// sets All to match. Changed is raised once per click, after every checkbox shows the result; a caller
 /// reads the items' states with IsItemOn, and shows states of its own with SetItemStates, which raises nothing.
 /// </remarks>
 public sealed class ToggleList(ElementServices services)
@@ -78,7 +79,7 @@ public sealed class ToggleList(ElementServices services)
             _itemToggles[index].SetIsOn(states[index]);
         }
 
-        AllToggle?.SetIsOn(AreAllItemsOn());
+        ShowAllToggleState();
     }
 
     /// <summary>Builds the checkboxes once ContentSize is real -- the same hook GridControl builds its row in.</summary>
@@ -90,7 +91,7 @@ public sealed class ToggleList(ElementServices services)
         var y = 0f;
         if (_allLabel is not null)
         {
-            AllToggle = CreateToggle(font, _allLabel, AreAllItemsStartingOn(), new Vector2(0, y), OnAllToggled);
+            AllToggle = CreateToggle(font, _allLabel, false, new Vector2(0, y), OnAllToggled);
             y += _rowHeight;
         }
 
@@ -100,6 +101,8 @@ public sealed class ToggleList(ElementServices services)
             _itemToggles.Add(CreateToggle(font, item.Label, item.IsOn, new Vector2(indent, y), _ => OnItemToggled()));
             y += _rowHeight;
         }
+
+        ShowAllToggleState();
     }
 
     private Toggle CreateToggle(SpriteFontBase font, string label, bool isOn, Vector2 position, Action<bool> onToggled)
@@ -129,11 +132,25 @@ public sealed class ToggleList(ElementServices services)
 
     private void OnItemToggled()
     {
-        AllToggle?.SetIsOn(AreAllItemsOn());
+        ShowAllToggleState();
         Changed?.Invoke();
     }
 
-    private bool AreAllItemsOn() => _itemToggles.Count > 0 && _itemToggles.TrueForAll(toggle => toggle.IsOn);
+    /// <summary>All shows on when every item is, off when none is, and indeterminate when only some are.</summary>
+    private void ShowAllToggleState()
+    {
+        if (AllToggle is not { } allToggle)
+        {
+            return;
+        }
 
-    private bool AreAllItemsStartingOn() => _items.Count > 0 && _items.All(item => item.IsOn);
+        var onCount = _itemToggles.Count(toggle => toggle.IsOn);
+        if (onCount > 0 && onCount < _itemToggles.Count)
+        {
+            allToggle.SetIndeterminate();
+            return;
+        }
+
+        allToggle.SetIsOn(onCount > 0);
+    }
 }

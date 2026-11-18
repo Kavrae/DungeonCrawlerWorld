@@ -62,10 +62,25 @@ public sealed class Toggle(ElementServices services)
 
         _label = null;
         CheckboxStyle = ToggleCheckboxStyle.Raised;
+        IsIndeterminate = false;
     }
 
+    /// <summary>Whether the toggle shows neither on nor off -- an "All" toggle over items some of which are on; IsOn is false meanwhile.</summary>
+    public bool IsIndeterminate { get; private set; }
+
     /// <summary>Shows isOn without notifying onToggled -- for a caller that keeps several toggles in step (an "All" toggle and the ones it covers).</summary>
-    public void SetIsOn(bool isOn) => IsOn = isOn;
+    public void SetIsOn(bool isOn)
+    {
+        IsOn = isOn;
+        IsIndeterminate = false;
+    }
+
+    /// <summary>Shows the toggle as neither on nor off, without notifying onToggled; a click or SetIsOn ends it, a click turning it on.</summary>
+    public void SetIndeterminate()
+    {
+        IsOn = false;
+        IsIndeterminate = true;
+    }
 
     /// <summary>Sets the state, the checkbox's colours and what a flip calls; called after CreateElement, before the toggle is added.</summary>
     public void Configure(bool defaultOn, Color onColor, Color offColor, Action<bool> onToggled)
@@ -74,10 +89,11 @@ public sealed class Toggle(ElementServices services)
         _offColor = offColor;
         _onToggled = onToggled;
         IsOn = defaultOn;
+        IsIndeterminate = false;
         Enabled = true;
     }
 
-    /// <summary>Shows text centred in the space after the checkbox, in font and color (dimmed while disabled); a later call changes the text shown.</summary>
+    /// <summary>Shows text from the left of the space after the checkbox, in font and color (dimmed while disabled); a later call changes the text shown.</summary>
     public Label SetLabel(string text, SpriteFontBase font, Color color)
     {
         if (_label is { } label)
@@ -95,7 +111,6 @@ public sealed class Toggle(ElementServices services)
             Text = new TextOptions { Text = text, TextColor = color },
         });
         label.DisabledTextColor = color * DisabledOpacity;
-        label.IsCentered = true;
         label.SetFont(font);
         _label = label;
         AddChild(label);
@@ -113,7 +128,8 @@ public sealed class Toggle(ElementServices services)
 
     private void Flip()
     {
-        IsOn = !IsOn;
+        IsOn = IsIndeterminate || !IsOn;
+        IsIndeterminate = false;
         _onToggled?.Invoke(IsOn);
     }
 
@@ -152,6 +168,10 @@ public sealed class Toggle(ElementServices services)
             {
                 CrossRenderer.Draw(spriteBatch, checkboxCorner, checkboxSize, CheckMarkInset, CheckMarkThickness, WindowPalette.BodyTextColor * flatOpacity);
             }
+            else if (IsIndeterminate)
+            {
+                spriteBatch.FillRectangle(IndeterminateBar(checkboxRectangle), WindowPalette.BodyTextColor * flatOpacity);
+            }
 
             return;
         }
@@ -164,6 +184,18 @@ public sealed class Toggle(ElementServices services)
         {
             CrossRenderer.Draw(spriteBatch, checkboxCorner, checkboxSize, CheckMarkInset, CheckMarkThickness, CheckMarkColor * opacity);
         }
+        else if (IsIndeterminate)
+        {
+            spriteBatch.FillRectangle(IndeterminateBar(checkboxRectangle), CheckMarkColor * opacity);
+        }
+    }
+
+    /// <summary>The indeterminate mark: a bar across the middle of the checkbox, inside the mark inset.</summary>
+    private static Rectangle IndeterminateBar(Rectangle checkboxRectangle)
+    {
+        var inset = (int)CheckMarkInset + 1;
+        var thickness = (int)CheckMarkThickness;
+        return new Rectangle(checkboxRectangle.X + inset, checkboxRectangle.Y + (checkboxRectangle.Height - thickness) / 2, checkboxRectangle.Width - inset * 2, thickness);
     }
 
     /// <summary>The checkbox square at the content's left edge past ContentIndent, centred vertically, its side set by CheckboxStyle.</summary>

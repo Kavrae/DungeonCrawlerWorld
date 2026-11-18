@@ -78,7 +78,7 @@ public sealed class DropdownTests
     }
 
     [TestMethod]
-    public void Keyboard_DownOpensTheFocusedField_UpDownMoveTheHighlight_EnterChooses()
+    public void Keyboard_SpaceOpensTheFocusedField_UpDownMoveTheHighlight_EnterChooses()
     {
         var harness = new ControlTestHarness();
         var field = AddField(harness, new Vector2(100, 100), Colours, selectedIndex: 0);
@@ -86,8 +86,8 @@ public sealed class DropdownTests
         harness.Click(field);
         Assert.IsTrue(field.IsFocused);
 
-        harness.Press(Keys.Down);
-        Assert.IsTrue(field.IsListOpen, "Down on the focused field opens its list.");
+        harness.Press(Keys.Space);
+        Assert.IsTrue(field.IsListOpen, "Space on the focused field opens its list.");
         Assert.AreEqual(0, harness.Dropdowns.Menu.HighlightedIndex);
 
         harness.Press(Keys.Down);

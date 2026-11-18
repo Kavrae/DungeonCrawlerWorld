@@ -10,6 +10,9 @@ public static class WindowChrome
     /// <summary>Generic inset between an element's own edges and its children's content area.</summary>
     public static float Padding = 4f;
 
+    /// <summary>How far a control's text sits in from its content edges -- a text box's, a dropdown's, a multi-choice's -- so every field's text starts at the same place.</summary>
+    public static int ControlTextInset = 3;
+
     /// <summary>Generic space between two sibling controls.</summary>
     public static float Gap = 4f;
 

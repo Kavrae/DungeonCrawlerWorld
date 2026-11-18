@@ -1,5 +1,6 @@
 using FontStashSharp;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Input;
 using UIEngine.Rendering;
 using UIEngine.UI.Chrome;
 using UIEngine.UI.ColorPalettes;
@@ -104,6 +105,7 @@ public sealed class Button(ElementServices services)
         TextColor = options.Text?.TextColor ?? WindowPalette.BodyTextColor;
         Enabled = true;
         ShowsHoverHighlight = true;
+        TakesTabFocus = true;
         IsSelected = false;
 
         _restingBorderStyle = options.Chrome?.BorderStyle ?? BorderStyle.Outset;
@@ -160,6 +162,45 @@ public sealed class Button(ElementServices services)
 
     /// <summary>Where a key label sits from the button's outer top-left corner.</summary>
     private static readonly Vector2 KeyLabelPadding = new(4f, 2f);
+
+    /// <summary>Whether Tab stops on the button while it is enabled; true unless its holder keeps Tab for its fields (an inspector row's revert button). A click never focuses a button either way.</summary>
+    public bool TakesTabFocus { get; set; }
+
+    public override bool IsTabStop => Enabled && TakesTabFocus;
+
+    /// <summary>Presses the button as a click would: raises Clicked, nothing while disabled.</summary>
+    public void Press()
+    {
+        if (Enabled)
+        {
+            RaiseClicked();
+        }
+    }
+
+    protected override void OnActivated() => Press();
+
+    /// <summary>Enter presses a focused button, as Space does.</summary>
+    protected override bool OnKeyPressAction(Keys key)
+    {
+        if (key != Keys.Enter)
+        {
+            return base.OnKeyPressAction(key);
+        }
+
+        Press();
+        return true;
+    }
+
+    /// <summary>Draws the focus mark over the button while it holds focus.</summary>
+    public override void Draw(GameTime gameTime)
+    {
+        base.Draw(gameTime);
+
+        if (IsFocused)
+        {
+            DrawFocusIndicator(Rectangle);
+        }
+    }
 
     protected override void OnPressedChanged() => ApplyBorderStyle();
 

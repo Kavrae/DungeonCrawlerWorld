@@ -11,7 +11,8 @@ namespace UIEngine.UI;
 /// <summary>
 /// A control showing the chosen one of a list of choices, which opens the shared Dropdown under itself to choose another
 /// -- an enum, a type picker or a reference to another record. A press on it opens the list, and a press on it while its
-/// list is open closes it. Focused, Space, Enter or Down opens it too, and the dropdown's own Up/Down/Enter choose.
+/// list is open closes it. Focused, Space or Enter opens it too and Up/Down choose the previous or next option without
+/// opening it; in the open list, Up/Down/Home/End move the highlight and Enter chooses.
 /// </summary>
 /// <remarks>Its choices are set with SetOptions, before or after Initialize.</remarks>
 public sealed class DropdownField(ElementServices services, DropdownController dropdowns)
@@ -20,7 +21,7 @@ public sealed class DropdownField(ElementServices services, DropdownController d
     /// <summary>How tall the open list may grow before it scrolls.</summary>
     public const float ListMaximumHeight = 300f;
 
-    private const float HorizontalTextInset = 4f;
+    private static float HorizontalTextInset => WindowChrome.ControlTextInset;
     private const int ArrowWidth = 9;
     private const int ArrowRightInset = 6;
 
@@ -49,6 +50,7 @@ public sealed class DropdownField(ElementServices services, DropdownController d
         SelectedIndex = -1;
         Placeholder = string.Empty;
         _contentState.BackgroundColor = options.Content?.ContentColor ?? Color.White;
+        _canContainChildren = false;
     }
 
     /// <summary>Replaces the choices, with selectedIndex chosen (-1 for none).</summary>
@@ -100,13 +102,26 @@ public sealed class DropdownField(ElementServices services, DropdownController d
 
     protected override bool OnKeyPressAction(Keys key)
     {
-        if (key is Keys.Space or Keys.Enter or Keys.Down && !IsListOpen)
+        if (IsListOpen)
         {
-            ToggleList();
-            return true;
+            return base.OnKeyPressAction(key);
         }
 
-        return base.OnKeyPressAction(key);
+        switch (key)
+        {
+            case Keys.Space or Keys.Enter:
+                ToggleList();
+                return true;
+            case Keys.Up or Keys.Down:
+                if (_options.Length > 0)
+                {
+                    Choose(System.Math.Clamp(SelectedIndex + (key == Keys.Down ? 1 : -1), 0, _options.Length - 1));
+                }
+
+                return true;
+            default:
+                return base.OnKeyPressAction(key);
+        }
     }
 
     private void ToggleList()

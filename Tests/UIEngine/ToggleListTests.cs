@@ -84,4 +84,15 @@ public sealed class ToggleListTests
         Assert.IsNull(list.AllToggle);
         Assert.AreEqual(list.ContentAbsolutePosition.X, list.ItemToggle(0).AbsolutePosition.X, 0.5f);
     }
+
+    [TestMethod]
+    public void EveryItemsLabel_IsDrawnFromItsLeftEdge_AtTheSamePlace()
+    {
+        var (_, list) = BuildList("All", true, false, true);
+
+        var labels = Enumerable.Range(0, list.ItemCount).Select(index => list.ItemToggle(index).ChildElements.OfType<Label>().Single()).ToArray();
+
+        Assert.IsTrue(labels.All(label => !label.IsCentered));
+        Assert.IsTrue(labels.All(label => label.AbsolutePosition.X == labels[0].AbsolutePosition.X));
+    }
 }

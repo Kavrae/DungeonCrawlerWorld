@@ -164,4 +164,12 @@ public sealed class ListViewAndModalDialogTests
         CollectionAssert.AreEqual(new[] { "Cancel" }, answers);
         Assert.IsFalse(harness.Layers.IsMenuModeActive);
     }
+
+    [TestMethod]
+    public void ARowsClipboardText_IsItsCells_TabSeparated()
+    {
+        var row = new ListViewRow(["Wand", "3", string.Empty, "rare"]);
+
+        Assert.AreEqual("Wand\t3\t\trare", ListView.ClipboardTextOf(row));
+    }
 }

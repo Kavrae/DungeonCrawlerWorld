@@ -57,7 +57,7 @@ public abstract class PressableElement(ElementServices services) : Element(servi
         return true;
     }
 
-    /// <summary>What the keyboard activation does; nothing by default, since a Button never takes focus.</summary>
+    /// <summary>What the keyboard activation does; nothing by default.</summary>
     protected virtual void OnActivated() { }
 
     /// <summary>Whether the nearest pressable control holding element is disabled; false when none holds it.</summary>

@@ -1,5 +1,6 @@
 using FontStashSharp;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Input;
 using UIEngine.Fonts;
 using UIEngine.UI.Chrome;
 using UIEngine.UI.ColorPalettes;
@@ -21,12 +22,17 @@ public sealed record ModalDialogRequest(string Title, IReadOnlyList<DialogButton
 
     /// <summary>Fills the body window with content of the caller's own -- a list to pick a replacement from.</summary>
     public Action<Window>? FillBody { get; init; }
+
+    /// <summary>The button Enter chooses while nothing in the dialog takes Enter itself; null for none.</summary>
+    public int? DefaultButtonIndex { get; init; }
 }
 
 /// <summary>
 /// A question the rest of the window set waits on -- a body and a row of buttons, opened as a menu window so everything
 /// behind it is dimmed and out of reach until one is chosen. Exactly one button's action runs: the one chosen, or the
-/// cancel button's when the dialog is closed with Escape or its close button.
+/// cancel button's when the dialog is closed with Escape or its close button. Enter chooses the default button, if the request
+/// names one (its label bold), unless something focused in the dialog takes Enter itself (a text box submits, a focused
+/// button presses itself).
 /// </summary>
 /// <remarks>Opened only through Show. A chosen button closes the dialog on the update after the click, then runs.</remarks>
 public sealed class ModalDialog(ElementServices services)
@@ -57,6 +63,11 @@ public sealed class ModalDialog(ElementServices services)
         ArgumentNullException.ThrowIfNull(request);
         ArgumentOutOfRangeException.ThrowIfNegative(request.CancelButtonIndex);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(request.CancelButtonIndex, request.Buttons.Count);
+        if (request.DefaultButtonIndex is { } defaultButtonIndex)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(defaultButtonIndex);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(defaultButtonIndex, request.Buttons.Count);
+        }
 
         var dialog = elementPoolService.CreateElement<ModalDialog>(null, new ElementOptions
         {
@@ -117,7 +128,8 @@ public sealed class ModalDialog(ElementServices services)
             {
                 Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, _request.BodySize.Y + BodyGap), Size = new Vector2(buttonWidths[buttonIndex], ButtonHeight), DisplayMode = ElementDisplayMode.Fixed },
             });
-            button.SetText(_request.Buttons[buttonIndex].Label);
+            var buttonLabel = button.SetText(_request.Buttons[buttonIndex].Label);
+            buttonLabel.IsBold = buttonIndex == _request.DefaultButtonIndex;
             button.Clicked += _ => _pendingChoice = capturedIndex;
             AddChild(button);
             _buttons.Add(button);
@@ -139,6 +151,18 @@ public sealed class ModalDialog(ElementServices services)
 
     private void Centre(Rectangle screenBounds) =>
         SetRelativePosition(new Vector2(screenBounds.Center.X - CurrentSize.X / 2f, screenBounds.Center.Y - CurrentSize.Y / 2f));
+
+    /// <summary>Enter chooses the default button, when the request names one.</summary>
+    protected override bool OnKeyPressAction(Keys key)
+    {
+        if (key == Keys.Enter && _request.DefaultButtonIndex is { } defaultButtonIndex)
+        {
+            Choose(defaultButtonIndex);
+            return true;
+        }
+
+        return base.OnKeyPressAction(key);
+    }
 
     /// <summary>Chooses buttonIndex as a click on it would.</summary>
     public void Choose(int buttonIndex)

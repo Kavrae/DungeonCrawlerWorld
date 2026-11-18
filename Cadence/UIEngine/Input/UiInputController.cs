@@ -455,7 +455,7 @@ public sealed class UiInputController
         return tookKey;
     }
 
-    private static readonly Keys[] DropdownNavigationKeys = [Keys.Up, Keys.Down, Keys.Enter, Keys.Left, Keys.Right];
+    private static readonly Keys[] DropdownNavigationKeys = [Keys.Up, Keys.Down, Keys.Home, Keys.End, Keys.Enter, Keys.Left, Keys.Right];
 
     /// <summary>
     /// Routes the whole keyboard state to whichever element is focused, once per frame (see
@@ -509,6 +509,7 @@ public sealed class UiInputController
         }
 
         CycleFocus(direction);
+        _keyboardFocusedElement = _focusedElement;
     }
 
     /// <summary>Every input handler's own keys, each frame -- unconditional and edge-triggered like Tab and Escape (no menu-mode gating), told whether a TextBox has focus so typed characters stay typed text.</summary>
@@ -797,7 +798,8 @@ public sealed class UiInputController
     /// <summary>
     /// Shows the TooltipText of the button or element under a resting pointer once it has stayed there for
     /// PopupChrome.HoverTooltipDelayFrames, below and right of the cursor where it was then (flipped where it wouldn't fit);
-    /// any press, drag or window interaction hides it and starts the wait again.
+    /// any press, drag or window interaction hides it and starts the wait again. While the pointer rests on nothing with a
+    /// tooltip, the element Tab moved focus to shows its own after the same wait, under the element.
     /// </summary>
     private void UpdateElementTooltip(MouseState mouseState)
     {
@@ -810,16 +812,28 @@ public sealed class UiInputController
             && mouseState.RightButton == ButtonState.Released
             && _activeInteraction.Kind == ElementDragInteractionKind.None;
         var hoveredElement = isPointerResting ? TooltipOwnerOf(_hoveredInteraction) : null;
+        var keyboardFocusedElement = hoveredElement?.TooltipText is null
+            && _keyboardFocusedElement is { TooltipText: not null, IsVisible: true } focused
+            && ReferenceEquals(focused, _focusedElement)
+                ? focused
+                : null;
+        var tooltipElement = keyboardFocusedElement ?? hoveredElement;
 
-        if (!ReferenceEquals(hoveredElement, _tooltipHoveredElement))
+        if (!ReferenceEquals(tooltipElement, _tooltipHoveredElement))
         {
-            _tooltipHoveredElement = hoveredElement;
+            _tooltipHoveredElement = tooltipElement;
             _tooltipHoveredFrames = 0;
         }
 
         if (_tooltipHoveredElement?.TooltipText is not { } tooltipText || ++_tooltipHoveredFrames < PopupChrome.HoverTooltipDelayFrames)
         {
             _tooltipController.Hide(this);
+            return;
+        }
+
+        if (keyboardFocusedElement is not null)
+        {
+            _tooltipController.Show(this, keyboardFocusedElement.Rectangle, PopupAnchor.South, PopupChrome.ElementTooltipGap, PopupChrome.HoverPopupMaximumSize, tooltipText);
             return;
         }
 
@@ -855,6 +869,9 @@ public sealed class UiInputController
 
         return pressable;
     }
+
+    /// <summary>The element Tab last moved focus to, whose tooltip shows while it keeps focus and the pointer rests on nothing with a tooltip of its own.</summary>
+    private Element? _keyboardFocusedElement;
 
     /// <summary>Where the pointer was when the element tooltip showing now appeared -- it stays there, below and right of the cursor, while the pointer moves within the element.</summary>
     private Point _tooltipCursorPosition;
@@ -1677,10 +1694,22 @@ public sealed class UiInputController
     /// While a dropdown list is open no key goes past the focused element: the open list has the keyboard, so nothing
     /// around it acts on a key meant for it. Skipped when the keyboard is unchanged since last frame -- nothing can be
     /// newly pressed then, and GetPressedKeys allocates an array every call.
+    ///
+    /// While a menu window is open and focus is outside every menu window (nothing focused, or something behind), a key is
+    /// offered to the topmost menu window first -- a dialog's Enter presses its default button though nothing in it has
+    /// focus yet -- and goes on to the focused element only when the menu window doesn't take it.
     /// </remarks>
     private void RouteKeyPressesToFocusedElement(KeyboardState keyboardState)
     {
-        if (_focusedElement is null || keyboardState == _previousKeyboardState)
+        if (keyboardState == _previousKeyboardState)
+        {
+            return;
+        }
+
+        var unfocusedMenuWindow = _layers.TopmostMenuWindow is { } menuWindow && (_focusedElement is null || !_layers.IsMenuWindow(_focusedElement.RootElement))
+            ? menuWindow
+            : null;
+        if (_focusedElement is null && unfocusedMenuWindow is null)
         {
             return;
         }
@@ -1688,6 +1717,11 @@ public sealed class UiInputController
         foreach (var key in keyboardState.GetPressedKeys())
         {
             if (key == Keys.Tab || _previousKeyboardState.IsKeyDown(key))
+            {
+                continue;
+            }
+
+            if (unfocusedMenuWindow is not null && unfocusedMenuWindow.HandleKeyPress(key))
             {
                 continue;
             }

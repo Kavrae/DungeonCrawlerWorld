@@ -35,7 +35,7 @@ public sealed class Label(ElementServices services) : Element(services)
     /// <summary>The colour the text is drawn in while the control holding the label is disabled; grey unless set.</summary>
     public Color DisabledTextColor { get; set; }
 
-    /// <summary>Whether the text's ink is centred in the label both ways (a button's or a toggle's label filling its space), rather than its line drawn from the left.</summary>
+    /// <summary>Whether the text's ink is centred in the label both ways (a button's label filling its space), rather than its line drawn from the left.</summary>
     public bool IsCentered { get; set; }
 
     /// <summary>Whether the text is outlined to read over any background (a key label over an icon); faded rather than recoloured while its control is disabled.</summary>

@@ -19,7 +19,9 @@ namespace UIEngine.UI;
 /// click-drag via UiInputController, Ctrl+A), Ctrl+word-deletion, key-repeat on held
 /// Backspace/Delete/arrows, typing/Backspace/Delete replacing an active selection, and
 /// Ctrl+C/Ctrl+X/Ctrl+V clipboard support (via FNA.NET's own SDL3 clipboard wrapper -- no
-/// new dependency) -- see the Text Input Enhanced Features TODO. Enter submits
+/// new dependency), Ctrl+Z undo and Ctrl+Y/Ctrl+Shift+Z redo (a run of typing or deleting is
+/// one step), Page Up/Page Down (a page of lines, or the start and end of a single line), an
+/// optional MaximumLength and an optional MaskCharacter. Enter submits
 /// (TextSubmitted) and, if a sibling TextBox exists under the same parent, asks
 /// UiInputController to hand focus to it. Shift+Enter inserts a newline at the caret
 /// instead (replacing any active selection first), but only when Multiline -- a
@@ -99,6 +101,27 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
     private int _consecutiveClickCount;
     private int _lastClickIndex = -1;
 
+    /// <summary>How many steps Ctrl+Z can go back; the oldest is dropped past it.</summary>
+    private const int MaximumUndoSteps = 100;
+
+    /// <summary>The text, caret and selection one edit and its undo restore.</summary>
+    private readonly record struct TextEditSnapshot(string Text, int CaretIndex, int? SelectionAnchor);
+
+    /// <summary>What an edit was, so a run of typing or of deleting at one place undoes as one step.</summary>
+    private enum TextEditKind : byte
+    {
+        None,
+        Typing,
+        Deleting,
+        Other,
+    }
+
+    private readonly List<TextEditSnapshot> _undoSnapshots = [];
+    private readonly List<TextEditSnapshot> _redoSnapshots = [];
+    private TextEditSnapshot? _snapshotBeforeEdit;
+    private TextEditKind _lastEditKind;
+    private int _caretIndexAfterLastEdit = -1;
+
     /// <summary>Raised when Enter (or Shift+Enter on a non-multiline box) submits the current text.</summary>
     public event Action<string>? TextSubmitted;
 
@@ -112,6 +135,42 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
 
     /// <summary>True to show text the user can select and copy but not change: typing, Backspace, Delete, Cut and Paste do nothing, and SetText still replaces it.</summary>
     public bool IsReadOnly { get; set; }
+
+    /// <summary>The most characters typing and pasting may leave in the box; null for no limit. SetText is not limited.</summary>
+    public int? MaximumLength { get; set; }
+
+    /// <summary>
+    /// The character every character of the text is shown as (a password); null shows the text itself. A masked box is
+    /// one word to Ctrl+arrows and double-click, and never copies or cuts its text to the clipboard.
+    /// </summary>
+    public char? MaskCharacter
+    {
+        get;
+        set
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            ReformatDisplayText();
+        }
+    }
+
+    /// <summary>Whether Ctrl+Z has an edit to take back.</summary>
+    public bool CanUndo => AcceptsEdits && _undoSnapshots.Count > 0;
+
+    /// <summary>Whether Ctrl+Y has an undone edit to put back.</summary>
+    public bool CanRedo => AcceptsEdits && _redoSnapshots.Count > 0;
+
+    /// <summary>The text as drawn and measured: OriginalText, or as many mask characters when masked, so every index lines up with OriginalText's.</summary>
+    private string ShownText => MaskCharacter is { } mask
+        ? _maskedText.Get((OriginalText.Length, mask), 0, static (key, _) => new string(key.Mask, key.Length))
+        : OriginalText;
+
+    /// <summary>ShownText's mask characters, kept until the length or the mask changes.</summary>
+    private readonly KeyedCache<(int Length, char Mask), string> _maskedText = new();
 
     /// <summary>Whether typing, Backspace, Delete, Cut and Paste change the text: enabled and not read-only.</summary>
     protected bool AcceptsEdits => Enabled && !IsReadOnly;
@@ -145,7 +204,10 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
         GhostText = null;
         GhostTextColor = WindowPalette.GhostText;
         IsReadOnly = false;
+        MaximumLength = null;
+        MaskCharacter = null;
         Enabled = true;
+        ClearUndoHistory();
     }
 
     public override void Initialize()
@@ -185,17 +247,108 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
 
     protected override void OnTextInputAction(char character)
     {
-        if (!AcceptsEdits || char.IsControl(character) || !AcceptsCharacter(character))
+        if (!AcceptsEdits || char.IsControl(character) || !AcceptsCharacter(character) || RoomForInsertedCharacters() < 1)
         {
             return;
         }
 
+        BeginEdit();
         TryDeleteSelection();
 
         var insertIndex = _caretIndex;
         SetTextAndAutoSize(OriginalText[..insertIndex] + character + OriginalText[insertIndex..]);
         MoveCaretTo(insertIndex + 1);
+        EndEdit(TextEditKind.Typing);
     }
+
+    /// <summary>How many characters may be inserted in place of the selection before MaximumLength is reached.</summary>
+    private int RoomForInsertedCharacters() => MaximumLength is { } maximumLength
+        ? System.Math.Max(0, maximumLength - (OriginalText.Length - SelectionLength))
+        : int.MaxValue;
+
+    private int SelectionLength => _selectionAnchor is { } anchor ? System.Math.Abs(anchor - _caretIndex) : 0;
+
+    private TextEditSnapshot CurrentSnapshot() => new(OriginalText, _caretIndex, _selectionAnchor);
+
+    /// <summary>Remembers the text before an edit, for EndEdit to keep as an undo step if the edit changes it.</summary>
+    private void BeginEdit() => _snapshotBeforeEdit = CurrentSnapshot();
+
+    /// <summary>
+    /// Keeps the text from before the edit BeginEdit started as an undo step, unless the edit changed nothing or continues
+    /// the last one -- typing, or deleting, again where the last edit of that kind left the caret, with nothing selected.
+    /// Any new edit clears what Ctrl+Y could put back.
+    /// </summary>
+    private void EndEdit(TextEditKind kind)
+    {
+        if (_snapshotBeforeEdit is not { } before)
+        {
+            return;
+        }
+
+        _snapshotBeforeEdit = null;
+        if (before.Text == OriginalText)
+        {
+            return;
+        }
+
+        var continuesLastEdit = kind != TextEditKind.Other
+            && kind == _lastEditKind
+            && before.CaretIndex == _caretIndexAfterLastEdit
+            && before.SelectionAnchor is null
+            && _undoSnapshots.Count > 0;
+        if (!continuesLastEdit)
+        {
+            PushSnapshot(_undoSnapshots, before);
+        }
+
+        _redoSnapshots.Clear();
+        _lastEditKind = kind;
+        _caretIndexAfterLastEdit = _caretIndex;
+    }
+
+    private static void PushSnapshot(List<TextEditSnapshot> snapshots, TextEditSnapshot snapshot)
+    {
+        if (snapshots.Count == MaximumUndoSteps)
+        {
+            snapshots.RemoveAt(0);
+        }
+
+        snapshots.Add(snapshot);
+    }
+
+    /// <summary>Takes back the last edit (Ctrl+Z), restoring its text, caret and selection.</summary>
+    public void Undo() => StepThroughHistory(_undoSnapshots, _redoSnapshots);
+
+    /// <summary>Puts back the last edit Undo took back (Ctrl+Y or Ctrl+Shift+Z).</summary>
+    public void Redo() => StepThroughHistory(_redoSnapshots, _undoSnapshots);
+
+    private void StepThroughHistory(List<TextEditSnapshot> takenFrom, List<TextEditSnapshot> keptIn)
+    {
+        if (!AcceptsEdits || takenFrom.Count == 0)
+        {
+            return;
+        }
+
+        var restored = takenFrom[^1];
+        takenFrom.RemoveAt(takenFrom.Count - 1);
+        PushSnapshot(keptIn, CurrentSnapshot());
+        SetTextAndAutoSize(restored.Text);
+        MoveCaretTo(restored.CaretIndex);
+        _selectionAnchor = restored.SelectionAnchor;
+        _lastEditKind = TextEditKind.None;
+    }
+
+    private void ClearUndoHistory()
+    {
+        _undoSnapshots.Clear();
+        _redoSnapshots.Clear();
+        _snapshotBeforeEdit = null;
+        _lastEditKind = TextEditKind.None;
+        _caretIndexAfterLastEdit = -1;
+    }
+
+    /// <summary>Raises TextSubmitted with the current text, as Enter does, leaving focus where it is.</summary>
+    public void Submit() => TextSubmitted?.Invoke(OriginalText);
 
     /// <summary>A focused text box keeps every key it is pressed with: its own keys (OnHotkeysAction) are the caret's and the text's, and none goes on to what holds it.</summary>
     protected override bool OnKeyPressAction(Keys key) => true;
@@ -209,19 +362,21 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
         {
             if (shiftHeld && _multiline)
             {
-                if (!AcceptsEdits)
+                if (!AcceptsEdits || RoomForInsertedCharacters() < 1)
                 {
                     return;
                 }
 
+                BeginEdit();
                 TryDeleteSelection();
                 var insertIndex = _caretIndex;
                 SetTextAndAutoSize(OriginalText[..insertIndex] + "\n" + OriginalText[insertIndex..]);
                 MoveCaretTo(insertIndex + 1);
+                EndEdit(TextEditKind.Typing);
             }
             else
             {
-                TextSubmitted?.Invoke(OriginalText);
+                Submit();
 
                 var next = ParentElement?.NextFocusableDescendant(this);
                 if (next is not null)
@@ -248,10 +403,7 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
 
         if (ctrlHeld && WasKeyPressed(keyboardState, previousKeyboardState, Keys.X))
         {
-            if (CopySelectionToClipboard() && AcceptsEdits)
-            {
-                TryDeleteSelection();
-            }
+            CutSelection();
             return;
         }
 
@@ -265,39 +417,50 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
             return;
         }
 
+        if (ctrlHeld && WasKeyPressed(keyboardState, previousKeyboardState, Keys.Z))
+        {
+            if (shiftHeld)
+            {
+                Redo();
+            }
+            else
+            {
+                Undo();
+            }
+
+            return;
+        }
+
+        if (ctrlHeld && WasKeyPressed(keyboardState, previousKeyboardState, Keys.Y))
+        {
+            Redo();
+            return;
+        }
+
         // Backspace/Delete/Left/Right/Up/Down all repeat while held (ShouldFire), instead of the
         // edit-hook's own edge-triggered HandleKeyPress -- see ShouldFire's own doc comment for
         // why Backspace/Delete moved here alongside the arrows rather than staying split across
         // two different input hooks with two different repeat behaviors.
-        if (ShouldFire(Keys.Back, keyboardState) && AcceptsEdits && !TryDeleteSelection())
+        if (ShouldFire(Keys.Back, keyboardState) && AcceptsEdits)
         {
-            if (ctrlHeld && _caretIndex > 0)
+            BeginEdit();
+            if (!TryDeleteSelection())
             {
-                var wordStart = FindPreviousWordBoundary(_caretIndex);
-                SetTextAndAutoSize(OriginalText[..wordStart] + OriginalText[_caretIndex..]);
-                MoveCaretTo(wordStart);
+                DeleteBeforeCaret(wholeWord: ctrlHeld);
             }
-            else if (_caretIndex > 0)
-            {
-                var backspaceIndex = _caretIndex - 1;
-                SetTextAndAutoSize(OriginalText[..backspaceIndex] + OriginalText[_caretIndex..]);
-                MoveCaretTo(backspaceIndex);
-            }
+
+            EndEdit(TextEditKind.Deleting);
         }
 
-        if (ShouldFire(Keys.Delete, keyboardState) && AcceptsEdits && !TryDeleteSelection())
+        if (ShouldFire(Keys.Delete, keyboardState) && AcceptsEdits)
         {
-            if (ctrlHeld && _caretIndex < OriginalText.Length)
+            BeginEdit();
+            if (!TryDeleteSelection())
             {
-                var wordEnd = FindNextWordBoundary(_caretIndex);
-                SetTextAndAutoSize(OriginalText[.._caretIndex] + OriginalText[wordEnd..]);
-                MoveCaretTo(_caretIndex);
+                DeleteAfterCaret(wholeWord: ctrlHeld);
             }
-            else if (_caretIndex < OriginalText.Length)
-            {
-                SetTextAndAutoSize(OriginalText[.._caretIndex] + OriginalText[(_caretIndex + 1)..]);
-                MoveCaretTo(_caretIndex);
-            }
+
+            EndEdit(TextEditKind.Deleting);
         }
 
         if (ShouldFire(Keys.Left, keyboardState))
@@ -320,6 +483,16 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
             MoveCaretPossiblyExtendingSelection(ComputeVerticalCaretMove(1), shiftHeld, preserveDesiredPixelX: true);
         }
 
+        if (ShouldFire(Keys.PageUp, keyboardState))
+        {
+            MoveCaretPossiblyExtendingSelection(_multiline ? ComputeVerticalCaretMove(-LinesPerPage) : 0, shiftHeld, preserveDesiredPixelX: _multiline);
+        }
+
+        if (ShouldFire(Keys.PageDown, keyboardState))
+        {
+            MoveCaretPossiblyExtendingSelection(_multiline ? ComputeVerticalCaretMove(LinesPerPage) : OriginalText.Length, shiftHeld, preserveDesiredPixelX: _multiline);
+        }
+
         if (WasKeyPressed(keyboardState, previousKeyboardState, Keys.Home))
         {
             MoveCaretPossiblyExtendingSelection(ctrlHeld ? 0 : CurrentLineStart(), shiftHeld);
@@ -329,6 +502,53 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
         {
             MoveCaretPossiblyExtendingSelection(ctrlHeld ? OriginalText.Length : CurrentLineEnd(), shiftHeld);
         }
+    }
+
+    /// <summary>How many lines Page Up and Page Down move a multiline box's caret: the lines it shows at once, at least one.</summary>
+    private int LinesPerPage => System.Math.Max(1, (int)((_contentState.Size.Y - LinePadding * 2) / ContentFont.LineHeight));
+
+    /// <summary>Backspace: deletes the character before the caret, or with Ctrl the word.</summary>
+    private void DeleteBeforeCaret(bool wholeWord)
+    {
+        if (_caretIndex == 0)
+        {
+            return;
+        }
+
+        var deleteStart = wholeWord ? FindPreviousWordBoundary(_caretIndex) : _caretIndex - 1;
+        SetTextAndAutoSize(OriginalText[..deleteStart] + OriginalText[_caretIndex..]);
+        MoveCaretTo(deleteStart);
+    }
+
+    /// <summary>Delete: deletes the character after the caret, or with Ctrl the word.</summary>
+    private void DeleteAfterCaret(bool wholeWord)
+    {
+        if (_caretIndex == OriginalText.Length)
+        {
+            return;
+        }
+
+        var deleteEnd = wholeWord ? FindNextWordBoundary(_caretIndex) : _caretIndex + 1;
+        SetTextAndAutoSize(OriginalText[.._caretIndex] + OriginalText[deleteEnd..]);
+        MoveCaretTo(_caretIndex);
+    }
+
+    /// <summary>Copies the selection to the clipboard and deletes it, as one undo step; nothing when the box takes no edits or nothing could be copied.</summary>
+    private void CutSelection()
+    {
+        if (!AcceptsEdits)
+        {
+            CopySelectionToClipboard();
+            return;
+        }
+
+        BeginEdit();
+        if (CopySelectionToClipboard())
+        {
+            TryDeleteSelection();
+        }
+
+        EndEdit(TextEditKind.Other);
     }
 
     /// <summary>
@@ -377,7 +597,7 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
     /// </summary>
     private bool CopySelectionToClipboard()
     {
-        if (_selectionAnchor is not { } anchor || anchor == _caretIndex)
+        if (MaskCharacter is not null || _selectionAnchor is not { } anchor || anchor == _caretIndex)
         {
             return false;
         }
@@ -427,20 +647,28 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
             }
         }
 
+        var room = RoomForInsertedCharacters();
+        if (filtered.Length > room)
+        {
+            filtered.Length = room;
+        }
+
         if (filtered.Length == 0)
         {
             return;
         }
 
+        BeginEdit();
         TryDeleteSelection();
 
         var insertIndex = _caretIndex;
         var insertedText = filtered.ToString();
         SetTextAndAutoSize(OriginalText[..insertIndex] + insertedText + OriginalText[insertIndex..]);
         MoveCaretTo(insertIndex + insertedText.Length);
+        EndEdit(TextEditKind.Other);
     }
 
-    /// <summary>Opens a Cut/Copy/Paste/Select All context menu at mousePosition -- see BuildContextMenuOptions for the actual option list. No-op if no ContextMenuController was wired (test setups that don't build one, matching cursorTextContent's own optional-dependency convention above).</summary>
+    /// <summary>Opens an Undo/Redo/Cut/Copy/Paste/Select All context menu at mousePosition -- see BuildContextMenuOptions for the actual option list. No-op if no ContextMenuController was wired (test setups that don't build one, matching cursorTextContent's own optional-dependency convention above).</summary>
     protected override bool OnRightClickTapAction(Point mousePosition)
     {
         contextMenuController?.Open(new Vector2(mousePosition.X, mousePosition.Y), BuildContextMenuOptions());
@@ -448,29 +676,25 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
     }
 
     /// <summary>
-    /// Cut/Copy/Paste/Select All, with the same standard Windows hotkey text shown alongside
+    /// Undo/Redo/Cut/Copy/Paste/Select All, with the same standard Windows hotkey text shown alongside
     /// each label -- internal, not private, so tests can inspect the exact option list/enabled
     /// state without a live ContextMenuController. Each OnSelect calls the exact same private
-    /// method its own Ctrl+X/C/V/A handler in OnHotkeysAction already does -- this is a second
-    /// trigger for existing behavior, not a second implementation of it. Cut/Copy are enabled
-    /// only with an active selection (the same check TryDeleteSelection/CopySelectionToClipboard
+    /// method its own Ctrl+Z/Y/X/C/V/A handler in OnHotkeysAction already does -- this is a second
+    /// trigger for existing behavior, not a second implementation of it. Undo/Redo are enabled while there is a step to take, Cut/Copy
+    /// only with an active selection in an unmasked box (the same check TryDeleteSelection/CopySelectionToClipboard
     /// already gate on), Paste only when the clipboard actually has text, and Select All whenever
     /// there's anything to select.
     /// </summary>
     internal IReadOnlyList<DropdownOption> BuildContextMenuOptions()
     {
-        var hasSelection = _selectionAnchor is { } anchor && anchor != _caretIndex;
+        var hasCopyableSelection = _selectionAnchor is { } anchor && anchor != _caretIndex && MaskCharacter is null;
 
         return
         [
-            new DropdownOption("Cut", "Ctrl+X", hasSelection && AcceptsEdits, () =>
-            {
-                if (CopySelectionToClipboard())
-                {
-                    TryDeleteSelection();
-                }
-            }),
-            new DropdownOption("Copy", "Ctrl+C", hasSelection, () => CopySelectionToClipboard()),
+            new DropdownOption("Undo", "Ctrl+Z", CanUndo, Undo),
+            new DropdownOption("Redo", "Ctrl+Y", CanRedo, Redo),
+            new DropdownOption("Cut", "Ctrl+X", hasCopyableSelection && AcceptsEdits, CutSelection),
+            new DropdownOption("Copy", "Ctrl+C", hasCopyableSelection, () => CopySelectionToClipboard()),
             new DropdownOption("Paste", "Ctrl+V", AcceptsEdits && SDL.SDL_HasClipboardText(), PasteFromClipboard),
             new DropdownOption("Select All", "Ctrl+A", OriginalText.Length > 0, () =>
             {
@@ -491,7 +715,7 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
     /// (even when its own action wouldn't fire, e.g. Backspace at index 0) so held-frame
     /// tracking stays accurate regardless of what the caller does with the result.
     /// </summary>
-    private bool ShouldFire(Keys key, KeyboardState keyboardState)
+    protected bool ShouldFire(Keys key, KeyboardState keyboardState)
     {
         if (!keyboardState.IsKeyDown(key))
         {
@@ -607,26 +831,26 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
     private void SelectWord(int clickedCharacterIndex)
     {
         var index = clickedCharacterIndex;
-        if (index > 0 && (index >= OriginalText.Length || OriginalText[index] == '\n') && OriginalText[index - 1] != '\n')
+        if (index > 0 && (index >= ShownText.Length || ShownText[index] == '\n') && ShownText[index - 1] != '\n')
         {
             index--;
         }
 
-        if (index >= OriginalText.Length || OriginalText[index] == '\n')
+        if (index >= ShownText.Length || ShownText[index] == '\n')
         {
             MoveCaretTo(index);
             return;
         }
 
-        var isWhiteSpace = char.IsWhiteSpace(OriginalText[index]);
+        var isWhiteSpace = char.IsWhiteSpace(ShownText[index]);
         var wordStart = index;
-        while (wordStart > 0 && IsSameRun(OriginalText[wordStart - 1], isWhiteSpace))
+        while (wordStart > 0 && IsSameRun(ShownText[wordStart - 1], isWhiteSpace))
         {
             wordStart--;
         }
 
         var wordEnd = index + 1;
-        while (wordEnd < OriginalText.Length && IsSameRun(OriginalText[wordEnd], isWhiteSpace))
+        while (wordEnd < ShownText.Length && IsSameRun(ShownText[wordEnd], isWhiteSpace))
         {
             wordEnd++;
         }
@@ -712,21 +936,21 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
     {
         var textLength = OriginalText.Length;
         var caretIndex = System.Math.Min(_caretIndex, textLength);
-        var maximumWidth = _contentState.Size.X - ContentPadding.X * 2;
+        var maximumWidth = TextAreaWidth;
         _visibleStartIndex = System.Math.Clamp(_visibleStartIndex, 0, textLength);
 
         if (caretIndex < _visibleStartIndex)
         {
             _visibleStartIndex = caretIndex;
         }
-        else if (MeasureOriginalText(_visibleStartIndex, caretIndex) > maximumWidth)
+        else if (MeasureShownText(_visibleStartIndex, caretIndex) > maximumWidth)
         {
             var low = _visibleStartIndex;
             var high = caretIndex;
             while (low < high)
             {
                 var mid = low + (high - low) / 2;
-                if (MeasureOriginalText(mid, caretIndex) > maximumWidth)
+                if (MeasureShownText(mid, caretIndex) > maximumWidth)
                 {
                     low = mid + 1;
                 }
@@ -740,7 +964,7 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
             return;
         }
 
-        if (_visibleStartIndex == 0 || MeasureOriginalText(_visibleStartIndex, textLength) > maximumWidth)
+        if (_visibleStartIndex == 0 || MeasureShownText(_visibleStartIndex, textLength) > maximumWidth)
         {
             return;
         }
@@ -750,7 +974,7 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
         while (retreatLow < retreatHigh)
         {
             var mid = retreatLow + (retreatHigh - retreatLow) / 2;
-            if (MeasureOriginalText(mid, textLength) > maximumWidth)
+            if (MeasureShownText(mid, textLength) > maximumWidth)
             {
                 retreatLow = mid + 1;
             }
@@ -829,7 +1053,7 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
     private float CaretPixelXWithinLine(int lineIndex, int caretIndex)
     {
         var lineStart = _lineSpans[lineIndex].Start;
-        return MeasureOriginalText(lineStart, caretIndex);
+        return MeasureShownText(lineStart, caretIndex);
     }
 
     /// <summary>
@@ -847,7 +1071,7 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
         while (low < high)
         {
             var mid = low + (high - low + 1) / 2;
-            if (MeasureOriginalText(lineStart, lineStart + mid) > targetX)
+            if (MeasureShownText(lineStart, lineStart + mid) > targetX)
             {
                 high = mid - 1;
             }
@@ -862,8 +1086,8 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
             return low;
         }
 
-        var widthBefore = MeasureOriginalText(lineStart, lineStart + low);
-        var widthAfter = MeasureOriginalText(lineStart, lineStart + low + 1);
+        var widthBefore = MeasureShownText(lineStart, lineStart + low);
+        var widthAfter = MeasureShownText(lineStart, lineStart + low + 1);
         return targetX - widthBefore > widthAfter - targetX ? low + 1 : low;
     }
 
@@ -872,11 +1096,11 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
     {
         var index = fromIndex;
 
-        while (index > 0 && char.IsWhiteSpace(OriginalText[index - 1]))
+        while (index > 0 && char.IsWhiteSpace(ShownText[index - 1]))
         {
             index--;
         }
-        while (index > 0 && !char.IsWhiteSpace(OriginalText[index - 1]))
+        while (index > 0 && !char.IsWhiteSpace(ShownText[index - 1]))
         {
             index--;
         }
@@ -888,13 +1112,13 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
     private int FindNextWordBoundary(int fromIndex)
     {
         var index = fromIndex;
-        var length = OriginalText.Length;
+        var length = ShownText.Length;
 
-        while (index < length && char.IsWhiteSpace(OriginalText[index]))
+        while (index < length && char.IsWhiteSpace(ShownText[index]))
         {
             index++;
         }
-        while (index < length && !char.IsWhiteSpace(OriginalText[index]))
+        while (index < length && !char.IsWhiteSpace(ShownText[index]))
         {
             index++;
         }
@@ -902,14 +1126,21 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
         return index;
     }
 
+    /// <summary>How wide the text may be drawn: the content width less what TrailingReservedWidth keeps at the right.</summary>
+    private float TextAreaWidth => _contentState.Size.X - ContentPadding.X * 2 - TrailingReservedWidth;
+
+    /// <summary>Width kept free of text at the content's right edge, for something a derived box draws there (a number field's spinner); none by default.</summary>
+    protected virtual float TrailingReservedWidth => 0f;
+
     /// <summary>Whether a typed or pasted character goes into the text -- every printable one by default; a number field takes only what a number is written with.</summary>
     protected virtual bool AcceptsCharacter(char character) => true;
 
-    /// <summary>Replaces the whole text, clearing any selection and putting the caret at the end -- for a value set from outside the box.</summary>
+    /// <summary>Replaces the whole text, clearing any selection, the undo history and putting the caret at the end -- for a value set from outside the box.</summary>
     public void SetText(string text)
     {
         SetTextAndAutoSize(text);
         MoveCaretTo(text.Length);
+        ClearUndoHistory();
     }
 
     private void SetTextAndAutoSize(string newText)
@@ -957,7 +1188,7 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
         }
         else
         {
-            var maximumWidth = _contentState.Size.X - ContentPadding.X * 2;
+            var maximumWidth = TextAreaWidth;
             var visibleText = GetVisibleWindowText(DisplayText.FormattedText, _visibleStartIndex, maximumWidth);
             LabelRenderer.Draw(spriteBatch, ContentFont, visibleText, new Vector2(LinePadding, LinePadding), TextColor);
         }
@@ -976,7 +1207,7 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
 
         var selectionStart = System.Math.Min(anchor, _caretIndex);
         var selectionEnd = System.Math.Max(anchor, _caretIndex);
-        var maximumWidth = _contentState.Size.X - ContentPadding.X * 2;
+        var maximumWidth = TextAreaWidth;
         var selectionRectangles = _selectionRectangles.Get(
             (OriginalText, DisplayText.FormattedText, _multiline, _visibleStartIndex, selectionStart, selectionEnd, maximumWidth, ContentFont),
             this,
@@ -999,8 +1230,8 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
             return [];
         }
 
-        var startX = System.Math.Min(MeasureOriginalText(_visibleStartIndex, visibleSelectionStart), maximumWidth);
-        var endX = System.Math.Min(MeasureOriginalText(_visibleStartIndex, selectionEnd), maximumWidth);
+        var startX = System.Math.Min(MeasureShownText(_visibleStartIndex, visibleSelectionStart), maximumWidth);
+        var endX = System.Math.Min(MeasureShownText(_visibleStartIndex, selectionEnd), maximumWidth);
 
         if (endX <= startX)
         {
@@ -1028,8 +1259,8 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
                 continue;
             }
 
-            var startX = MeasureOriginalText(lineStart, rangeStart);
-            var endX = MeasureOriginalText(lineStart, rangeEnd);
+            var startX = MeasureShownText(lineStart, rangeStart);
+            var endX = MeasureShownText(lineStart, rangeEnd);
             var y = ContentFont.LineHeight * lineIndex;
 
             rectangles.Add(new Rectangle((int)(LinePadding + startX), (int)(LinePadding + y), (int)(endX - startX), (int)ContentFont.LineHeight));
@@ -1101,9 +1332,9 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
     private SpriteFontBase? _contentTextMeasurerFont;
     private FontStashTextMeasurer? _contentTextMeasurer;
 
-    /// <summary>Pixel width of OriginalText[startIndex..endIndex], measured as a span so no substring is allocated.</summary>
-    private float MeasureOriginalText(int startIndex, int endIndex) =>
-        ContentTextMeasurer.MeasureWidth(OriginalText.AsSpan(startIndex, endIndex - startIndex));
+    /// <summary>Pixel width of ShownText[startIndex..endIndex], measured as a span so no substring is allocated.</summary>
+    private float MeasureShownText(int startIndex, int endIndex) =>
+        ContentTextMeasurer.MeasureWidth(ShownText.AsSpan(startIndex, endIndex - startIndex));
 
     /// <summary>
     /// A thin vertical bar at the caret's current pixel position, only while focused and mid-blink
@@ -1141,12 +1372,12 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
         {
             var lineIndex = FindLineIndexFor(_caretIndex);
             var lineStart = _lineSpans[lineIndex].Start;
-            var x = MeasureOriginalText(lineStart, _caretIndex);
+            var x = MeasureShownText(lineStart, _caretIndex);
             var y = ContentFont.LineHeight * lineIndex;
             return new Vector2(LinePadding + x, LinePadding + y);
         }
 
-        var visibleX = MeasureOriginalText(_visibleStartIndex, _caretIndex);
+        var visibleX = MeasureShownText(_visibleStartIndex, _caretIndex);
         return new Vector2(LinePadding + visibleX, LinePadding);
     }
 
@@ -1197,9 +1428,9 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
         // that word-wraps at all; OriginalText can't contain '\n' outside it either way (Shift+Enter
         // is gated behind _multiline, see OnHotkeysAction), so the segment loop below still only
         // ever produces one segment for a single-line box.
-        var maximumWidth = _multiline ? _contentState.Size.X - ContentPadding.X * 2 : float.MaxValue;
+        var maximumWidth = _multiline ? TextAreaWidth : float.MaxValue;
         DisplayText = _wrappedLines.Get(
-            (OriginalText, ContentFont, maximumWidth),
+            (OriginalText, MaskCharacter, ContentFont, maximumWidth),
             this,
             static (key, textBox) => textBox.WrapOriginalText(key.MaximumWidth));
 
@@ -1210,7 +1441,7 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
     }
 
     /// <summary>ReformatDisplayText's last wrap, kept with the _lineSpans it filled until the text, the font or the width changes.</summary>
-    private readonly KeyedCache<(string Text, SpriteFontBase Font, float MaximumWidth), DisplayText> _wrappedLines = new();
+    private readonly KeyedCache<(string Text, char? MaskCharacter, SpriteFontBase Font, float MaximumWidth), DisplayText> _wrappedLines = new();
 
     /// <summary>Refills _lineSpans from OriginalText wrapped to maximumWidth and returns the lines joined for drawing.</summary>
     private DisplayText WrapOriginalText(float maximumWidth)
@@ -1241,7 +1472,7 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
                 stringBuilder.Append('\n');
             }
             var (start, length) = _lineSpans[index];
-            stringBuilder.Append(OriginalText, start, length);
+            stringBuilder.Append(ShownText, start, length);
         }
 
         return new DisplayText(stringBuilder.ToString(), _lineSpans.Count);
@@ -1271,7 +1502,7 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
             var spaceIndex = OriginalText.IndexOf(' ', wordStart, segmentEnd - wordStart);
             var wordEnd = spaceIndex < 0 ? segmentEnd : spaceIndex;
             var isFirstWordOnLine = wordStart == lineStart;
-            var wordWidth = MeasureOriginalText(wordStart, wordEnd);
+            var wordWidth = MeasureShownText(wordStart, wordEnd);
 
             if (!isFirstWordOnLine)
             {
@@ -1337,7 +1568,7 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
         while (low < high)
         {
             var mid = low + (high - low + 1) / 2;
-            if (MeasureOriginalText(wordStart, mid) > maximumWidth)
+            if (MeasureShownText(wordStart, mid) > maximumWidth)
             {
                 high = mid - 1;
             }
