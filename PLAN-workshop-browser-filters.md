@@ -5,7 +5,7 @@ drafts, the records with errors, what differs from master, one mod's records, or
 search box, in the 340-wide column the browser has.
 
 **Status:** written 2026-11-15 from the TODO entry's research and a read of the code. Decisions 1-10 were confirmed
-the same day. Phases 0-1 built and checked 2026-11-15, the button reading "Filter" until a funnel glyph is chosen; Phase 2 built
+the same day. Phases 0-1 built and checked 2026-11-15, the button reading ⛛ (U+26DB, from the Symbola fallback font: Unicode has no funnel; chosen 2026-11-17); Phase 2 built
 and checked 2026-11-15; Phase 3 built and checked 2026-11-15; Phase 4 built and checked 2026-11-15 -- complete -- and the
 "After the last phase" notes written (IMPLEMENTATION-NOTES "Workshop browser filters", CLAUDE.md, TODO.md).
 

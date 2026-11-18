@@ -29,7 +29,8 @@ namespace UIEngine.UI.Filtering;
 public sealed class ListFilterButton(ElementServices services, DropdownController dropdowns)
     : Element(services)
 {
-    public const string DefaultLabel = "Filter";
+    /// <summary>The button's label: a funnel-like wedge (U+26DB, from the fallback symbol font) -- Unicode has no funnel.</summary>
+    public const string DefaultLabel = "⛛";
     public const string ClearFiltersLabel = "Clear filters";
 
     private IListFilterMenuSource? _source;
@@ -159,7 +160,14 @@ public sealed class ListFilterButton(ElementServices services, DropdownControlle
         return options;
     }
 
-    private static string LabelFor(string label, int checkedCount) => checkedCount == 0 ? label : $"{label} ({checkedCount})";
+    /// <summary>What a button labelled label reads with checkedCount choices checked: the label alone, else the label and the count ("⛛ 2").</summary>
+    public static string LabelFor(string label, int checkedCount) => checkedCount == 0 ? label : $"{label} {checkedCount}";
+
+    /// <summary>Room either side of the button's widest label.</summary>
+    private const float LabelPadding = 2f;
+
+    /// <summary>How wide a host makes the button in font for a filter of choiceCount choices: its widest label (every choice checked) and a little room either side.</summary>
+    public static float WidthFor(SpriteFontBase font, int choiceCount) => font.MeasureString(LabelFor(DefaultLabel, choiceCount)).X + LabelPadding * 2;
 
     /// <summary>Draws the focus mark over everything else while focused.</summary>
     public override void Draw(GameTime gameTime)

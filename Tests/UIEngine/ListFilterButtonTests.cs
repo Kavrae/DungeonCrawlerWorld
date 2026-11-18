@@ -86,7 +86,8 @@ public sealed class ListFilterButtonTests
         Assert.IsTrue(((Toggle)Row(harness, RipeRow)).IsOn);
         CollectionAssert.AreEqual(new[] { null, "2", "2", "1", "0" }, Counts(harness), "A checked row shows no count; the others count what checking them would leave.");
         Assert.IsTrue(Row(harness, ClearRow).Enabled);
-        Assert.AreEqual($"{ListFilterButton.DefaultLabel} (1)", button.DrawnLabel);
+        Assert.AreEqual(ListFilterButton.LabelFor(ListFilterButton.DefaultLabel, 1), button.DrawnLabel);
+        Assert.AreEqual("⛛ 1", button.DrawnLabel);
     }
 
     [TestMethod]

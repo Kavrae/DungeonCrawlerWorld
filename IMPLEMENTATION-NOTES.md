@@ -3608,7 +3608,7 @@ Items, Actions, Auras, Map and Sprites -- narrows its list by a filter menu besi
 - **Engine-side, for the inventory too.** The model and both controls are UIEngine's (`Cadence/UIEngine/UI/Filtering`)
   and name no IDE or game concept, so the game's inventory can host them under `GridControl` unchanged:
   `ListFilter<TItem>` (groups, a `ListFilterSelection` -- a bit per choice, a version, a change event, its ids out and
-  in -- matching, and the count a flip of one choice would leave), `ListFilterButton` (opens the menu in the shared
+  in -- matching, and the count a flip of one choice would leave), `ListFilterButton` (reading ⛛, U+26DB -- Unicode has no funnel, and the solid triangles read as a dropdown arrow -- then the count checked, "⛛ 2"; opens the menu in the shared
   `Dropdown`, a tab stop keyed like `MultiChoiceField`) and `ListFilterChips` (the checked choices as a wrapping row,
   Clear last, no height while empty, its height through `SetSize` so the host hears `Resized`). The model holds no
   items: the host passes its list whenever it asks (`ListFilterMenuSource<TItem>`), and matching one item allocates

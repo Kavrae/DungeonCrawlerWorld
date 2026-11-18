@@ -50,7 +50,6 @@ public sealed class SpritesTab : IIdeTab
 
     private const float SearchBoxHeight = 26f;
     private const float SearchGap = 4f;
-    private const float FilterButtonPadding = 14f;
     private const float MaximumChipsHeight = 400f;
     private const string FilterButtonTooltip = "Show only the entries that match: checked choices under one heading combine as the heading says, and every heading must hold";
 
@@ -199,7 +198,7 @@ public sealed class SpritesTab : IIdeTab
             }
         };
         var font = _uiEngine.FontService.GetFont(UIEngine.UI.Chrome.FontChrome.DefaultFontSize);
-        _filterButtonWidth = font.MeasureString($"{ListFilterButton.DefaultLabel} ({filter.Choices.Count})").X + FilterButtonPadding;
+        _filterButtonWidth = ListFilterButton.WidthFor(font, filter.Choices.Count);
         return filter;
     }
 
@@ -281,7 +280,7 @@ public sealed class SpritesTab : IIdeTab
 
     private Vector2 ListSize() => new(_entriesWindow.ContentSize.X, Math.Max(SearchBoxHeight, _entriesWindow.ContentSize.Y - ListTop()));
 
-    private Vector2 SearchBoxSize() => new(_entriesWindow.ContentSize.X - _filterButtonWidth - SearchGap, SearchBoxHeight);
+    private Vector2 SearchBoxSize() => new(_entriesWindow.ContentSize.X - _filterButtonWidth, SearchBoxHeight);
 
     private Vector2 FilterButtonPosition() => new(_entriesWindow.ContentSize.X - _filterButtonWidth, 0);
 

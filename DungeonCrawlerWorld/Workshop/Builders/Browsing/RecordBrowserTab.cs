@@ -84,9 +84,6 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
 
     private const float NewRecordButtonWidth = 56f;
 
-    /// <summary>Room around the filter button's widest label ("Filter (9)").</summary>
-    private const float FilterButtonPadding = 14f;
-
     private const string FilterButtonTooltip = "Show only the records that match: checked choices under one heading combine as the heading says, and every heading must hold";
     private const float EmptyListMessageHeight = 44f;
     private const float ClearFiltersButtonWidth = 96f;
@@ -824,7 +821,7 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
 
         filter.Selection.Changed += OnFilterChanged;
         var font = _context.UiEngine.FontService.GetFont(UIEngine.UI.Chrome.FontChrome.DefaultFontSize);
-        _filterButtonWidth = font.MeasureString($"{ListFilterButton.DefaultLabel} ({filter.Choices.Count})").X + FilterButtonPadding;
+        _filterButtonWidth = ListFilterButton.WidthFor(font, filter.Choices.Count);
     }
 
     private void OnFilterChanged(ListFilterSelection selection)
@@ -1194,7 +1191,7 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
     /// <summary>The New button's place: the right end of the control rows.</summary>
     private Vector2 NewRecordButtonPosition() => new(ControlRowsInset + ControlRowsWidth - NewRecordButtonWidth, 0);
 
-    /// <summary>The search box's size: the control rows' width, less the filter button and the New button, each with a gap, when the tab has them.</summary>
+    /// <summary>The search box's size: the control rows' width, less the filter button (against it) and the New button (a gap before it), when the tab has them.</summary>
     private Vector2 SearchBoxSize() => new(ControlRowsWidth - NewRecordButtonSpace - FilterButtonSpace, SearchBoxHeight);
 
     /// <summary>The filter button's place: at the search box's right end, left of the New button.</summary>
@@ -1202,7 +1199,8 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
 
     private float NewRecordButtonSpace => NewRecordLabel is null ? 0f : NewRecordButtonWidth + SearchGap;
 
-    private float FilterButtonSpace => _filter is null ? 0f : _filterButtonWidth + SearchGap;
+    /// <summary>The filter button's share of the search row: its width, with no gap, so it sits against the search box.</summary>
+    private float FilterButtonSpace => _filter is null ? 0f : _filterButtonWidth;
 
     private Vector2 PreviewPosition(Rectangle area) =>
         HasInspector
