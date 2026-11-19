@@ -1,3 +1,5 @@
+using Engine.ECS.Properties;
+
 namespace Game.Modules.Auras.Components;
 
 /// <summary>One aura an entity radiates: which aura, how strongly and how far, and which toggle holds it.</summary>
@@ -14,17 +16,22 @@ namespace Game.Modules.Auras.Components;
 /// <param name="power">The aura's value at the source.</param>
 /// <param name="size">How many tiles from the source it reaches.</param>
 /// <param name="heldGrantKey">The key of the toggle holding this source (EffectContext.HeldGrantKey), or 0 for a source no toggle holds.</param>
-public struct AuraSourceComponent(byte auraId, ushort power, byte size, uint heldGrantKey = AuraSourceComponent.NoHeldGrantKey)
+[DescribedComponent]
+public partial struct AuraSourceComponent(byte auraId, ushort power, byte size, uint heldGrantKey = AuraSourceComponent.NoHeldGrantKey)
 {
     /// <summary>HeldGrantKey of a source no toggle holds.</summary>
     public const uint NoHeldGrantKey = 0;
 
+    [ReadOnlyProperty]
+    [PropertyMeaning(GamePropertyMeanings.AuraId)]
     public byte AuraId { get; set; } = auraId;
+    [ReadOnlyProperty]
     public byte Size { get; set; } = size;
+    [ReadOnlyProperty]
     public ushort Power { get; set; } = power;
 
     /// <summary>The key of the toggle holding this source, or NoHeldGrantKey. Only that toggle removes it.</summary>
-    public uint HeldGrantKey { get; } = heldGrantKey;
-
-    public override readonly string ToString() => $"AuraId : {AuraId}\nPower : {Power}\nSize : {Size}\nHeldGrantKey : {HeldGrantKey}";
+    [PropertyMeaning(GamePropertyMeanings.HeldGrantKey)]
+    [ReadOnlyProperty]
+    public uint HeldGrantKey { get; init; } = heldGrantKey;
 }

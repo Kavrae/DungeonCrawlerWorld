@@ -1,4 +1,5 @@
 using Engine.ECS.Entities;
+using Engine.ECS.Properties;
 using Game.World;
 
 namespace Game.Modules.Death.Components;
@@ -12,7 +13,7 @@ namespace Game.Modules.Death.Components;
 /// who may loot it for LootRights.ExclusiveLootFrames; None when no entity had damaged it.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public readonly record struct DeadComponent(ActionSource KilledBy, long DiedAtFrame, EntityKey LootOwnerEntityKey = default)
+[DescribedComponent]
+public readonly partial record struct DeadComponent(ActionSource KilledBy, [property: PropertyMeaning(ComponentPropertyMeaningNames.Frame)] long DiedAtFrame, EntityKey LootOwnerEntityKey = default)
 {
-    public override readonly string ToString() => $"KilledBy : {KilledBy}\nDiedAtFrame : {DiedAtFrame}\nLootOwnerEntityKey : {LootOwnerEntityKey}";
 }

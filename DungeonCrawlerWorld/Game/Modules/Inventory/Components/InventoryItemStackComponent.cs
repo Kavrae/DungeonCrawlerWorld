@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Properties;
 using Engine.ECS.Systems;
 
 namespace Game.Modules.Inventory.Components;
@@ -45,16 +46,20 @@ namespace Game.Modules.Inventory.Components;
 /// when they end on the same frame. It is a scheduled timer: ItemCooldownSystem returns the stack's units to an
 /// interchangeable ready stack when it ends. FrameDeadline.Never when the units aren't cooling down.
 /// </remarks>
-public struct InventoryItemStackComponent(Guid itemDefinitionId, ushort quantity, ItemDefinition? overrideDefinition = null, bool isDivergent = false, uint cooldownReadyAtFrame = FrameDeadline.Never) : IKeyedScheduledTimer
+[DescribedComponent]
+public partial struct InventoryItemStackComponent(Guid itemDefinitionId, ushort quantity, ItemDefinition? overrideDefinition = null, bool isDivergent = false, uint cooldownReadyAtFrame = FrameDeadline.Never) : IKeyedScheduledTimer
 {
     /// <summary>Which item this is, as an interned 2-byte handle (see ItemIds).</summary>
-    public ushort ItemId { get; } = ItemIds.IdFor(itemDefinitionId);
+    [PropertyMeaning(GamePropertyMeanings.ItemId)]
+    [ReadOnlyProperty]
+    public ushort ItemId { get; init; } = ItemIds.IdFor(itemDefinitionId);
 
     /// <summary>The item definition id ItemId stands for -- what every caller still reads and compares.</summary>
     public readonly Guid ItemDefinitionId => ItemIds.DefinitionIdOf(ItemId);
 
     /// <summary>Hands out the next stack instance id. A session counter rather than a Guid: this is an addressing key with no determinism requirement (see this component's own doc comment), and 16 bytes per stack bought nothing over 4.</summary>
-    private static uint NextStackInstanceId() => (uint)System.Threading.Interlocked.Increment(ref _lastStackInstanceId);
+    /// <remarks>Public for a snapshot restore, which issues a restored stack a fresh id (decision 17).</remarks>
+    public static uint NextStackInstanceId() => (uint)System.Threading.Interlocked.Increment(ref _lastStackInstanceId);
 
     /// <summary>Hands out the next acquisition sequence number. Its own counter, because TryTransferStack re-stamps a looted stack without changing its identity.</summary>
     public static uint NextAcquiredSequence() => (uint)System.Threading.Interlocked.Increment(ref _lastAcquiredSequence);
@@ -64,7 +69,9 @@ public struct InventoryItemStackComponent(Guid itemDefinitionId, ushort quantity
     /// <summary>0 is "no stack", so the first id handed out is 1.</summary>
     private static int _lastStackInstanceId;
 
-    public uint StackInstanceId { get; } = NextStackInstanceId();
+    [PropertyMeaning(GamePropertyMeanings.StackInstanceId)]
+    [ReadOnlyProperty]
+    public uint StackInstanceId { get; init; } = NextStackInstanceId();
 
     /// <summary>When this stack was acquired, as a session counter rather than a timestamp: the "recently acquired" sort only needs the order, and a counter is 4 bytes to a timestamp's 8 with no clock read per stack.</summary>
     public uint AcquiredSequence { get; set; } = NextAcquiredSequence();
@@ -76,6 +83,7 @@ public struct InventoryItemStackComponent(Guid itemDefinitionId, ushort quantity
     public bool IsDivergent { get; set; } = isDivergent;
 
     /// <summary>The frame the units' cooldown ends, or FrameDeadline.Never when they aren't cooling down.</summary>
+    [PropertyMeaning(ComponentPropertyMeaningNames.Frame)]
     public uint CooldownReadyAtFrame { get; set; } = cooldownReadyAtFrame;
 
     private uint _timerWheelMark;
@@ -91,7 +99,4 @@ public struct InventoryItemStackComponent(Guid itemDefinitionId, ushort quantity
     uint IScheduledTimer.NextTickFrame { readonly get => CooldownReadyAtFrame; set => CooldownReadyAtFrame = value; }
 
     uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
-
-    public override readonly string ToString() =>
-        $"ItemDefinitionId : {ItemDefinitionId}\nStackInstanceId : {StackInstanceId}\nAcquiredSequence : {AcquiredSequence}\nQuantity : {Quantity}\nIsDivergent : {IsDivergent}\nCooldownReadyAtFrame : {CooldownReadyAtFrame}";
 }

@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Entities;
+using Engine.ECS.Properties;
 using Engine.ECS.Relationships;
 
 namespace Engine.ECS.Components;
@@ -113,6 +114,7 @@ public sealed class ComponentManager
         var relatedSources = new MultiComponentPool<RelatedSourceComponent<TLink>>(_initialEntityCapacity, initialCapacity ?? _initialComponentCapacity);
         AddPool<TLink>(links);
         AddPool<RelatedSourceComponent<TLink>>(relatedSources, isRelatedSource: true);
+        ComponentPropertyAccessOf<RelatedSourceComponent<TLink>>.Register(RelatedSourceComponentPropertyAccess<TLink>.Instance);
 
         var relationship = new Relationship<TLink>(spec, links, relatedSources, Keys, DestroyingEntityIds, _initialEntityCapacity);
         _relationshipsByLinkType.Add(typeof(TLink), relationship);
@@ -326,8 +328,11 @@ public sealed class ComponentManager
     /// <summary>Every registered pool, in registration order: the order RemoveAllComponents removes in.</summary>
     public IReadOnlyList<IComponentPool> PoolsInRegistrationOrder => _poolsInRegistrationOrder;
 
+    /// <summary>The pool registered for componentType, for tooling that names a component by its Type (inspection, Admin Mode's edits).</summary>
+    public bool TryGetPool(Type componentType, [NotNullWhen(true)] out IComponentPool? pool) => _componentPools.TryGetValue(componentType, out pool);
+
     /// <summary> All registered component pools</summary>
-    /// <remarks> For inspection tooling (e.g. Diagnostics/ComponentInspector). </remarks>
+    /// <remarks> For diagnostics tooling (ComponentMemoryTracker); inspection reads PoolsInRegistrationOrder through each pool's property table. </remarks>
     public Dictionary<Type, IComponentPool>.ValueCollection AllPools => _componentPools.Values;
 
     /// <summary>Grows every pool to accept entity ids below newMaximumEntityCount.</summary>

@@ -3917,3 +3917,104 @@ toolkits have that ours don't". `Tests/UIEngine/KeyboardControlTests` covers eac
 - **The other conventions this pass settled:** a `*State` class is a bag of public fields for one or two collaborators
   (`ElementGeometryState`'s doc comment, with `PointerState`'s single-writer exception), and UIEngine's options bags
   (`ElementOptions` and its parts) are `init`-only.
+- **Every component is described** (2026-11-18, "Component property tables" below): `[DescribedComponent]` on a
+  `partial` struct. A get-only member that names the instance (a Multi pool's timer or instance key, what the pool holds
+  one of per entity) stays `{ get; }`; any other value a constructor sets is `{ get; init; }`, so a table can write it
+  through `with`. A settable member something else is indexed by or rebuilt from (a keyed timer's key, an aura source,
+  `TransformComponent`, the tier, the spawn record) is `[ReadOnlyProperty]`. Private state is read by a described
+  property or marked `[NotAProperty]` (a timer wheel's mark needs neither).
+
+### Component property tables (2026-11-18)
+
+`PLAN-generated-component-property-access.md`. One description per component for inspection, editing, saves and
+diagnostics, generated at build time; nothing on the frame reads it.
+
+- **What a table is.** `Engine.ECS.Properties`: a `ComponentPropertyTable` of ordered `ComponentPropertyDescriptor`s
+  (stable name, `ComponentPropertyKind`, `ComponentPropertyMeaning`, flags `ReadOnly`/`NotSaved`/`NotShown`/`Optional`/
+  `Derived`, a nested type's table or an indexed one's row) and a traversal: `ComponentPropertyAccess<T>.Read(in T,
+  ComponentPropertyVisitor)` -- one call per property, integers as `long` and numbers as `double`, no boxing, no
+  strings -- and `Write(ref T, path, in ComponentPropertyValue)`, which refuses (returns false, nothing written) a
+  read-only member, a value out of its type's range, an undeclared enum or flag value, or a path that names no value.
+  A path is the property index, then one index per nested or indexed level.
+- **The generator** (`Cadence/Analyzers/ComponentProperties`, `ComponentPropertyTableGenerator`) emits a nested
+  `PropertyAccess` inside every `[DescribedComponent]` or `[DescribedValue]` partial struct and one module initializer
+  per assembly filling `ComponentPropertyAccessOf<T>.Access` for each component (a mod's assembly registers itself when
+  `ModuleLoader` first constructs one of its modules; the slot doesn't keep a collectible context alive). Members: every
+  public instance property and field, plus private ones marked `[ComponentProperty]`, less `[NotAProperty]`. Settable by
+  a public setter (assigned) or `init` (written through `with`); get-only is read-only; a get-only property with no
+  backing field is `Derived` (read-only, not saved). `CAD0002`: a member whose type is none of the kinds, a described
+  struct, a `[DescribedByHand]` struct or a `[DescribedDefinition]` class -- or private state no described property
+  reads. `CAD0003`: not partial, nested in a non-partial type, or generic.
+- **Kinds.** Integer, Number, Boolean, Text, Enum, Flags, Guid, Color (FNA's, by name), Tag and TagQuery (by name;
+  a query is read-only until it has a written form), Nested, Definition (a shared reference shown as a summary, never
+  written), Indexed (hand-written only); `EntityKey` is an Integer with the meaning `EntityKey`; `Nullable<T>` and a
+  nullable reference are the inner kind with `Optional` (read as `Absent`, cleared by writing `Absent`).
+- **By hand** (`[DescribedByHand(typeof(...))]`, the access in `Game/ComponentProperties`): `BodyPartStateComponent`
+  and `AbilityScoresComponent` (inline arrays read through methods, rows named by a meaning), `ActionSource` (packed;
+  read-only; its identity as name and crawler number). `RelatedSourceComponent<TLink>` is generic, so
+  `ComponentManager.RegisterRelationship` registers its table.
+- **Meanings** name what a value stands for: the engine's in `ComponentPropertyMeaningNames` (Frame, Frames,
+  EntityKey, EntityId, MapPosition, Tiles, BehaviorId), the game's in `Game.GamePropertyMeanings`. Resolving them
+  (display, choices, persistent form) is Phase 2's.
+- **Pools** implement `IDescribedComponentPool`: `PropertyTable`, `ReadProperties(entity, visitor)` (each instance
+  between `BeginInstance`/`EndInstance`, with its version), `ReadInstanceProperties(entity, instance, visitor)` (one
+  instance: what inspection and edits read, so a Multi pool's block never reads its siblings) and
+  `WriteProperty(entity, instance, path, value)`, which
+  writes a copy through the table and stores it through a write scope only if the table took it -- one version and one
+  observation per write, none for a refusal.
+- **Never gameplay.** A raw write raises no event and follows no rule. `ComponentPropertyArchitectureTests` fails Game
+  code outside `ComponentProperties`, `Admin`, `Views` and `Diagnostics` that names a runtime type of the namespace (the
+  attributes are fine anywhere), and any built-in pool with no table.
+- **Inspection** (Phase 2, 2026-11-18): `GameViews.ComponentInspection` (`ComponentInspectionView`) lists an entity's
+  instances sorted by component name with their versions (`CopyInstances`: a traversal that formats nothing) and
+  formats one instance's rows on demand (`CopyRows`): each value through its meaning's resolver
+  (`ComponentPropertyMeanings`: the engine's Frame and Frames; the game's in `GameComponentPropertyMeanings` -- keys and
+  ids as names, body part rows named by the race and only its parts shown), an `ActionSource` as one row, and
+  `SimpleHealthComponent`/`BodyPartStateComponent` with their modified maximum as derived rows. `InspectionWindowContent`
+  keeps one block per instance and rewrites one only when its version changed, or every refresh if it shows a frame in
+  seconds or a derived row; a component added or removed rebuilds the view. An unsimulated creature's defaults are
+  `CopyUnsimulatedDefaults`, which rebuilds the record in a staging world. Body part state is added only once something
+  happens to a part, so an untouched creature lists no `BodyPartStateComponent` (the subject block's bar still shows
+  its health). Components have no `ToString`: a test comparing two entities reads `Tests/ComponentProperties/ComponentSnapshots`.
+- **Editing** (Phase 3, 2026-11-18): `AdminTools.ComponentPropertyEdits` (`ComponentPropertyEdits`) writes one value by
+  entity key through the pool's table write and keeps the edit for revert; a keyed timer is named by its key, anything
+  else by position and refused if the entity's count of that component changed. Destroyed is refused, dead is not; a
+  relationship's links are checked before they are stored (`PackedComponentPool.PropertyWriteCheck`), so a refused link
+  is never written. A revert restores the value, not the world. `ComponentPropertyFields` (UIEngine) maps a descriptor
+  onto a `FieldRow` -- the same rows the Workshop's content inspector uses -- with a meaning's choices as a searchable
+  choice. The inspection window edits only in Edit mode (its "Edit" title button, for an entity inspected in Admin
+  Mode), which holds the game paused (`MapViewState.IsEditingComponents`, part of `MapWindow.IsPaused`), so nothing
+  changes under a focused field and the view isn't rebuilt by a component coming or going; it ends with the Admin
+  inspection or a minimize; the button is on the title bar only while Admin Mode is on. A search box above the view
+  filters the component blocks by name. What a component caches from others is recomputed after an edit or revert
+  through `ComponentPropertyEdits.RefreshAfterWrite<T>` (Admin's: `ComponentPropertyEditCaches` -- an ability score's
+  total, the only stored derived stat); a new cached value registers there. The map's Admin menu has "Revert last edit":
+  the latest edit of an entity that still exists (`ComponentPropertyEdits.Latest`, which forgets destroyed entities'
+  edits, as `Revert` does), disabled with the reason `RevertRefusal` gives. An editable block holds the instance it was
+  built for (`EditableBlock.Target`, moved on by each edit through `CurrentTargetOf`): a commit names that instance, and
+  a refresh that finds another instance at its position rebuilds the view. A title button that comes and goes stays
+  attached and is hidden (`Window.SetTitleButtonShown`), so it closes with its window; `Element.AddChild` on an element
+  that can't hold children returns the child to its pool rather than dropping it.
+- **Snapshots** (Phase 4, 2026-11-18; the plan's decisions 16-19): `EntitySnapshots` (Engine.ECS.Properties) captures a
+  set of entities' described components as JSON and restores them onto fresh entities through each pool's `Restore`
+  (built from saved leaves by `ComponentPropertyAccess.Restore`, then `Add`, so timers schedule and observers hear of
+  it).
+  - **Restorable:** every saved member can be restored: a get-only auto-property that is saved fails `CAD0002`, so a
+    member that names its instance is `{ get; init; }` with `[ReadOnlyProperty]`.
+  - **How values are saved:** a value is saved by its meaning's persistent form (`ComponentPropertyPersistence`):
+    - frames relative to the capture;
+    - entity keys as positions in the snapshot;
+    - a counter's values (stack ids, toggle keys) as ordinals, issued fresh on restore;
+    - session ids by the Guid or key they stand for.
+  - **Definitions** go through their content codecs, and anything else is saved as itself (`EntitySnapshotValues`).
+  - **Order and placement:** links restore after everything else, so their targets exist. The game's host
+    (`GameEntitySnapshots`) creates each entity tiered, places it as a spawn is, and recomputes its ability score
+    totals.
+  - **Adding a meaning:** a new meaning a saved member uses registers its persistent form there, or the snapshot check
+    (`GameEntitySnapshots.Check`, held empty by `EntitySnapshotTests`) names it.
+  - **Not captured:** a skeleton, whose spawn record rebuilds it.
+  - Nothing in the game calls it yet: it is the per-pool half of "Data storage" and "Save and load Beyond
+    neighborhoods".
+- **Cost** (Phase 0, Release): reading every property of a component through the traversal is about 33 ns and
+  allocates nothing; formatting rows through it about 350-410 ns, against `ToString`'s 580-680 ns and 371 bytes and
+  cached reflection's 770-815 ns.

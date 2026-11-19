@@ -144,6 +144,10 @@ public sealed class BlueprintRegistry
         return Register(new BlueprintDefinition(id, name) { Includes = includes });
     }
 
+    /// <summary>Whether definition is one Compose interned: an unnamed composite whose Guid is derived from its includes, so another session gets the same one by composing them again.</summary>
+    public static bool IsComposed(BlueprintDefinition definition) =>
+        definition.Includes.Count > 0 && definition.Build is null && definition.Id == ComposedId([.. definition.Includes]);
+
     /// <summary>Resolves every registered definition, so a broken one fails here rather than when it is first spawned.</summary>
     public void ResolveAll()
     {

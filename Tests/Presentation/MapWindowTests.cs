@@ -202,6 +202,25 @@ public sealed class MapWindowTests
         Assert.IsFalse(mapWindow.IsPaused);
     }
 
+    [TestMethod]
+    public void TheInspectorsEditMode_HoldsThePause_AndLeavesThePlayersOwnPauseAsItWas()
+    {
+        var (_, mapViewState, mapWindow) = BuildMapWindow(5, 5, 1);
+
+        mapViewState.IsEditingComponents = true;
+        Assert.IsTrue(mapWindow.IsPaused);
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.Space), new KeyboardState());
+        mapViewState.IsEditingComponents = false;
+        Assert.IsTrue(mapWindow.IsPaused, "Space pressed while editing pauses for the player once editing ends.");
+
+        mapWindow.HandleHotkeys(new KeyboardState(), new KeyboardState(Keys.Space));
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.Space), new KeyboardState());
+        mapViewState.IsEditingComponents = true;
+        mapViewState.IsEditingComponents = false;
+        Assert.IsFalse(mapWindow.IsPaused);
+    }
+
     /// <summary>
     /// WASD moves the player character (through MovementComponent.NextMapPosition, like any
     /// other entity -- see PlayerCommands.Flush), not the camera. A fresh press moves

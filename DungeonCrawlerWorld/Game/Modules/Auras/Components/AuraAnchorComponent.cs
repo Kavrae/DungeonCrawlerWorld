@@ -1,3 +1,4 @@
+using Engine.ECS.Properties;
 using Game.World;
 
 namespace Game.Modules.Auras.Components;
@@ -9,9 +10,9 @@ namespace Game.Modules.Auras.Components;
 /// destroying the owner destroys the anchor, and destroying an anchor a toggle holds switches the toggle off.
 /// </remarks>
 /// <param name="placedBy">What placed it -- the source its aura's effects are credited to.</param>
-public readonly struct AuraAnchorComponent(ActionSource placedBy)
+[DescribedComponent]
+public readonly partial struct AuraAnchorComponent(ActionSource placedBy)
 {
-    public ActionSource PlacedBy { get; } = placedBy;
-
-    public override string ToString() => $"PlacedBy : {PlacedBy}";
+    [ReadOnlyProperty]
+    public ActionSource PlacedBy { get; init; } = placedBy;
 }

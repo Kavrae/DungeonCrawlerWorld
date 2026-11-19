@@ -1,11 +1,12 @@
 using System.Runtime.CompilerServices;
+using Engine.ECS.Properties;
 
 namespace Engine.ECS.Components.Stores;
 
 /// <summary> Entity-indexed component storage for near-universal components. </summary>
 /// <remarks> Storage index == entityId. Best for components present on most entities, where direct lookup beats sparse-set indirection. </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspectableComponentPool, IMemoryReportingComponentPool, IMembershipMaskedComponentPool where T : struct
+public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IDescribedComponentPool, IMemoryReportingComponentPool, IMembershipMaskedComponentPool where T : struct
 {
     private ComponentMembershipMasks? _membershipMasks;
     private int _membershipBit;
@@ -218,23 +219,104 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         }
     }
 
-    /// <summary>Returns the string representation of the component for the specified entity.</summary>
-    /// <param name="entityId">The ID of the entity to check.</param>
-    /// <param name="destination">The list to add the inspection data to.</param>
-    /// <returns>The number of inspection entries added.</returns>
-    public int CopyInspectionDataForEntity(int entityId, List<InspectedComponentEntry> destination)
+    /// <inheritdoc/>
+    public ComponentPropertyTable? PropertyTable => ComponentPropertyAccessOf<T>.Access?.Table;
+
+    /// <inheritdoc/>
+    public int ReadProperties(int entityId, ComponentPropertyVisitor visitor) => ReadInstanceProperties(entityId, 0, visitor) ? 1 : 0;
+
+    /// <inheritdoc/>
+    public bool ReadInstanceProperties(int entityId, int instance, ComponentPropertyVisitor visitor)
     {
-        if (_present[entityId] == 0)
+        Guard(entityId);
+        return instance == 0
+            && IsInBounds(entityId)
+            && _present[entityId] != 0
+            && ComponentPropertyPoolAccess.ReadInstance(in _components[entityId], 0, _versions[entityId], visitor);
+    }
+
+    /// <inheritdoc/>
+    public bool WriteProperty(int entityId, int instance, ReadOnlySpan<int> path, in ComponentPropertyValue value, out string? refusal)
+    {
+        Guard(entityId);
+        if (instance != 0 || !IsInBounds(entityId) || _present[entityId] == 0)
+        {
+            refusal = ComponentPropertyRefusals.NoSuchInstance;
+            return false;
+        }
+
+        refusal = ComponentPropertyPoolAccess.TryEdit(in _components[entityId], path, in value, out var edited);
+        if (refusal is not null)
+        {
+            return false;
+        }
+
+        using var write = Write(entityId);
+        write.Value = edited;
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public string? Restore(int entityId, IReadOnlyList<IReadOnlyList<ComponentPropertyLeaf>> instances)
+    {
+        if (!IsInBounds(entityId))
+        {
+            return $"{typeof(T).Name}: entity {entityId} is past the pool's capacity of {_present.Length}.";
+        }
+
+        if (_present[entityId] != 0)
+        {
+            return $"{typeof(T).Name}: entity {entityId} already holds one, and a restore starts from none.";
+        }
+
+        if (ComponentPropertyRestoring.TryBuildOne<T>(instances, out var built) is { } refusal)
+        {
+            return refusal;
+        }
+
+        Add(entityId, built);
+        return null;
+    }
+
+    /// <inheritdoc/>
+    public bool HoldsSeveralPerEntity => false;
+
+    /// <inheritdoc/>
+    public int CopyInstanceVersions(int entityId, List<uint> destination)
+    {
+        Guard(entityId);
+        if (!IsInBounds(entityId) || _present[entityId] == 0)
         {
             return 0;
         }
 
-        destination.Add(new InspectedComponentEntry(
-            ComponentType,
-            _components[entityId].ToString() ?? string.Empty,
-            _versions[entityId]));
-
+        destination.Add(_versions[entityId]);
         return 1;
+    }
+
+    /// <inheritdoc/>
+    public int? TimerKeyOf(int entityId, int instance) => null;
+
+    /// <inheritdoc/>
+    public bool TryFindInstanceByTimerKey(int entityId, int timerKey, out int instance)
+    {
+        instance = -1;
+        return false;
+    }
+
+    /// <inheritdoc/>
+    public object? ValueOf(int entityId, int instance)
+    {
+        Guard(entityId);
+        return instance == 0 && IsInBounds(entityId) && _present[entityId] != 0 ? _components[entityId] : null;
+    }
+
+    /// <inheritdoc/>
+    public bool TryFindInstanceHolding(int entityId, int preferredInstance, object value, out int instance)
+    {
+        Guard(entityId);
+        instance = 0;
+        return value is T held && IsInBounds(entityId) && _present[entityId] != 0 && EqualityComparer<T>.Default.Equals(_components[entityId], held);
     }
 
     /// <summary>Gets the version of the component for the specified entity.</summary>

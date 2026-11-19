@@ -607,6 +607,43 @@ public sealed class ContentInspectorTests
     }
 
     [TestMethod]
+    public void ANewRow_GivesItsEditorTheRowsWholeHeight_FromItsFirstLayout()
+    {
+        var harness = new Harness();
+        var size = new Vector2(400, FieldRow.RowHeight);
+        var row = harness.Pool.CreateElement<FieldRow>(harness.Host, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { Size = size, MinimumSize = size, MaximumSize = size, DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+        });
+        row.Configure(new FieldEditorDescription("Strength", FieldValueKind.Integer) { Minimum = 1, Maximum = 300 }, FieldValue.OfNumber(5));
+        harness.Host.AddChild(row);
+        harness.Frame();
+        Assert.AreEqual(FieldRow.RowHeight, row.Editor.CurrentSize.Y, "Sized before the row's padding went, the editor was shorter than the row and its text sat low.");
+        Assert.AreEqual(row.AbsolutePosition.Y, row.Editor.AbsolutePosition.Y);
+    }
+
+    [TestMethod]
+    public void AMultiLineReadOnlyValue_GrowsItsRow_AndShrinksItBackForOneLine()
+    {
+        var harness = new Harness();
+        var row = harness.Pool.CreateElement<FieldRow>(harness.Host, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { Size = new Vector2(600, FieldRow.RowHeight), MinimumSize = new Vector2(600, FieldRow.RowHeight), MaximumSize = new Vector2(600, FieldRow.RowHeight), DisplayMode = ElementDisplayMode.Fixed },
+        });
+        row.Configure(new FieldEditorDescription("Reward", FieldValueKind.ReadOnlyText), FieldValue.OfText("first line\nsecond line\nthird line"));
+        harness.Host.AddChild(row);
+
+        Assert.IsGreaterThan(FieldRow.RowHeight + 10, row.CurrentSize.Y);
+        Assert.AreEqual(row.CurrentSize.Y, row.Editor.CurrentSize.Y, 1f, "The value takes the row's whole height.");
+
+        row.ShowValue(FieldValue.OfText("one line"));
+
+        Assert.AreEqual(FieldRow.RowHeight, row.CurrentSize.Y, 1f);
+    }
+
+    [TestMethod]
     public void ALabelOnlyRow_TakesTheRowsWidth_WithItsButtonRightAfterTheText_AndCutsOnlyPastIt()
     {
         var harness = new Harness();

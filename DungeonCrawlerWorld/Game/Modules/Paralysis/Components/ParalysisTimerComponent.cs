@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Properties;
 using Game.Modules.StatusEffects;
 
 namespace Game.Modules.Paralysis.Components;
@@ -9,11 +10,13 @@ namespace Game.Modules.Paralysis.Components;
 /// through, so its one timer-wheel firing is the expiry.
 /// </summary>
 /// <param name="expiresAtFrame">The simulation frame Paralysis ends on -- FrameDeadline.After(now, duration).</param>
-public struct ParalysisTimerComponent(uint expiresAtFrame) : IScheduledTimer, IStatusEffectStackCount
+[DescribedComponent]
+public partial struct ParalysisTimerComponent(uint expiresAtFrame) : IScheduledTimer, IStatusEffectStackCount
 {
     private uint _timerWheelMark;
 
     /// <summary>The simulation frame Paralysis ends on.</summary>
+    [PropertyMeaning(ComponentPropertyMeaningNames.Frame)]
     public uint ExpiresAtFrame { get; set; } = expiresAtFrame;
 
     public readonly byte StackCount => 1;
@@ -21,6 +24,4 @@ public struct ParalysisTimerComponent(uint expiresAtFrame) : IScheduledTimer, IS
     uint IScheduledTimer.NextTickFrame { readonly get => ExpiresAtFrame; set => ExpiresAtFrame = value; }
 
     uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
-
-    public override readonly string ToString() => $"ExpiresAtFrame : {ExpiresAtFrame}\nStackCount : {StackCount}";
 }

@@ -1,3 +1,5 @@
+using Engine.ECS.Properties;
+
 namespace Game.Modules.Containers.Components;
 
 /// <summary>
@@ -7,7 +9,7 @@ namespace Game.Modules.Containers.Components;
 /// ContainerDestructionSystem clears its inventory and renames it "Destroyed" instead of leaving
 /// its items and name intact the way a creature's corpse does.
 /// </summary>
-public readonly record struct ContainerComponent
+[DescribedComponent]
+public readonly partial record struct ContainerComponent
 {
-    public override readonly string ToString() => nameof(ContainerComponent);
 }

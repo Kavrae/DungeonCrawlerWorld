@@ -4,7 +4,7 @@ namespace Engine.Diagnostics;
 
 /// <summary>Throttled sampler of per-component-type memory usage.</summary>
 /// <remarks>
-/// Enumerates ComponentManager.AllPools (the same enumeration ComponentInspector already uses),
+/// Enumerates ComponentManager.AllPools,
 /// filtering for IMemoryReportingComponentPool -- every concrete pool store implements it, so a
 /// brand-new component type gets memory reporting for free, nothing to register. Each pool's
 /// EstimatedBytes is O(1) (a handful of multiplications against its own backing arrays'

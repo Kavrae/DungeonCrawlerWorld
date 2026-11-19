@@ -729,6 +729,22 @@ already updates. Investigate the pros and cons of adding events.
 
 ### Low Priority
 
+#### Workshop live inspector
+
+The Workshop's Debug tab showing a running game's entities and editing their components, over the diagnostics link
+(`DiagnosticsLink`, `DiagnosticsLinkListener`). The last phase of `PLAN-generated-component-property-access.md`
+(Phase 5, "only when wanted"); everything it reads and writes through is built (IMPLEMENTATION-NOTES "Component
+property tables").
+- **The link:** table descriptions (`ComponentPropertyTable`) and values as link messages, read in the game through
+  the same tables and meanings Admin Mode's inspection uses (`GameViews.ComponentInspection`). The game applies the
+  Workshop's requests between frames through `ComponentPropertyEdits`, as Admin Mode does: the link's receiver in the
+  game stops discarding what the Workshop sends.
+- **The view:** a Debug tab page listing entities by neighborhood and tier, filtered by component; the selected
+  entity's components shown and edited with the same field rows (`ComponentPropertyFields` over `FieldRow`) and Edit
+  mode rules as the in-game inspector.
+- **Decide when scheduled:** its checks, and whether it also settles "Remote inspection of a running game"
+  (Global), whose endpoint would answer the same requests for a script or a test.
+
 #### Partial module replacement
 
 A mod that replaces a built-in module by `Id` currently replaces all of it and must register every
@@ -3536,6 +3552,22 @@ as if a key were pressed, a ready shape for "Replay by recording input" and "In-
 (Global).
 
 ### Medium Priority
+
+#### Sprites taller than a tile render wrongly outside the map
+
+A sprite more than one tile tall (a tall creature, a shrine, anything whose manifest entry reaches above its tile --
+IMPLEMENTATION-NOTES "Tall sprites, wall faces and tops, and the sprite manifest") doesn't render correctly in the
+inspection window's icon (`InspectionWindowContent`'s subject and terrain blocks, `EntityIconElement`, a fixed
+40x40 square). The map draws it right: `MapRenderer` places a sprite by its entry's size and pivot
+(`SpritePlacementTiles`/`SpritePlacementMath`) inside the reach box, while an icon has only its square.
+- **Verify every place a sprite is drawn for the same bug**, and fix each the same way: `EntityIconElement` (inspector,
+  loot and container windows), `IconElement` and `Button.SetIcon`, `InventoryItemStackCell`, `CurrencyElement`,
+  `ActivatableDetailsSections` (Item Details), `AbilityScoreWindowController`, `DragGhostRenderer`, `Dropdown` and
+  `ListFilterChips` rows, `Folder`, and the Workshop's `RecordRow`, `GameInspectorSource`, `ControlGalleryTab` and
+  Sprites tab (`SpriteCellDrawer`, which may be right already, since it previews placement).
+- **Decide:** how a tall sprite fits a square -- scaled down whole to the square keeping its aspect (likely), or
+  cropped to its footprint -- and do it once, in the shared drawing helper (`SpriteOrGlyphRenderer`/`SpriteRenderer`),
+  rather than per call site.
 
 #### Tooltip indicators
 

@@ -175,6 +175,9 @@ public class Element(ElementServices services)
     /// <summary>Space at the start of the tiling axis this element keeps for what it draws itself before its tiled children (a toggle's checkbox), after ContentIndent; none by default.</summary>
     protected virtual float LeadingTileInset => 0f;
 
+    /// <summary>Space at the end of the tiling axis this element keeps for what it draws itself after its tiled children (a dropdown's arrow), which a filler never grows into; none by default.</summary>
+    protected virtual float TrailingTileInset => 0f;
+
     /// <summary>Where the first tiled child starts on the tiling axis: past ContentIndent and LeadingTileInset.</summary>
     private float FirstTileOffset => _contentIndent + LeadingTileInset;
 
@@ -595,6 +598,7 @@ public class Element(ElementServices services)
         _childrenTileMode = hierarchy?.ChildrenTileMode ?? ChildElementTileMode.Floating;
         _childGap = hierarchy?.ChildGap ?? 0f;
         _contentIndent = hierarchy?.ContentIndent ?? 0f;
+        ContentPadding = new Vector2(WindowChrome.Padding);
         _childCrossAlignment = hierarchy?.ChildCrossAlignment ?? ChildCrossAlignment.Start;
         _hasAddedFillsRemainingChild = false;
         _children = [];
@@ -1534,11 +1538,14 @@ public class Element(ElementServices services)
     /// children creates a second, orphaned set of them. Positioning is handled separately, by Arrange (see RetileChildren)
     /// rather than here, so it's correct regardless of when in this element's lifecycle newChild
     /// was added -- see RetileChildren's own doc comment for why that split matters.
+    /// An element that can't contain children closes newChild instead, back to its pool, so a refused child is never
+    /// left held by nobody (as Window.AddTitleButton does for a window with no title bar).
     /// </summary>
     public void AddChild(Element newChild, int? insertIndex = null)
     {
         if (!_canContainChildren)
         {
+            ElementPoolService.CloseElement(newChild);
             return;
         }
 
@@ -1712,7 +1719,12 @@ public class Element(ElementServices services)
             extent = Vector2.Max(extent, childPosition + childSize);
         }
 
-        return extent;
+        return _childrenTileMode switch
+        {
+            ChildElementTileMode.Horizontal => extent + new Vector2(TrailingTileInset, 0),
+            ChildElementTileMode.Vertical => extent + new Vector2(0, TrailingTileInset),
+            _ => extent,
+        };
     }
 
     /// <summary>Re-lays out this element after one of its children was added, removed, shown, hidden, resized or moved outside this element's own Measure.</summary>
@@ -1916,7 +1928,7 @@ public class Element(ElementServices services)
     private float RemainingMainAxisSpace(Element filler, float mainAxisContentSize)
     {
         var isHorizontal = _childrenTileMode == ChildElementTileMode.Horizontal;
-        var usedSpace = FirstTileOffset;
+        var usedSpace = FirstTileOffset + TrailingTileInset;
         Element? previousVisibleChild = null;
         foreach (var childElement in _children)
         {

@@ -1,3 +1,4 @@
+using Engine.ECS.Properties;
 using Game.Modules.Actions;
 
 namespace Game.Modules.Inventory.Components;
@@ -14,12 +15,13 @@ namespace Game.Modules.Inventory.Components;
 /// different stack of the same item -- see InventoryQueries.TryFindByStackInstanceId. Binding
 /// does not remove anything from inventory -- it's a reference, not a transfer.
 /// </summary>
-public struct ItemHotkeyBindingComponent(HotkeySlot slot, uint stackInstanceId) : IHotkeySlotBinding<uint>
+[DescribedComponent]
+public partial struct ItemHotkeyBindingComponent(HotkeySlot slot, uint stackInstanceId) : IHotkeySlotBinding<uint>
 {
-    public HotkeySlot Slot { get; } = slot;
+    [ReadOnlyProperty]
+    public HotkeySlot Slot { get; init; } = slot;
+    [PropertyMeaning(GamePropertyMeanings.StackInstanceId)]
     public uint StackInstanceId { get; set; } = stackInstanceId;
 
     readonly uint IHotkeySlotBinding<uint>.BoundId => StackInstanceId;
-
-    public override readonly string ToString() => $"Slot : {Slot}\nStackInstanceId : {StackInstanceId}";
 }

@@ -33,10 +33,7 @@ public sealed class SpawnRecordRebuilderTests
 
     private static Creature Read(ComponentManager componentManager, int entityId, params Type[] excluded)
     {
-        var entries = new List<InspectedComponentEntry>();
-        new ComponentInspector(componentManager).CopyInspectionDataForEntity(entityId, entries);
-
-        var components = entries
+        var components = Tests.ComponentProperties.ComponentSnapshots.Of(componentManager, entityId)
             .Where(entry => !ComparedSeparately.Contains(entry.ComponentType) && !excluded.Contains(entry.ComponentType))
             .Select(static entry => $"{entry.ComponentType.Name}: {entry.Value}")
             .Order(StringComparer.Ordinal)

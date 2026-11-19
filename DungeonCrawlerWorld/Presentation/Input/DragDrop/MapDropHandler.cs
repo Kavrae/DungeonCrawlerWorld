@@ -127,7 +127,7 @@ public sealed class MapDropHandler(IMapViewQuery mapView, ShopView shopView, Map
         }
 
         accepts =
-            !shopView.IsShop(originEntityId) && !IsTradeOfferEntity(originEntityId) &&
+            !shopView.IsTradingShop(originEntityId) && !IsTradeOfferEntity(originEntityId) &&
             MapWindow.AllowsAccess(mapView.GetInteraction(containerEntityId).AccessRefusal) &&
             !inventoryTransferDropHandler.IsDropRefusedAt(payload, new InventoryDropTarget(containerEntityId), position);
         return true;

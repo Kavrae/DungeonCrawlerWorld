@@ -1,4 +1,4 @@
-using Engine.ECS.Systems;
+using Engine.ECS.Properties;
 using Engine.Tags;
 using Game.World;
 
@@ -32,7 +32,8 @@ namespace Game.Modules.StatModifiers.Components;
 /// wheel entry rather than N. See StatModifierExpirySystem.
 /// </remarks>
 /// <param name="expiresAtFrame">The simulation frame this modifier is removed on -- FrameDeadline.After(now, duration), or FrameDeadline.Never for a permanent modifier.</param>
-public struct StatModifierComponent(
+[DescribedComponent]
+public partial struct StatModifierComponent(
     StatModifierTarget target,
     StatModifierOperation operation,
     StatModifierPolarity polarity,
@@ -42,16 +43,16 @@ public struct StatModifierComponent(
     ActionSource source,
     GameplayTag conditionTag = default)
 {
-    public StatModifierTarget Target { get; } = target;
-    public StatModifierOperation Operation { get; } = operation;
-    public StatModifierPolarity Polarity { get; } = polarity;
-    public bool CanModify { get; } = canModify;
-    public float Magnitude { get; } = magnitude;
+    public StatModifierTarget Target { get; init; } = target;
+    public StatModifierOperation Operation { get; init; } = operation;
+    public StatModifierPolarity Polarity { get; init; } = polarity;
+    public bool CanModify { get; init; } = canModify;
+    public float Magnitude { get; init; } = magnitude;
 
     /// <summary>FrameDeadline.Never means "never expires" -- StatModifierExpirySystem never schedules a modifier at this value, so an entity holding only permanent modifiers costs nothing.</summary>
+    [PropertyMeaning(ComponentPropertyMeaningNames.Frame)]
     public uint ExpiresAtFrame { get; set; } = expiresAtFrame;
-    public ActionSource Source { get; } = source;
-    public GameplayTag ConditionTag { get; } = conditionTag;
-
-    public override readonly string ToString() => $"Target : {Target}\nSource : {Source}\nOperation : {(Operation == StatModifierOperation.Additive ? Polarity == StatModifierPolarity.Buff ? '+' : '-' : Polarity == StatModifierPolarity.Buff ? 'x' : '÷')}{Magnitude}\nCanModify : {CanModify}\nExpiresAtFrame : {(ExpiresAtFrame == FrameDeadline.Never ? "Permanent" : ExpiresAtFrame.ToString())}\nConditionTag : {ConditionTag}";
+    [ReadOnlyProperty]
+    public ActionSource Source { get; init; } = source;
+    public GameplayTag ConditionTag { get; init; } = conditionTag;
 }

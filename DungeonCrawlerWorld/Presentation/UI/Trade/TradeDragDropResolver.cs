@@ -36,7 +36,7 @@ internal sealed class TradeDragDropResolver(MapViewState mapViewState, ShopView 
 
         var isDestinationTradePlayer = mapViewState.ReservedEntityIds?.TradeOfferPlayerEntityId == context.DestinationEntityId;
         var isDestinationTradeShop = mapViewState.ReservedEntityIds?.TradeOfferShopEntityId == context.DestinationEntityId;
-        if (context.CurrencyType is not null && shopView.IsShop(context.OriginEntityId))
+        if (context.CurrencyType is not null && shopView.IsTradingShop(context.OriginEntityId))
         {
             return !isDestinationTradeShop;
         }
@@ -57,7 +57,7 @@ internal sealed class TradeDragDropResolver(MapViewState mapViewState, ShopView 
             return context.OriginEntityId != owningEntityId;
         }
 
-        var originIsShop = shopView.IsShop(context.OriginEntityId);
+        var originIsShop = shopView.IsTradingShop(context.OriginEntityId);
         return isDestinationTradePlayer
             ? originIsShop || IsTradeOfferEntity(context.OriginEntityId)
             : !originIsShop;
@@ -100,8 +100,8 @@ internal sealed class TradeDragDropResolver(MapViewState mapViewState, ShopView 
     /// </summary>
     private void ResolveItemDrag(int originEntityId, int destinationEntityId, uint stackInstanceId)
     {
-        var originIsShop = shopView.IsShop(originEntityId);
-        var destinationIsShop = shopView.IsShop(destinationEntityId);
+        var originIsShop = shopView.IsTradingShop(originEntityId);
+        var destinationIsShop = shopView.IsTradingShop(destinationEntityId);
         var isOriginTradePlayer = mapViewState.ReservedEntityIds?.TradeOfferPlayerEntityId == originEntityId;
         var isOriginTradeShop = mapViewState.ReservedEntityIds?.TradeOfferShopEntityId == originEntityId;
         var isDestinationTradePlayer = mapViewState.ReservedEntityIds?.TradeOfferPlayerEntityId == destinationEntityId;

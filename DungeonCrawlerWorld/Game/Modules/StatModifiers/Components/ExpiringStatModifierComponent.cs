@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Properties;
 
 namespace Game.Modules.StatModifiers.Components;
 
@@ -21,14 +22,14 @@ namespace Game.Modules.StatModifiers.Components;
 /// every Goblin's racial damage reduction, see Goblin.Build) never gets one at all.
 /// </summary>
 /// <param name="nextTickFrame">The earliest ExpiresAtFrame among the entity's modifiers.</param>
-public struct ExpiringStatModifierComponent(uint nextTickFrame) : IScheduledTimer
+[DescribedComponent]
+public partial struct ExpiringStatModifierComponent(uint nextTickFrame) : IScheduledTimer
 {
     private uint _timerWheelMark;
 
     /// <summary>The next frame any of this entity's modifiers is due to expire on.</summary>
+    [PropertyMeaning(ComponentPropertyMeaningNames.Frame)]
     public uint NextTickFrame { get; set; } = nextTickFrame;
 
     uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
-
-    public override readonly string ToString() => $"NextModifierExpiryFrame : {NextTickFrame}";
 }

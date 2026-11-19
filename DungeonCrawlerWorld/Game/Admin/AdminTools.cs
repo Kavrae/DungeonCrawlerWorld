@@ -1,3 +1,4 @@
+using Engine.ECS.Properties;
 using Game.Bootstrap;
 using Game.Floors;
 
@@ -16,4 +17,8 @@ public sealed class AdminTools(GameSession gameSession, NeighborhoodStreamer nei
     public TeleportAdminCommands TeleportAdminCommands { get; } = new(gameSession.Internals.Teleporter, gameSession.World);
 
     public StructureAdminCommands StructureAdminCommands { get; } = new(gameSession.World);
+
+    /// <summary>Admin Mode's edits of one entity's component properties through their tables, kept so each can be reverted. Between frames only; never gameplay.</summary>
+    /// <remarks>An edit of an ability score's base recomputes the entity's ability score totals, the one value a component caches from others (ComponentPropertyEditCaches).</remarks>
+    public ComponentPropertyEdits ComponentPropertyEdits { get; } = ComponentPropertyEditCaches.For(gameSession);
 }

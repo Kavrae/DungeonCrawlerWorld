@@ -1,3 +1,5 @@
+using Engine.ECS.Properties;
+
 namespace Game.Modules.Core.Components;
 
 /// <summary>
@@ -6,7 +8,7 @@ namespace Game.Modules.Core.Components;
 /// NonBlockingComponent when both are present -- see IMapQuery.IsBlocking. Multi-pooled for
 /// the same overlapping-sources reason as NonBlockingComponent.
 /// </summary>
-public struct ForceBlockingComponent
+[DescribedComponent]
+public partial struct ForceBlockingComponent
 {
-    public override readonly string ToString() => nameof(ForceBlockingComponent);
 }

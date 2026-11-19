@@ -1,4 +1,5 @@
 using Engine.ECS.Entities;
+using Engine.ECS.Properties;
 using Engine.ECS.Relationships;
 
 namespace Game.Modules.Auras.Components;
@@ -11,7 +12,7 @@ namespace Game.Modules.Auras.Components;
 /// </remarks>
 /// <param name="TargetKey">The entity that placed the anchor.</param>
 /// <param name="HeldGrantKey">The key of the owner's toggle holding it (EffectContext.HeldGrantKey), or AuraSourceComponent.NoHeldGrantKey for a timed one.</param>
-public readonly record struct AuraAnchorOwnerLink(EntityKey TargetKey, uint HeldGrantKey) : IRelationshipLink
+[DescribedComponent]
+public readonly partial record struct AuraAnchorOwnerLink(EntityKey TargetKey, [property: ReadOnlyProperty, PropertyMeaning(GamePropertyMeanings.HeldGrantKey)] uint HeldGrantKey) : IRelationshipLink
 {
-    public override string ToString() => $"Owner : {TargetKey}\nHeldGrantKey : {HeldGrantKey}";
 }

@@ -337,7 +337,10 @@ public class Window : Element
 
         foreach (var button in _titleButtons)
         {
-            button.Draw(gameTime);
+            if (button.IsVisible)
+            {
+                button.Draw(gameTime);
+            }
         }
     }
 
@@ -431,6 +434,23 @@ public class Window : Element
         }
     }
 
+    /// <summary>Shows or hides one of this window's title buttons; a hidden one takes no room, draws nothing and is never hit, and the rest close up.</summary>
+    /// <remarks>The button stays attached, so it still closes with the window (ElementPoolService.CloseAllTitleButtons) -- never take a title button off a window without closing it.</remarks>
+    public void SetTitleButtonShown(Button button, bool isShown)
+    {
+        if (!_titleButtons.Contains(button) || button.IsVisible == isShown)
+        {
+            return;
+        }
+
+        button.IsVisible = isShown;
+        RepositionTitleButtons();
+        if (DisplayMode == ElementDisplayMode.WrapContent)
+        {
+            MeasureAndArrange();
+        }
+    }
+
     /// <summary>
     /// Right-aligns title buttons against the current title width, tiling each earlier-added
     /// button further left of the one after it -- re-run on every recalculation (see
@@ -444,6 +464,11 @@ public class Window : Element
         var right = HeaderSize.X;
         foreach (var button in _titleButtons)
         {
+            if (!button.IsVisible)
+            {
+                continue;
+            }
+
             right -= button.CurrentSize.X + TitleButtonGap;
             button.PositionInHeader(new Vector2(right, System.MathF.Max(0f, (HeaderSize.Y - button.CurrentSize.Y) / 2f)), AbsolutePosition);
         }
@@ -482,18 +507,16 @@ public class Window : Element
     /// <summary>Total width every title button needs, tiled with the same 3px gaps RepositionTitleButtons itself uses -- see MinimumHeaderWidth, which combines this with the title text's own width.</summary>
     private float TotalTitleButtonsWidth()
     {
-        if (_titleButtons.Count == 0)
-        {
-            return 0f;
-        }
-
-        var width = 3f; // gap between the rightmost button and the title's right edge.
+        var width = 0f;
         foreach (var button in _titleButtons)
         {
-            width += button.CurrentSize.X + 3f; // each button plus the gap to its left.
+            if (button.IsVisible)
+            {
+                width += button.CurrentSize.X + TitleButtonGap; // each button plus the gap to its left.
+            }
         }
 
-        return width;
+        return width == 0f ? 0f : width + TitleButtonGap; // and the gap between the rightmost button and the title's right edge.
     }
 
     /// <summary>

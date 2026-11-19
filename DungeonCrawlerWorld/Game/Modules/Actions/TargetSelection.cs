@@ -1,4 +1,5 @@
 using Engine.ECS.Entities;
+using Engine.ECS.Properties;
 using Engine.Math;
 
 namespace Game.Modules.Actions;
@@ -26,13 +27,14 @@ public enum TargetingMode : byte
 /// <param name="MarkedFootprintOffset">Which tile of the marked entity's footprint was aimed at, from its top-left, so a large entity is hit where it was aimed.</param>
 /// <param name="MaximumRange">The effective maximum range.</param>
 /// <param name="AreaSize">The effective area size.</param>
-public readonly record struct TargetSelection(
+[DescribedValue]
+public readonly partial record struct TargetSelection(
     TargetingMode Mode,
-    Vector3Int AimedTile,
+    [property: PropertyMeaning(ComponentPropertyMeaningNames.MapPosition)] Vector3Int AimedTile,
     EntityKey MarkedEntity,
     Vector2Byte MarkedFootprintOffset,
-    ushort MaximumRange,
-    ushort AreaSize)
+    [property: PropertyMeaning(ComponentPropertyMeaningNames.Tiles)] ushort MaximumRange,
+    [property: PropertyMeaning(ComponentPropertyMeaningNames.Tiles)] ushort AreaSize)
 {
     public bool HasMarkedEntity => Mode == TargetingMode.Target && !MarkedEntity.IsNone;
 

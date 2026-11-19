@@ -7,7 +7,7 @@ using Game.Modules.Containers.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death;
 using Game.Modules.Death.Components;
-using Game.Modules.Shops.Components;
+using Game.Modules.Shops;
 
 namespace Game.Modules.Containers;
 
@@ -45,24 +45,19 @@ public sealed class ContainerAccess(ComponentManager componentManager, EntityKey
 {
     private readonly DirectComponentPool<TransformComponent> _transforms = componentManager.GetDirectPool<TransformComponent>();
     private readonly PackedComponentPool<ContainerComponent> _containers = componentManager.GetPackedPool<ContainerComponent>();
-    private readonly PackedComponentPool<ShopComponent> _shops = componentManager.GetPackedPool<ShopComponent>();
     private readonly PackedComponentPool<DeadComponent> _deadEntities = componentManager.GetPackedPool<DeadComponent>();
+    private readonly TradingShops _tradingShops = new(componentManager);
     private readonly LootRights _lootRights = LootRights.For(componentManager, entityKeys);
 
-    /// <summary>The window entityId's items open in: a dead one's loot (a destroyed shop trades no more), a standing shop's shop, a container's loot.</summary>
+    /// <summary>The window entityId's items open in: a trading shop's shop (TradingShops), a dead one's or a container's loot.</summary>
     public ContainerWindowKind WindowKindOf(int entityId)
     {
-        if (_deadEntities.Has(entityId))
-        {
-            return ContainerWindowKind.Loot;
-        }
-
-        if (_shops.Has(entityId))
+        if (_tradingShops.IsTrading(entityId))
         {
             return ContainerWindowKind.Shop;
         }
 
-        return _containers.Has(entityId) ? ContainerWindowKind.Loot : ContainerWindowKind.None;
+        return _deadEntities.Has(entityId) || _containers.Has(entityId) ? ContainerWindowKind.Loot : ContainerWindowKind.None;
     }
 
     /// <summary>Why reacherEntityId can't reach entityId's items now, or None.</summary>

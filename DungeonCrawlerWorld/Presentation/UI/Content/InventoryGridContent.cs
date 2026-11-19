@@ -438,7 +438,7 @@ public sealed class InventoryGridContent(
     /// </summary>
     private void UpdateShopEligibilityState(int shopEntityId)
     {
-        if (!_shopView.TryGetShop(shopEntityId, out var shop))
+        if (!_shopView.TryGetTradingShop(shopEntityId, out var shop))
         {
             foreach (var cell in _cells)
             {
@@ -637,7 +637,7 @@ public sealed class InventoryGridContent(
     /// <summary>Reads what ComputeShopRows needs from the open shop -- false outside shop mode, where there are no shop rows.</summary>
     private bool TryGetShopRowsInputs(ItemDefinition definition, out ShopRowsInputs inputs)
     {
-        if (!_isShopMode || mapViewState.OpenShopEntityId is not { } shopEntityId || !_shopView.TryGetShop(shopEntityId, out var shop))
+        if (!_isShopMode || mapViewState.OpenShopEntityId is not { } shopEntityId || !_shopView.TryGetTradingShop(shopEntityId, out var shop))
         {
             inputs = default;
             return false;
@@ -864,7 +864,7 @@ public sealed class InventoryGridContent(
         getSecondaryTargetEntityId() is { } secondaryTargetEntityId &&
         cell.EntityId == secondaryTargetEntityId &&
         secondaryTargetEntityId != world.PlayerEntityId &&
-        !_shopView.IsShop(secondaryTargetEntityId);
+        !_shopView.IsTradingShop(secondaryTargetEntityId);
 
     /// <summary>Moves every item and all currency lootedEntityId holds to the player.</summary>
     private void TakeAll(int lootedEntityId) => inventoryServices.LootCommands.TakeAll(lootedEntityId, world.PlayerEntityId);
@@ -958,7 +958,7 @@ public sealed class InventoryGridContent(
             return false;
         }
 
-        var isShopSecondary = _shopView.IsShop(secondaryTargetEntityId);
+        var isShopSecondary = _shopView.IsTradingShop(secondaryTargetEntityId);
         if (cell.EntityId == world.PlayerEntityId)
         {
             label = isShopSecondary ? "Sell All" : "Give";
@@ -1248,7 +1248,7 @@ public sealed class InventoryGridContent(
     /// </summary>
     private int ComputeShopTotalPrice(ItemDefinition definition, int quantity)
     {
-        if (mapViewState.OpenShopEntityId is not { } shopEntityId || !_shopView.TryGetShop(shopEntityId, out var shop))
+        if (mapViewState.OpenShopEntityId is not { } shopEntityId || !_shopView.TryGetTradingShop(shopEntityId, out var shop))
         {
             return 0;
         }

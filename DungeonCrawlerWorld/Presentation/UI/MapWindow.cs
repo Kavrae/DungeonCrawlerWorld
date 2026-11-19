@@ -53,8 +53,10 @@ public sealed class MapWindow : Window, IContentDropTarget
     private readonly int _tileDepth;
 
     /// <summary>Whether the simulation is currently paused.</summary>
-    /// <remarks>Toggled by Space while this window holds focus (see OnHotkeysAction). GameLoop.Update gates EcsContext.Update on this flag -- see the "Pause modality" TODO item for why this is one of several independent, not-yet-generalized pause sources GameLoop currently OR's together.</remarks>
-    public bool IsPaused { get; private set; }
+    /// <remarks>The player's own pause, toggled by Space while this window holds focus (see OnHotkeysAction), or the inspector's Edit mode (MapViewState.IsEditingComponents), which holds it while on. GameLoop.Update gates EcsContext.Update on this flag -- see the "Pause modality" TODO item for why this is one of several independent, not-yet-generalized pause sources GameLoop currently OR's together.</remarks>
+    public bool IsPaused => _isPausedByPlayer || _mapViewState.IsEditingComponents;
+
+    private bool _isPausedByPlayer;
 
     /// <summary>
     /// Lets Space's pause toggle (see OnHotkeysAction) check whether a TextBox is currently
@@ -569,7 +571,7 @@ public sealed class MapWindow : Window, IContentDropTarget
     {
         if (WasKeyPressed(keyboardState, previousKeyboardState, Keys.Space) && !(IsTextInputFocused?.Invoke() ?? false))
         {
-            IsPaused = !IsPaused;
+            _isPausedByPlayer = !_isPausedByPlayer;
         }
 
         if (WasKeyPressed(keyboardState, previousKeyboardState, Keys.Home))

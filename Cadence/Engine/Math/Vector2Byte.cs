@@ -1,10 +1,13 @@
+using Engine.ECS.Properties;
+
 namespace Engine.Math;
 
 /// <summary> A 2D byte vector</summary>
 /// <remarks>Used for entity footprint sizes and other small values.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public struct Vector2Byte : IEquatable<Vector2Byte>
+[DescribedValue]
+public partial struct Vector2Byte : IEquatable<Vector2Byte>
 {
     public byte X;
     public byte Y;

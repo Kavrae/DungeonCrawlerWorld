@@ -16,8 +16,8 @@ internal sealed class ShopDragDropResolver(ShopView shopView, ShopCommands shopC
 {
     public bool TryResolve(in DragDropContext context)
     {
-        var originIsShop = shopView.IsShop(context.OriginEntityId);
-        var destinationIsShop = shopView.IsShop(context.DestinationEntityId);
+        var originIsShop = shopView.IsTradingShop(context.OriginEntityId);
+        var destinationIsShop = shopView.IsTradingShop(context.DestinationEntityId);
 
         if (context.ItemStackInstanceId is { } stackInstanceId)
         {

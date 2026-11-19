@@ -13,6 +13,9 @@ public static class HudChrome
     private const float ManaBarGap = 3f;
     private const float InspectionWindowGap = 8f;
 
+    /// <summary>The inspection window's width: room for a field row's label column (FieldRow.LabelColumnWidth) and a control wide enough for a value such as "Multiplicative", wider than the health bar above it, whose right edge it keeps.</summary>
+    private const float InspectionWindowWidth = 420f;
+
     /// <summary>Room above InspectionWindow for the stack counts PlayerStatusEffectsContent draws below its icons, which hang past its own height.</summary>
     private const float StatusEffectCountClearance = 10f;
 
@@ -49,7 +52,7 @@ public static class HudChrome
         var inspectionWindowTop = Margin.Y + PlayerHealthBarContent.Size.Y + ManaBarGap + PlayerManaBarContent.Size.Y + PlayerStatusEffectsContent.Size.Y + StatusEffectCountClearance + InspectionWindowGap;
         var hotbarClearanceTop = screenSize.Y - HotbarContent.MaximumSize.Y - Margin.Y * 1.5f;
         var inspectionWindowBottom = hotbarClearanceTop - InspectionWindowGap - MinimapReserve;
-        InspectionWindowSize = new Vector2(PlayerHealthBarContent.Size.X, System.Math.Max(0f, inspectionWindowBottom - inspectionWindowTop));
+        InspectionWindowSize = new Vector2(System.Math.Max(PlayerHealthBarContent.Size.X, InspectionWindowWidth), System.Math.Max(0f, inspectionWindowBottom - inspectionWindowTop));
         InspectionWindowPosition = new Vector2(screenSize.X - Margin.X - InspectionWindowSize.X, inspectionWindowTop);
 
         QuestTriggerWindowPosition = new Vector2(Margin.X, 800);

@@ -33,6 +33,7 @@ public sealed class GameViews
         AuraView = new AuraView(context.AuraField, context.Auras);
         ActionSourceNaming = new ActionSourceNaming(context.Terrain, context.Auras, context.EntityKeys);
         NpcDecisions = new NpcDecisionView(componentManager, context.NpcDecisions, context.PlayerQuery, context.SimulationClock);
+        ComponentInspection = new ComponentInspectionView(componentManager, context.Definitions, Game.ComponentProperties.GameComponentPropertyMeanings.For(context));
         ContentSpriteNames = new ContentSpriteNames(context.Definitions, context.Terrain, context.Actions, context.Items, context.Lootboxes);
     }
 
@@ -78,4 +79,7 @@ public sealed class GameViews
 
     /// <summary>What an inspected NPC decides with and what it last decided, for the Admin Mode inspection readout.</summary>
     public NpcDecisionView NpcDecisions { get; }
+
+    /// <summary>Admin inspection of an entity's components through their property tables, as named rows.</summary>
+    public ComponentInspectionView ComponentInspection { get; }
 }

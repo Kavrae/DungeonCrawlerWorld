@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Engine.ECS.Properties;
 using Engine.ECS.Systems;
 
 namespace Game.Modules.Health.Components;
@@ -17,6 +18,7 @@ namespace Game.Modules.Health.Components;
 /// exists today (Goblin and Human have 11), and a definition that exceeded it would silently lose
 /// parts, so EntityBodyParts throws instead.
 /// </remarks>
+[DescribedByHand(typeof(Game.ComponentProperties.BodyPartStateComponentPropertyAccess))]
 public struct BodyPartStateComponent
 {
     /// <summary>The most body parts one entity can have.</summary>

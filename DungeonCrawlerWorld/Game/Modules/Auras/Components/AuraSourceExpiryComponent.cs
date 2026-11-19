@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Properties;
 
 namespace Game.Modules.Auras.Components;
 
@@ -15,18 +16,20 @@ namespace Game.Modules.Auras.Components;
 /// <remarks>A timer-wheel timer (IScheduledTimer) whose one firing is the expiry.</remarks>
 /// <param name="auraId">The session-local id (AuraCatalog) of the aura whose source expires.</param>
 /// <param name="expiresAtFrame">The simulation frame the aura source is revoked on.</param>
-public struct AuraSourceExpiryComponent(byte auraId, uint expiresAtFrame) : IScheduledTimer
+[DescribedComponent]
+public partial struct AuraSourceExpiryComponent(byte auraId, uint expiresAtFrame) : IScheduledTimer
 {
     private uint _timerWheelMark;
 
+    [ReadOnlyProperty]
+    [PropertyMeaning(GamePropertyMeanings.AuraId)]
     public byte AuraId { get; set; } = auraId;
 
     /// <summary>The simulation frame the aura source is revoked on.</summary>
+    [PropertyMeaning(ComponentPropertyMeaningNames.Frame)]
     public uint ExpiresAtFrame { get; set; } = expiresAtFrame;
 
     uint IScheduledTimer.NextTickFrame { readonly get => ExpiresAtFrame; set => ExpiresAtFrame = value; }
 
     uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
-
-    public override readonly string ToString() => $"AuraId : {AuraId}\nExpiresAtFrame : {ExpiresAtFrame}";
 }

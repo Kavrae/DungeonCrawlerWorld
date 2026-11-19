@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Engine.ECS.Properties;
 
 namespace Game.Modules.AbilityScores.Components;
 
@@ -13,6 +14,7 @@ namespace Game.Modules.AbilityScores.Components;
 /// because a score that was never granted is not zero: readers fall back to their own defaults for
 /// it (see DodgeEffects, PotionCooldownEffects).
 /// </remarks>
+[DescribedByHand(typeof(Game.ComponentProperties.AbilityScoresComponentPropertyAccess))]
 public struct AbilityScoresComponent
 {
     /// <summary>The number of AbilityScoreType members -- AbilityScoresComponentTests guards this against the enum.</summary>
@@ -70,27 +72,6 @@ public struct AbilityScoresComponent
                 Set((AbilityScoreType)type, other._baseValues[type], other._totals[type]);
             }
         }
-    }
-
-    public override readonly string ToString()
-    {
-        var text = new System.Text.StringBuilder();
-        for (var type = 0; type < Count; type++)
-        {
-            if ((_granted & (1 << type)) == 0)
-            {
-                continue;
-            }
-
-            if (text.Length > 0)
-            {
-                text.Append(", ");
-            }
-
-            text.Append((AbilityScoreType)type).Append(' ').Append(_baseValues[type]).Append('(').Append(_totals[type]).Append(')');
-        }
-
-        return text.ToString();
     }
 
     private static byte Mask(AbilityScoreType type) => (byte)(1 << (int)type);

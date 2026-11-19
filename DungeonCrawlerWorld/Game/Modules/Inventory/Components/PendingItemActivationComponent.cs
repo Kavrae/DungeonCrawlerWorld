@@ -1,3 +1,4 @@
+using Engine.ECS.Properties;
 using Game.Modules.Actions;
 
 namespace Game.Modules.Inventory.Components;
@@ -13,13 +14,13 @@ namespace Game.Modules.Inventory.Components;
 /// </summary>
 /// <param name="selection">What the caster aimed at; TargetResolution turns it into tiles.</param>
 /// <param name="activatedFromSlot">The hotkey slot the activation came from, or null when it came from anywhere else (the inventory, an NPC). When the activated unit changes stack, this is the slot that follows it.</param>
-public struct PendingItemActivationComponent(uint stackInstanceId, TargetSelection selection, HotkeySlot? activatedFromSlot = null)
+[DescribedComponent]
+public partial struct PendingItemActivationComponent(uint stackInstanceId, TargetSelection selection, HotkeySlot? activatedFromSlot = null)
 {
+    [PropertyMeaning(GamePropertyMeanings.StackInstanceId)]
     public uint StackInstanceId { get; set; } = stackInstanceId;
     public TargetSelection Selection { get; set; } = selection;
 
     /// <summary>The hotkey slot the activation came from, or null.</summary>
     public HotkeySlot? ActivatedFromSlot { get; set; } = activatedFromSlot;
-
-    public override readonly string ToString() => $"StackInstanceId : {StackInstanceId}\nSelection : {Selection}\nActivatedFromSlot : {ActivatedFromSlot}";
 }

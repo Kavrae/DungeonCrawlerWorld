@@ -89,7 +89,7 @@ public static class ShellBootstrapper
         tooltipController.Initialize(uiEngine.ElementPoolService, uiLayers);
 
         var mapWindow = BuildBaseWindows(uiEngine, uiLayers);
-        var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(uiEngine, gameSession, screenSize, mapViewState, uiLayers, tooltipController, pointerState);
+        var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(uiEngine, gameSession, screenSize, mapViewState, uiLayers, tooltipController, pointerState, worldSession.AdminTools.ComponentPropertyEdits);
         mapWindow.OnInspectionOpened = () => inspectionWindow.SetDisplayMode(ElementDisplayMode.Fixed);
         var (notificationCenter, healthController) = BuildDynamicHudWindows(uiEngine, world, ecsContext.EventBus, contextMenuController, uiLayers);
         var itemWindows = new ItemWindowCoordinator(uiEngine.ElementPoolService, shellServices, world, mapWindow, actionTargetingController, views.InventoryView, catalogs.ItemCatalog, catalogs.LootboxCatalog, commands.LootCommands, commands.LootboxCommands, worldSession.ReservedEntityIds);
@@ -187,7 +187,7 @@ public static class ShellBootstrapper
 
     /// <summary>StaticHUD tier: the player health bar, action lock, status effects, InspectionWindow, the hotbar, and the quest trigger -- see UiInputController's own doc comment for what each of the four tiers means. questTriggerWindow is returned for Build, which wires its Clicked event once the DynamicHUD tier (needed by OpenQuestComposer) also exists. hotbarContent and inspectionWindow are returned too, for BuildHotbarController and Build's own OnInspectionOpened wiring respectively.</summary>
     private static (TextWindow QuestTriggerWindow, HotbarContent HotbarContent, InspectionWindow InspectionWindow) BuildStaticHudWindows(
-        UiEngineContext uiEngine, GameSession gameSession, Vector2 screenSize, MapViewState mapViewState, UiLayerStack layers, TooltipController tooltipController, PointerState pointerState)
+        UiEngineContext uiEngine, GameSession gameSession, Vector2 screenSize, MapViewState mapViewState, UiLayerStack layers, TooltipController tooltipController, PointerState pointerState, Engine.ECS.Properties.ComponentPropertyEdits componentPropertyEdits)
     {
         var world = gameSession.World;
         var ecsContext = gameSession.EcsContext;
@@ -258,8 +258,8 @@ public static class ShellBootstrapper
 
         // Right-aligned column, directly beneath the status effects row -- see HudChrome.
         // ResolveLayout's own MinimapReserve constant for why headroom is left above the
-        // hotbar's worst-case (fully expanded) top edge. Same width as the health bar
-        // (PlayerHealthBarContent.Size.X), per the Inspection V2 request.
+        // hotbar's worst-case (fully expanded) top edge. Right edge aligned with the health bar,
+        // wide enough for its field rows (HudChrome.InspectionWindowWidth).
         var inspectionWindow = uiEngine.ElementPoolService.CreateElement<InspectionWindow>(null, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
@@ -275,10 +275,9 @@ public static class ShellBootstrapper
                 ShowTitleWhenMinimized = true,
                 CanUserClose = false,
                 CanUserMinimize = true,
-                CanUserScrollVertical = true,
             },
         });
-        inspectionWindow.SetContent(new InspectionWindowContent(world, mapView, mapViewState, ecsContext.ComponentManager, ecsContext.EntityManager, uiEngine.ElementPoolService, catalogs.Definitions, gameSession.Internals.SpawnRecordRebuilder, gameSession.Internals.Skeletons, gameSession.Views.AuraView, gameSession.Views.ActionSourceNaming, gameSession.Views.NpcDecisions));
+        inspectionWindow.SetContent(new InspectionWindowContent(world, mapView, mapViewState, ecsContext.ComponentManager, ecsContext.EntityManager, uiEngine.ElementPoolService, catalogs.Definitions, gameSession.Internals.SpawnRecordRebuilder, gameSession.Internals.Skeletons, gameSession.Views.AuraView, gameSession.Views.ActionSourceNaming, gameSession.Views.NpcDecisions, gameSession.Views.ComponentInspection, componentPropertyEdits));
         inspectionWindow.Initialize();
         layers.Add(UiLayer.StaticHud, inspectionWindow);
 

@@ -23,6 +23,14 @@ namespace UIEngine.UI.Fields;
 public sealed class FieldRow(ElementServices services)
     : Element(services)
 {
+    /// <remarks>A row always holds its label, editor and revert button, whatever its options say, edge to edge: its padding is gone before its first layout, so a new row's editor is as tall as one reused from the pool.</remarks>
+    public override void Build(Element? parent, ElementOptions options)
+    {
+        base.Build(parent, options);
+        _canContainChildren = true;
+        ContentPadding = Vector2.Zero;
+    }
+
     public const float RowHeight = 26f;
 
     /// <summary>A multi-line text row's height: about four lines.</summary>
@@ -188,6 +196,58 @@ public sealed class FieldRow(ElementServices services)
         }
     }
 
+    /// <summary>Replaces what explains the value in the label's tooltip, for a value whose meaning changes with time (a frame shown as seconds from now).</summary>
+    public void SetHint(string? hint)
+    {
+        if (_description.Hint == hint)
+        {
+            return;
+        }
+
+        _description = _description with { Hint = hint };
+        TooltipText = ComposeTooltip();
+    }
+
+    /// <summary>Shows a new value that came from outside (the owner's data changed), raising nothing; an editor that has focus keeps what is being typed.</summary>
+    public void ShowValue(FieldValue value)
+    {
+        _value = value;
+        if (_editor.IsFocused)
+        {
+            return;
+        }
+
+        switch (_editor)
+        {
+            case SearchableChoiceField searchable:
+                searchable.Configure(_description.Choices, value.ChoiceIndex, _description.AllowsFreeText, value.Text);
+                break;
+            case NumericField numeric:
+                numeric.SetValue(value.Number);
+                break;
+            case ColorField color:
+                color.SetValue(value.Color);
+                break;
+            case TextBox textBox:
+                _committedText = value.Text;
+                textBox.SetTextShowingStart(value.Text);
+                break;
+            case TextWindow label:
+                label.UpdateText(value.Text);
+                FitHeightToValue();
+                break;
+            case Toggle toggle:
+                toggle.SetIsOn(value.Boolean);
+                break;
+            case DropdownField dropdown:
+                dropdown.SetSelectedIndex(value.ChoiceIndex);
+                break;
+            case MultiChoiceField multiChoice:
+                multiChoice.Configure(_description.Choices, value.ChoiceIndices ?? []);
+                break;
+        }
+    }
+
     private bool RevertNumber(NumericField numeric)
     {
         numeric.SetValue(numeric.Value);
@@ -202,7 +262,7 @@ public sealed class FieldRow(ElementServices services)
 
     private bool RevertText(TextBox textBox)
     {
-        textBox.SetText(_committedText);
+        textBox.SetTextShowingStart(_committedText);
         return true;
     }
 
@@ -219,12 +279,11 @@ public sealed class FieldRow(ElementServices services)
     {
         base.Initialize();
 
-        ContentPadding = Vector2.Zero;
         _editor = CreateEditor();
         AddChild(_editor);
         if (IsTextKind && _editor is TextBox textBox)
         {
-            textBox.SetText(_value.Text);
+            textBox.SetTextShowingStart(_value.Text);
         }
 
         _revertButton = ElementPoolService.CreateElement<Button>(this, new ElementOptions
@@ -269,6 +328,29 @@ public sealed class FieldRow(ElementServices services)
         _editor.SetMaximumSize(editorSize);
         _editor.SetBounds(new Vector2(editorX, 0), editorSize);
         _revertButton.SetBounds(new Vector2(editorX + editorWidth + Gap, buttonTop), buttonSize);
+        FitHeightToValue();
+    }
+
+    /// <summary>Grows or shrinks the row to the lines a read-only value wraps to -- a multi-line value (a definition, a list) takes as many as it needs, one line takes RowHeight. Any other kind keeps the height it was given.</summary>
+    private void FitHeightToValue()
+    {
+        if (_description.Kind != FieldValueKind.ReadOnlyText || _description.IsLabelOnly || _editor is not TextWindow label)
+        {
+            return;
+        }
+
+        var lineCount = System.Math.Max(1, label.DisplayText.LineCount);
+        var contentHeight = System.Math.Max(RowHeight, TextWindow.SingleLineHeight(label.ContentFont) + label.ContentFont.LineHeight * (lineCount - 1));
+        var height = contentHeight + (CurrentSize.Y - ContentSize.Y);
+        if (System.MathF.Abs(height - CurrentSize.Y) < 0.5f)
+        {
+            return;
+        }
+
+        var size = new Vector2(CurrentSize.X, height);
+        SetMinimumSize(size);
+        SetMaximumSize(size);
+        SetFixedSize(size);
     }
 
     /// <summary>

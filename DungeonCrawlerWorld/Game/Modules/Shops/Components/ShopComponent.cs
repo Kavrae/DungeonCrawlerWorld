@@ -1,3 +1,4 @@
+using Engine.ECS.Properties;
 using Engine.Tags;
 
 namespace Game.Modules.Shops.Components;
@@ -13,11 +14,10 @@ namespace Game.Modules.Shops.Components;
 /// shopping-skill system) -- these two properties always stay the shop's own unmodified baseline.
 /// </summary>
 /// <remarks>AcceptedItems is shared: every shop of one kind holds the same query instance.</remarks>
-public readonly struct ShopComponent(GameplayTagQuery? acceptedItems, float buyMultiplier, float sellMultiplier)
+[DescribedComponent]
+public readonly partial struct ShopComponent(GameplayTagQuery? acceptedItems, float buyMultiplier, float sellMultiplier)
 {
-    public GameplayTagQuery? AcceptedItems { get; } = acceptedItems;
-    public float BuyMultiplier { get; } = buyMultiplier;
-    public float SellMultiplier { get; } = sellMultiplier;
-
-    public override readonly string ToString() => $"AcceptedItems : {(AcceptedItems is null ? "Any" : AcceptedItems.ToString())}\nBuyMultiplier : {BuyMultiplier}\nSellMultiplier : {SellMultiplier}";
+    public GameplayTagQuery? AcceptedItems { get; init; } = acceptedItems;
+    public float BuyMultiplier { get; init; } = buyMultiplier;
+    public float SellMultiplier { get; init; } = sellMultiplier;
 }

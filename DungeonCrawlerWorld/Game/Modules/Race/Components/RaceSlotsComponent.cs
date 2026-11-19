@@ -1,3 +1,4 @@
+using Engine.ECS.Properties;
 using Game.Blueprints;
 
 namespace Game.Modules.Race.Components;
@@ -11,12 +12,15 @@ namespace Game.Modules.Race.Components;
 /// exist today (see TODO.md's deferred-build entry), and growing the component for it would cost
 /// every creature.
 /// </remarks>
-public struct RaceSlotsComponent(ushort race1, ushort race2 = BlueprintRegistry.None)
+[DescribedComponent]
+public partial struct RaceSlotsComponent(ushort race1, ushort race2 = BlueprintRegistry.None)
 {
     public const ushort Empty = BlueprintRegistry.None;
 
+    [PropertyMeaning(GamePropertyMeanings.BlueprintId)]
     public ushort Race1 { get; set; } = race1;
 
+    [PropertyMeaning(GamePropertyMeanings.BlueprintId)]
     public ushort Race2 { get; set; } = race2;
 
     /// <summary>The race a creature counts as when only one can be meant -- who it looks like.</summary>
@@ -41,6 +45,4 @@ public struct RaceSlotsComponent(ushort race1, ushort race2 = BlueprintRegistry.
             Race2 = raceId;
         }
     }
-
-    public override readonly string ToString() => $"Race1 : {Race1}\nRace2 : {Race2}";
 }

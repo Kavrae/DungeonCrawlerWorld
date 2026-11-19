@@ -14,9 +14,7 @@ public sealed class BlueprintSkeletonTests
 {
     private static List<string> SkeletonComponentsOf(ComponentManager componentManager, int entityId)
     {
-        var entries = new List<InspectedComponentEntry>();
-        new ComponentInspector(componentManager).CopyInspectionDataForEntity(entityId, entries);
-        return [.. entries
+        return [.. Tests.ComponentProperties.ComponentSnapshots.Of(componentManager, entityId)
             .Where(static entry => EntityFactory.SkeletonComponentTypes.Contains(entry.ComponentType))
             .Select(static entry => $"{entry.ComponentType.Name}: {entry.Value}")
             .Order(StringComparer.Ordinal)];

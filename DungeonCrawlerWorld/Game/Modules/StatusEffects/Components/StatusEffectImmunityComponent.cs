@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Properties;
 using Engine.ECS.Systems;
 
 namespace Game.Modules.StatusEffects.Components;
@@ -21,19 +22,25 @@ namespace Game.Modules.StatusEffects.Components;
 /// </remarks>
 /// <param name="expiresAtFrame">The simulation frame the immunity ends on -- FrameDeadline.After(now, duration), or FrameDeadline.Never for permanent.</param>
 /// <param name="heldGrantKey">The key of the toggle holding this immunity (EffectContext.HeldGrantKey), or 0 for one no toggle holds. A held immunity never expires and is ended only by its toggle.</param>
-public struct StatusEffectImmunityComponent(StatusEffectType effectType, uint expiresAtFrame, uint heldGrantKey = StatusEffectImmunityComponent.NoHeldGrantKey) : IKeyedScheduledTimer
+[DescribedComponent]
+public partial struct StatusEffectImmunityComponent(StatusEffectType effectType, uint expiresAtFrame, uint heldGrantKey = StatusEffectImmunityComponent.NoHeldGrantKey) : IKeyedScheduledTimer
 {
     /// <summary>HeldGrantKey of an immunity no toggle holds.</summary>
     public const uint NoHeldGrantKey = 0;
 
     private uint _timerWheelMark;
 
-    public StatusEffectType EffectType { get; } = effectType;
+    [ReadOnlyProperty]
+
+    public StatusEffectType EffectType { get; init; } = effectType;
 
     /// <summary>The key of the toggle holding this immunity, or NoHeldGrantKey.</summary>
-    public uint HeldGrantKey { get; } = heldGrantKey;
+    [PropertyMeaning(GamePropertyMeanings.HeldGrantKey)]
+    [ReadOnlyProperty]
+    public uint HeldGrantKey { get; init; } = heldGrantKey;
 
     /// <summary>FrameDeadline.Never means "never expires", mirroring StatModifierComponent.ExpiresAtFrame.</summary>
+    [PropertyMeaning(ComponentPropertyMeaningNames.Frame)]
     public uint ExpiresAtFrame { get; set; } = expiresAtFrame;
 
     uint IScheduledTimer.NextTickFrame { readonly get => ExpiresAtFrame; set => ExpiresAtFrame = value; }
@@ -44,7 +51,4 @@ public struct StatusEffectImmunityComponent(StatusEffectType effectType, uint ex
         : -1 - (int)((HeldGrantKey << 5) | (uint)EffectType);
 
     uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
-
-    public override readonly string ToString() =>
-        $"EffectType : {EffectType}\nExpiresAtFrame : {(ExpiresAtFrame == FrameDeadline.Never ? "Permanent" : ExpiresAtFrame.ToString())}";
 }

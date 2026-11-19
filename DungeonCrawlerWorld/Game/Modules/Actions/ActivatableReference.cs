@@ -1,3 +1,5 @@
+using Engine.ECS.Properties;
+
 namespace Game.Modules.Actions;
 
 /// <summary>Which kind of thing an ActivatableReference names, and so which feature owns it.</summary>
@@ -19,7 +21,11 @@ public enum ActivatableKind : byte
 /// </remarks>
 /// <param name="ActionId">The action, for Kind Action; empty otherwise.</param>
 /// <param name="StackInstanceId">The stack, for Kind Item; 0 otherwise.</param>
-public readonly record struct ActivatableReference(ActivatableKind Kind, Guid ActionId, uint StackInstanceId)
+[DescribedValue]
+public readonly partial record struct ActivatableReference(
+    ActivatableKind Kind,
+    [property: PropertyMeaning(GamePropertyMeanings.ActionId)] Guid ActionId,
+    [property: PropertyMeaning(GamePropertyMeanings.StackInstanceId)] uint StackInstanceId)
 {
     public static ActivatableReference Action(Guid actionId) => new(ActivatableKind.Action, actionId, 0);
 

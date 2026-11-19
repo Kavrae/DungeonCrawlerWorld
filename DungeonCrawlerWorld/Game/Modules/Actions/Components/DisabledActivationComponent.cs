@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Properties;
 using Engine.Tags;
 
 namespace Game.Modules.Actions.Components;
@@ -9,16 +10,19 @@ namespace Game.Modules.Actions.Components;
 /// Query is the granting entry's own shared instance, so a second grant from the same entry refreshes this rule rather than
 /// adding another. A scheduled timer, removed when it ends (DisabledActivationSystem). Multi pool: several rules at once.
 /// </remarks>
-public struct DisabledActivationComponent(GameplayTagQuery query, uint expiresAtFrame, int instanceKey) : IKeyedScheduledTimer
+[DescribedComponent]
+public partial struct DisabledActivationComponent(GameplayTagQuery query, uint expiresAtFrame, int instanceKey) : IKeyedScheduledTimer
 {
     /// <summary>Which actions and items this rule disables, by their tags.</summary>
-    public GameplayTagQuery Query { get; } = query;
+    public GameplayTagQuery Query { get; init; } = query;
 
     /// <summary>The frame this rule ends.</summary>
+    [PropertyMeaning(ComponentPropertyMeaningNames.Frame)]
     public uint ExpiresAtFrame { get; set; } = expiresAtFrame;
 
     /// <summary>A key of its own, telling this rule apart from the entity's others.</summary>
-    public int InstanceKey { get; } = instanceKey;
+    [ReadOnlyProperty]
+    public int InstanceKey { get; init; } = instanceKey;
 
     private uint _timerWheelMark;
 
@@ -27,6 +31,4 @@ public struct DisabledActivationComponent(GameplayTagQuery query, uint expiresAt
     uint IScheduledTimer.NextTickFrame { readonly get => ExpiresAtFrame; set => ExpiresAtFrame = value; }
 
     uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
-
-    public override readonly string ToString() => $"Query : {Query}\nExpiresAtFrame : {ExpiresAtFrame}";
 }

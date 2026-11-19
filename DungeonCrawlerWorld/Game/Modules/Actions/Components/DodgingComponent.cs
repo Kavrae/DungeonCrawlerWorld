@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Properties;
 
 namespace Game.Modules.Actions.Components;
 
@@ -11,16 +12,16 @@ namespace Game.Modules.Actions.Components;
 /// </summary>
 /// <remarks>An expiring duration: a timer (IScheduledTimer) whose one firing removes it -- see DodgeExpirySystem.</remarks>
 /// <param name="expiresAtFrame">The simulation frame the window closes on -- FrameDeadline.After(now, windowFrames).</param>
-public struct DodgingComponent(uint expiresAtFrame) : IScheduledTimer
+[DescribedComponent]
+public partial struct DodgingComponent(uint expiresAtFrame) : IScheduledTimer
 {
     private uint _timerWheelMark;
 
     /// <summary>The simulation frame this dodge window closes on.</summary>
+    [PropertyMeaning(ComponentPropertyMeaningNames.Frame)]
     public uint ExpiresAtFrame { get; set; } = expiresAtFrame;
 
     uint IScheduledTimer.NextTickFrame { readonly get => ExpiresAtFrame; set => ExpiresAtFrame = value; }
 
     uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
-
-    public override readonly string ToString() => $"ExpiresAtFrame : {ExpiresAtFrame}";
 }

@@ -1,3 +1,4 @@
+using Engine.Utilities;
 using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
@@ -25,10 +26,15 @@ public sealed class DropdownField(ElementServices services, DropdownController d
     private const int ArrowWidth = 9;
     private const int ArrowRightInset = 6;
 
-    private readonly SpriteFontBase _font = services.FontService.GetFont(FontChrome.DefaultFontSize);
+    /// <summary>The room a field's text leaves at its right for the list arrow (DrawArrow): the text's inset, the arrow and the arrow's inset. Shared by every field that opens a list.</summary>
+    internal static float ArrowReserve => HorizontalTextInset + ArrowWidth + ArrowRightInset;
 
     private IReadOnlyList<string> _labels = [];
     private DropdownOption[] _options = [];
+    private string _placeholder = string.Empty;
+
+    /// <summary>What the field shows -- the chosen label, else the placeholder -- left of the arrow, cut with "..." to the room there.</summary>
+    private Label? _shownText;
 
     /// <summary>The chosen option's index into the labels SetOptions was given, or -1 for none.</summary>
     public int SelectedIndex { get; private set; } = -1;
@@ -36,7 +42,21 @@ public sealed class DropdownField(ElementServices services, DropdownController d
     public string? SelectedLabel => SelectedIndex >= 0 ? _labels[SelectedIndex] : null;
 
     /// <summary>Shown in place of a label when nothing is chosen.</summary>
-    public string Placeholder { get; set; } = string.Empty;
+    public string Placeholder
+    {
+        get => _placeholder;
+        set
+        {
+            _placeholder = value;
+            ShowSelection();
+        }
+    }
+
+    /// <summary>The text starts past the left inset.</summary>
+    protected override float LeadingTileInset => HorizontalTextInset;
+
+    /// <summary>The arrow's room, and the inset before it, which the text never grows into.</summary>
+    protected override float TrailingTileInset => ArrowReserve;
 
     /// <summary>Raised with the new index when the player chooses a different option. Not raised by SetOptions or SetSelectedIndex.</summary>
     public event Action<int>? SelectionChanged;
@@ -48,9 +68,36 @@ public sealed class DropdownField(ElementServices services, DropdownController d
         _labels = [];
         _options = [];
         SelectedIndex = -1;
-        Placeholder = string.Empty;
+        _placeholder = string.Empty;
+        _shownText = null;
         _contentState.BackgroundColor = options.Content?.ContentColor ?? Color.White;
-        _canContainChildren = false;
+        _canContainChildren = true;
+        _childrenTileMode = ChildElementTileMode.Horizontal;
+        ContentPadding = Vector2.Zero;
+    }
+
+    /// <summary>Shows the chosen label, else the placeholder in ghost colour, in the text label -- built the first time there is something to show.</summary>
+    private void ShowSelection()
+    {
+        var text = SelectedLabel ?? _placeholder;
+        if (_shownText is null)
+        {
+            if (text.Length == 0)
+            {
+                return;
+            }
+
+            _shownText = ElementPoolService.CreateElement<Label>(this, new ElementOptions
+            {
+                Layout = new ElementLayoutOptions { DisplayMode = ElementDisplayMode.Fill, FillsRemaining = true },
+                Chrome = new ElementChromeOptions { CanUserFocus = false },
+                Text = new TextOptions { Text = text },
+            });
+            AddChild(_shownText);
+        }
+
+        _shownText.TextColor = SelectedLabel is null ? WindowPalette.GhostTextOnLightColor : WindowPalette.BodyTextColor;
+        _shownText.SetText(text);
     }
 
     /// <summary>Replaces the choices, with selectedIndex chosen (-1 for none).</summary>
@@ -68,6 +115,7 @@ public sealed class DropdownField(ElementServices services, DropdownController d
         }
 
         SelectedIndex = selectedIndex;
+        ShowSelection();
     }
 
     /// <summary>Chooses selectedIndex without raising SelectionChanged -- the owner's own data changed.</summary>
@@ -77,6 +125,7 @@ public sealed class DropdownField(ElementServices services, DropdownController d
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(selectedIndex, _labels.Count);
 
         SelectedIndex = selectedIndex;
+        ShowSelection();
     }
 
     public bool IsListOpen => dropdowns.IsOpen && ReferenceEquals(dropdowns.Owner, this);
@@ -91,6 +140,7 @@ public sealed class DropdownField(ElementServices services, DropdownController d
         }
 
         SelectedIndex = optionIndex;
+        ShowSelection();
         SelectionChanged?.Invoke(optionIndex);
     }
 
@@ -151,26 +201,12 @@ public sealed class DropdownField(ElementServices services, DropdownController d
         }
     }
 
-    public override void DrawContent(GameTime gameTime)
+    /// <summary>Draws the arrow; the text is the label child's.</summary>
+    public override void DrawContent(GameTime gameTime) => DrawArrow(Render.Batch, LocalContentRectangle);
+
+    /// <summary>A downward triangle of shrinking rows at the right edge of content -- drawn, since the font has no arrow glyph. Every field that opens a list draws it, in ArrowReserve.</summary>
+    internal static void DrawArrow(SpriteEffectBatch spriteBatch, Rectangle content)
     {
-        var spriteBatch = Render.Batch;
-
-        var text = SelectedLabel ?? Placeholder;
-        var textColor = SelectedLabel is null ? WindowPalette.GhostTextOnLightColor : WindowPalette.BodyTextColor;
-        var textPosition = new Vector2(HorizontalTextInset, 0);
-        var textSize = ContentSize - new Vector2(HorizontalTextInset * 2 + ArrowWidth + ArrowRightInset, 0);
-        if (text.Length > 0)
-        {
-            LabelRenderer.DrawLeftAligned(spriteBatch, _font, text, textPosition, textSize, textColor);
-        }
-
-        DrawArrow(spriteBatch);
-    }
-
-    /// <summary>A downward triangle of shrinking rows at the right edge -- drawn, since the font has no arrow glyph.</summary>
-    private void DrawArrow(SpriteEffectBatch spriteBatch)
-    {
-        var content = LocalContentRectangle;
         var left = content.Right - ArrowRightInset - ArrowWidth;
         var rows = (ArrowWidth + 1) / 2;
         var top = content.Y + (content.Height - rows) / 2;

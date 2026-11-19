@@ -1,3 +1,5 @@
+using Engine.ECS.Properties;
+
 namespace Game.Modules.Actions.Components;
 
 /// <summary>
@@ -8,9 +10,11 @@ namespace Game.Modules.Actions.Components;
 /// simply stops mattering once ScrollMasteryEffects.MasteryThreshold is reached and the spell has
 /// been granted -- re-activating the same scroll afterward just keeps incrementing harmlessly).
 /// </summary>
-public struct ScrollMasteryComponent(Guid spellId, ushort usageCount)
+[DescribedComponent]
+public partial struct ScrollMasteryComponent(Guid spellId, ushort usageCount)
 {
-    public Guid SpellId { get; } = spellId;
+    [PropertyMeaning(GamePropertyMeanings.ActionId)]
+    [ReadOnlyProperty]
+    public Guid SpellId { get; init; } = spellId;
     public ushort UsageCount { get; set; } = usageCount;
-    public override readonly string ToString() => $"SpellId : {SpellId}\nUsageCount : {UsageCount}";
 }

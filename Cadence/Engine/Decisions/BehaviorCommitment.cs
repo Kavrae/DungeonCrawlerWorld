@@ -1,4 +1,5 @@
 using Engine.ECS.Entities;
+using Engine.ECS.Properties;
 using Engine.ECS.Systems;
 
 namespace Engine.Decisions;
@@ -10,11 +11,14 @@ namespace Engine.Decisions;
 /// persisted. Target is whatever the picked behavior's Act left in the context, held as a key because it outlives the
 /// frame; the engine never resolves it.
 /// </remarks>
-public struct BehaviorCommitment(ushort behaviorSessionId, uint committedUntilFrame, EntityKey target)
+[DescribedComponent]
+public partial struct BehaviorCommitment(ushort behaviorSessionId, uint committedUntilFrame, EntityKey target)
 {
     /// <summary>The committed behavior's session id (BehaviorCatalog); 0 for none.</summary>
+    [PropertyMeaning(ComponentPropertyMeaningNames.BehaviorId)]
     public ushort BehaviorSessionId { get; set; } = behaviorSessionId;
 
+    [PropertyMeaning(ComponentPropertyMeaningNames.Frame)]
     public uint CommittedUntilFrame { get; set; } = committedUntilFrame;
 
     public EntityKey Target { get; set; } = target;

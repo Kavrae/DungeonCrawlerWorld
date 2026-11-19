@@ -1,3 +1,5 @@
+using Engine.ECS.Properties;
+
 namespace Game.Modules.Actions.Components;
 
 /// <summary>
@@ -11,10 +13,10 @@ namespace Game.Modules.Actions.Components;
 /// not a standing intent to retry.
 /// </summary>
 /// <param name="selection">What the caster aimed at; TargetResolution turns it into tiles.</param>
-public struct PendingActionActivationComponent(Guid actionId, TargetSelection selection)
+[DescribedComponent]
+public partial struct PendingActionActivationComponent(Guid actionId, TargetSelection selection)
 {
+    [PropertyMeaning(GamePropertyMeanings.ActionId)]
     public Guid ActionId { get; set; } = actionId;
     public TargetSelection Selection { get; set; } = selection;
-
-    public override readonly string ToString() => $"ActionId : {ActionId}\nSelection : {Selection}";
 }

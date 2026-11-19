@@ -1,3 +1,4 @@
+using Engine.ECS.Properties;
 using Engine.Utilities;
 
 namespace Game.Modules.Mana.Components;
@@ -10,13 +11,9 @@ namespace Game.Modules.Mana.Components;
 /// (ManaGrant.EnsureManaComponentExists), its BaseMaximumMana then the Intelligence total. CurrentMana is held within the
 /// modified maximum; compare it only with that (ManaQueries.TryGetTotals), never with BaseMaximumMana.
 /// </remarks>
-public struct ManaComponent(float currentMana, float baseMaximumMana)
+[DescribedComponent]
+public partial struct ManaComponent(float currentMana, float baseMaximumMana)
 {
     public float CurrentMana { get; set; } = currentMana;
     public float BaseMaximumMana { get; set; } = baseMaximumMana;
-
-    public override readonly string ToString() =>
-        BaseMaximumMana > 0
-            ? $"{StringUtility.BuildPercentageBar("MP", (int)CurrentMana, (int)BaseMaximumMana, 20)} {(int)CurrentMana}/{(int)BaseMaximumMana} (base)"
-            : $"Invalid BaseMaximumMana: {BaseMaximumMana}";
 }

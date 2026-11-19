@@ -16,7 +16,7 @@ public sealed class AdminContextMenuOptionsTests
     [TestMethod]
     public void AddTileOptions_OffersTheNeighborhoodGroup_ThenTheTileGroupOfSpawnHereBuildStoneWallAndTeleportHere()
     {
-        var adminContextMenuOptions = new AdminContextMenuOptions(TestAdminTools.Create());
+        var adminContextMenuOptions = new AdminContextMenuOptions(TestAdminTools.Create(), static _ => { });
         List<DropdownOption> options = [];
 
         adminContextMenuOptions.AddTileOptions(options, new Vector3Int(5, 6, 0));
@@ -37,7 +37,7 @@ public sealed class AdminContextMenuOptionsTests
     public void BuildStoneWall_ThenRemoveWall_PutsAStoneWallOnTheTileAndTakesItAway()
     {
         var gameSession = BuildSession();
-        var adminContextMenuOptions = new AdminContextMenuOptions(TestAdminTools.Create(gameSession));
+        var adminContextMenuOptions = new AdminContextMenuOptions(TestAdminTools.Create(gameSession), static _ => { });
         var tile = new Vector3Int(5, 5, 0);
         List<DropdownOption> options = [];
         adminContextMenuOptions.AddTileOptions(options, tile);
@@ -62,7 +62,7 @@ public sealed class AdminContextMenuOptionsTests
         var gameSession = BuildSession();
         var tile = new Vector3Int(6, 6, (int)Game.Modules.Core.Components.MapLayer.Ground);
         gameSession.Internals.Factory.Spawn(Game.Blueprints.Races.Goblin.Id, tile.X, tile.Y);
-        var adminContextMenuOptions = new AdminContextMenuOptions(TestAdminTools.Create(gameSession));
+        var adminContextMenuOptions = new AdminContextMenuOptions(TestAdminTools.Create(gameSession), static _ => { });
         List<DropdownOption> options = [];
 
         adminContextMenuOptions.AddTileOptions(options, tile);
@@ -75,7 +75,7 @@ public sealed class AdminContextMenuOptionsTests
     [TestMethod]
     public void AddEntityOptions_OffersApplyAndGrantLootBox()
     {
-        var adminContextMenuOptions = new AdminContextMenuOptions(TestAdminTools.Create());
+        var adminContextMenuOptions = new AdminContextMenuOptions(TestAdminTools.Create(), static _ => { });
         List<DropdownOption> options = [];
 
         adminContextMenuOptions.AddEntityOptions(options, entityId: 0);
@@ -89,7 +89,7 @@ public sealed class AdminContextMenuOptionsTests
     {
         var gameSession = BuildSession();
         var entityId = gameSession.EcsContext.EntityManager.CreateEntity();
-        var adminContextMenuOptions = new AdminContextMenuOptions(TestAdminTools.Create(gameSession));
+        var adminContextMenuOptions = new AdminContextMenuOptions(TestAdminTools.Create(gameSession), static _ => { });
         List<DropdownOption> options = [];
         adminContextMenuOptions.AddEntityOptions(options, entityId);
 
@@ -103,7 +103,7 @@ public sealed class AdminContextMenuOptionsTests
     public void SpawnHere_SelectingABlueprint_SpawnsAnEntity()
     {
         var gameSession = BuildSession();
-        var adminContextMenuOptions = new AdminContextMenuOptions(TestAdminTools.Create(gameSession));
+        var adminContextMenuOptions = new AdminContextMenuOptions(TestAdminTools.Create(gameSession), static _ => { });
         List<DropdownOption> options = [];
         adminContextMenuOptions.AddTileOptions(options, new Vector3Int(5, 5, 0));
         var livingBefore = gameSession.EcsContext.EntityManager.LivingEntityCount;

@@ -66,7 +66,7 @@ public sealed class InventoryTransferDropHandler : IContentDropHandler
 
         if (drag.Origin == DragPayloadOrigin.Currency && drag.OriginEntityId is { } currencyOwnerEntityId)
         {
-            return !_shopView.IsShop(currencyOwnerEntityId) || currencyOwnerEntityId == _mapViewState.OpenShopEntityId;
+            return !_shopView.IsTradingShop(currencyOwnerEntityId) || currencyOwnerEntityId == _mapViewState.OpenShopEntityId;
         }
 
         return true;
@@ -81,7 +81,7 @@ public sealed class InventoryTransferDropHandler : IContentDropHandler
     private bool HasRoomFor(in DragDropContext context)
     {
         var destinationEntityId = context.DestinationEntityId;
-        if (destinationEntityId == _playerQuery.PlayerEntityId || destinationEntityId == context.OriginEntityId || _shopView.IsShop(destinationEntityId) || _shopView.IsShop(context.OriginEntityId))
+        if (destinationEntityId == _playerQuery.PlayerEntityId || destinationEntityId == context.OriginEntityId || _shopView.IsTradingShop(destinationEntityId) || _shopView.IsTradingShop(context.OriginEntityId))
         {
             return true;
         }

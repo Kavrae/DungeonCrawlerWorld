@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Properties;
 
 namespace Game.Modules.Actions.Components;
 
@@ -12,15 +13,20 @@ namespace Game.Modules.Actions.Components;
 /// A keyed timer-wheel timer (IKeyedScheduledTimer) keyed by Key; FrameDeadline.Never for a toggle
 /// with no periodic effects.
 /// </remarks>
-public struct ActiveToggleComponent(uint key, ActivatableReference owner, uint nextTickFrame) : IKeyedScheduledTimer
+[DescribedComponent]
+public partial struct ActiveToggleComponent(uint key, ActivatableReference owner, uint nextTickFrame) : IKeyedScheduledTimer
 {
     /// <summary>Unique among the entity's active toggles, never 0, and fixed for as long as the toggle is on.</summary>
-    public uint Key { get; } = key;
+    [PropertyMeaning(GamePropertyMeanings.HeldGrantKey)]
+    [ReadOnlyProperty]
+    public uint Key { get; init; } = key;
 
     /// <summary>What the toggle belongs to: an action, or the item stack holding the lit unit.</summary>
-    public ActivatableReference Owner { get; } = owner;
+    [ReadOnlyProperty]
+    public ActivatableReference Owner { get; init; } = owner;
 
     /// <summary>The simulation frame the toggle's periodic effects next apply on.</summary>
+    [PropertyMeaning(ComponentPropertyMeaningNames.Frame)]
     public uint NextTickFrame { get; set; } = nextTickFrame;
 
     private uint _timerWheelMark;
@@ -28,6 +34,4 @@ public struct ActiveToggleComponent(uint key, ActivatableReference owner, uint n
     readonly int IKeyedScheduledTimer.TimerKey => unchecked((int)Key);
 
     uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
-
-    public override readonly string ToString() => $"Key : {Key}\nOwner : {Owner}\nNextTickFrame : {NextTickFrame}";
 }

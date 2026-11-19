@@ -1,3 +1,5 @@
+using Engine.ECS.Properties;
+
 namespace Game.Modules.Death.Components;
 
 /// <summary>
@@ -7,7 +9,7 @@ namespace Game.Modules.Death.Components;
 /// Distinct from "has loot" (stacks or currency): drives whether MapWindow draws the LootBag-Red
 /// badge grey, and keeps NPCs from returning to a corpse already opened.
 /// </summary>
-public readonly record struct LootedComponent
+[DescribedComponent]
+public readonly partial record struct LootedComponent
 {
-    public override readonly string ToString() => nameof(LootedComponent);
 }

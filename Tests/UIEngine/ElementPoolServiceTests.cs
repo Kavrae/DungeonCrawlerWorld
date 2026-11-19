@@ -22,6 +22,20 @@ public sealed class ElementPoolServiceTests
     };
 
     [TestMethod]
+    public void AddChild_ToAnElementThatCantContainChildren_ReturnsTheChildToItsPool()
+    {
+        var pool = TestElementPoolServiceFactory.Create(TestFonts.Shared);
+        var parent = pool.CreateElement<Window>(null, FixedOptions());
+        var child = pool.CreateElement<Window>(parent, FixedOptions());
+
+        parent.AddChild(child);
+
+        Assert.IsEmpty(parent.ChildElements);
+        Assert.AreEqual(1, child.PoolReturnCount);
+        Assert.AreSame(child, pool.CreateElement<Window>(null, FixedOptions()), "The refused child is handed out again.");
+    }
+
+    [TestMethod]
     public void RegisterFactory_SecondFactoryForOneType_Throws()
     {
         var pool = TestElementPoolServiceFactory.Create(TestFonts.Shared);

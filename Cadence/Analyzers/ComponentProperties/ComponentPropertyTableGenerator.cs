@@ -1,0 +1,456 @@
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
+using System.Text;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
+namespace Analyzers.ComponentProperties;
+
+/// <summary>Generates a property table and a visitor traversal inside every [DescribedComponent] or [DescribedValue] partial struct, and one module initializer per assembly registering its components' access.</summary>
+/// <remarks>
+/// A described struct gains a nested PropertyAccess: for a component a ComponentPropertyAccess&lt;T&gt; with a static Instance,
+/// for a value a static class; both expose Description, ReadProperties and WriteProperty, which a holder's access calls
+/// for a nested value. CAD0002: a member's type can't be described, or private state no described property reads.
+/// CAD0003: the struct, or a type it is nested in, isn't partial, or it is generic.
+/// </remarks>
+[Generator(LanguageNames.CSharp)]
+public sealed class ComponentPropertyTableGenerator : IIncrementalGenerator
+{
+    public const string UndescribableId = "CAD0002";
+    public const string NotPartialId = "CAD0003";
+
+    private const string Runtime = "global::Engine.ECS.Properties.";
+
+    private static readonly DiagnosticDescriptor Undescribable = new(
+        UndescribableId,
+        "A described struct holds something its property table can't describe",
+        "{0}",
+        "ComponentProperties",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Every member of a described component must be describable or excluded, so a new field can't silently drop out of inspection, editing or saves.");
+
+    private static readonly DiagnosticDescriptor NotPartial = new(
+        NotPartialId,
+        "A described struct can't take its generated table",
+        "{0}",
+        "ComponentProperties",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public void Initialize(IncrementalGeneratorInitializationContext context)
+    {
+        var components = context.SyntaxProvider.ForAttributeWithMetadataName(
+            ComponentPropertyModelBuilder.DescribedComponentName,
+            static (node, _) => node is TypeDeclarationSyntax,
+            static (attributeContext, cancellationToken) => ComponentPropertyModelBuilder.Build(attributeContext, isComponent: true, cancellationToken));
+        var values = context.SyntaxProvider.ForAttributeWithMetadataName(
+            ComponentPropertyModelBuilder.DescribedValueName,
+            static (node, _) => node is TypeDeclarationSyntax,
+            static (attributeContext, cancellationToken) => ComponentPropertyModelBuilder.Build(attributeContext, isComponent: false, cancellationToken));
+        var handWritten = context.SyntaxProvider.ForAttributeWithMetadataName(
+            ComponentPropertyModelBuilder.DescribedByHandName,
+            static (node, _) => node is TypeDeclarationSyntax,
+            static (attributeContext, _) => ComponentPropertyModelBuilder.BuildHandWritten(attributeContext));
+
+        context.RegisterSourceOutput(components, static (production, model) => EmitType(production, model));
+        context.RegisterSourceOutput(values, static (production, model) => EmitType(production, model));
+
+        var registrations = components.Collect()
+            .Combine(handWritten.Collect())
+            .Combine(context.CompilationProvider.Select(static (compilation, _) => compilation.AssemblyName ?? "Assembly"));
+        context.RegisterSourceOutput(registrations, static (production, input) => EmitRegistration(production, input.Left.Left, input.Left.Right, input.Right));
+    }
+
+    private static void EmitType(SourceProductionContext production, TypeModel model)
+    {
+        foreach (var diagnostic in model.Diagnostics)
+        {
+            production.ReportDiagnostic(Diagnostic.Create(
+                diagnostic.Id == NotPartialId ? NotPartial : Undescribable,
+                diagnostic.Location?.ToLocation() ?? Location.None,
+                diagnostic.Message));
+        }
+
+        if (model.CanEmit)
+        {
+            production.AddSource(model.HintName, new TypeEmitter(model).Emit());
+        }
+    }
+
+    private static void EmitRegistration(SourceProductionContext production, ImmutableArray<TypeModel> components, ImmutableArray<HandWrittenModel?> handWritten, string assemblyName)
+    {
+        var registered = components.Where(component => component.CanEmit)
+            .Select(component => (component.FullName, Access: component.FullName + ".PropertyAccess"))
+            .Concat(handWritten.Where(model => model is { IsComponent: true }).Select(model => (model!.FullName, Access: model.AccessFullName)))
+            .OrderBy(entry => entry.FullName, System.StringComparer.Ordinal)
+            .ToList();
+        if (registered.Count == 0)
+        {
+            return;
+        }
+
+        var source = new StringBuilder();
+        source.AppendLine("// <auto-generated/>");
+        source.AppendLine("#nullable enable");
+        source.AppendLine($"namespace ComponentPropertyGenerated.{Sanitize(assemblyName)};");
+        source.AppendLine();
+        source.AppendLine("/// <summary>Registers this assembly's described components' access when the assembly is first used.</summary>");
+        source.AppendLine("internal static class ComponentPropertyRegistration");
+        source.AppendLine("{");
+        source.AppendLine("    [global::System.Runtime.CompilerServices.ModuleInitializer]");
+        source.AppendLine("    internal static void Register()");
+        source.AppendLine("    {");
+        foreach (var (fullName, access) in registered)
+        {
+            source.AppendLine($"        {Runtime}ComponentPropertyAccessOf<{fullName}>.Register({access}.Instance);");
+        }
+
+        source.AppendLine("    }");
+        source.AppendLine("}");
+        production.AddSource("ComponentPropertyRegistration.g.cs", source.ToString());
+    }
+
+    private static string Sanitize(string name)
+    {
+        var builder = new StringBuilder();
+        foreach (var character in name)
+        {
+            builder.Append(char.IsLetterOrDigit(character) ? character : '_');
+        }
+
+        return char.IsDigit(builder[0]) ? "_" + builder : builder.ToString();
+    }
+
+    private sealed class TypeEmitter(TypeModel model)
+    {
+        private readonly StringBuilder _source = new();
+        private string _indent = "";
+
+        public string Emit()
+        {
+            Line("// <auto-generated/>");
+            Line("#nullable enable");
+            if (model.Namespace is not null)
+            {
+                Line($"namespace {model.Namespace};");
+            }
+
+            Line();
+            foreach (var containing in model.ContainingDeclarations)
+            {
+                Open(containing);
+            }
+
+            Open(model.Declaration);
+            Line("/// <summary>This type's property table and traversal, generated from its members.</summary>");
+            Open(model.IsComponent
+                ? $"public sealed class PropertyAccess : {Runtime}ComponentPropertyAccess<{model.FullName}>"
+                : "public static class PropertyAccess");
+
+            foreach (var member in model.Members)
+            {
+                Line($"private static readonly {Runtime}ComponentPropertyDescriptor P{member.Index} = {Descriptor(member)};");
+            }
+
+            Line();
+            Line($"public static {Runtime}ComponentPropertyTable Description {{ get; }} = new(typeof({model.FullName}), [{string.Join(", ", model.Members.Select(member => $"P{member.Index}"))}]);");
+            if (model.IsComponent)
+            {
+                Line();
+                Line("public static readonly PropertyAccess Instance = new();");
+                Line();
+                Line($"public override {Runtime}ComponentPropertyTable Table => Description;");
+                Line();
+                Line($"public override void Read(in {model.FullName} component, {Runtime}ComponentPropertyVisitor visitor) => ReadProperties(in component, visitor);");
+                Line();
+                Line($"public override bool Write(ref {model.FullName} component, global::System.ReadOnlySpan<int> path, in {Runtime}ComponentPropertyValue value) => WriteProperty(ref component, path, in value, restoring: false);");
+                Line();
+                Line($"public override bool Restore(ref {model.FullName} component, global::System.ReadOnlySpan<int> path, in {Runtime}ComponentPropertyValue value) => WriteProperty(ref component, path, in value, restoring: true);");
+            }
+
+            EmitRead();
+            EmitWrite();
+            Close();
+            Close();
+            foreach (var _ in model.ContainingDeclarations)
+            {
+                Close();
+            }
+
+            return _source.ToString();
+        }
+
+        private void EmitRead()
+        {
+            Line();
+            Open($"public static void ReadProperties(in {model.FullName} component, {Runtime}ComponentPropertyVisitor visitor)");
+            foreach (var member in model.Members)
+            {
+                var descriptor = $"P{member.Index}";
+                if (member.IsOptional && member.ValueIsValueType)
+                {
+                    Open($"if (component.{member.Name} is {{ }} value{member.Index})");
+                    Line(ReadCall(member, descriptor, $"value{member.Index}"));
+                    Close();
+                    Open("else");
+                    Line($"visitor.Absent({descriptor});");
+                    Close();
+                }
+                else if (member.IsOptional && member.Kind is "Text" or "Tag")
+                {
+                    Open($"if (component.{member.Name} is {{ }} value{member.Index})");
+                    Line(ReadCall(member, descriptor, $"value{member.Index}"));
+                    Close();
+                    Open("else");
+                    Line($"visitor.Absent({descriptor});");
+                    Close();
+                }
+                else
+                {
+                    Line(ReadCall(member, descriptor, $"component.{member.Name}"));
+                }
+            }
+
+            Close();
+        }
+
+        private static string ReadCall(MemberModel member, string descriptor, string value) => member.Kind switch
+        {
+            "Integer" => member.IntegerForm == "Unsigned64"
+                ? $"visitor.Integer({descriptor}, unchecked((long){value}));"
+                : $"visitor.Integer({descriptor}, {value});",
+            "Key" => $"visitor.Integer({descriptor}, unchecked((long){value}.Value));",
+            "Number" => $"visitor.Number({descriptor}, {value});",
+            "Boolean" => $"visitor.Boolean({descriptor}, {value});",
+            "Text" => $"visitor.Text({descriptor}, {value});",
+            "Enum" or "Flags" => $"visitor.Enum({descriptor}, unchecked((long){value}));",
+            "Guid" => $"visitor.Guid({descriptor}, {value});",
+            "Color" => $"visitor.Color({descriptor}, {value}.PackedValue);",
+            "Tag" => $"visitor.Tag({descriptor}, {value});",
+            "TagQuery" => $"visitor.TagQuery({descriptor}, {value});",
+            "Definition" => $"visitor.Definition({descriptor}, {value});",
+            "Nested" => $"visitor.BeginNested({descriptor}); {member.NestedAccess}.ReadProperties({value}, visitor); visitor.EndNested({descriptor});",
+            _ => throw new System.InvalidOperationException(member.Kind),
+        };
+
+        private void EmitWrite()
+        {
+            Line();
+            Line($"public static bool WriteProperty(ref {model.FullName} component, global::System.ReadOnlySpan<int> path, in {Runtime}ComponentPropertyValue value) => WriteProperty(ref component, path, in value, restoring: false);");
+            Line();
+            Open($"public static bool WriteProperty(ref {model.FullName} component, global::System.ReadOnlySpan<int> path, in {Runtime}ComponentPropertyValue value, bool restoring)");
+            Open("if (path.Length == 0)");
+            Line("return false;");
+            Close();
+            Line();
+            Open("switch (path[0])");
+            foreach (var member in model.Members.Where(member => member.Write != MemberWrite.None && !member.IsDerived))
+            {
+                Open($"case {member.Index}:");
+                if (member.IsReadOnly)
+                {
+                    Open("if (!restoring)");
+                    Line("return false;");
+                    Close();
+                    Line();
+                }
+
+                if (member.Kind == "Nested")
+                {
+                    EmitNestedWrite(member);
+                }
+                else
+                {
+                    Open("if (path.Length != 1)");
+                    Line("return false;");
+                    Close();
+                    Line();
+                    Open("if (value.IsAbsent)");
+                    Line(member.IsOptional ? Assign(member, "null") : "return false;");
+                    if (member.IsOptional)
+                    {
+                        Line("return true;");
+                    }
+
+                    Close();
+                    Line();
+
+                    foreach (var line in Convert(member))
+                    {
+                        Line(line);
+                    }
+
+                    Line(Assign(member, "converted"));
+                    Line("return true;");
+                }
+
+                Close();
+            }
+
+            Open("default:");
+            Line("return false;");
+            Close();
+            Close();
+            Close();
+        }
+
+        private void EmitNestedWrite(MemberModel member)
+        {
+            if (member.IsOptional)
+            {
+                Open("if (path.Length == 1)");
+                Open("if (!value.IsAbsent)");
+                Line("return false;");
+                Close();
+                Line();
+                Line(Assign(member, "null"));
+                Line("return true;");
+                Close();
+                Line();
+                Open($"if (component.{member.Name} is null && !restoring)");
+                Line("return false;");
+                Close();
+                Line();
+                Line($"var nested = component.{member.Name} ?? default({member.ValueType});");
+            }
+            else
+            {
+                Open("if (path.Length == 1)");
+                Line("return false;");
+                Close();
+                Line();
+                Line($"var nested = component.{member.Name};");
+            }
+
+            Open($"if (!{member.NestedAccess}.WriteProperty(ref nested, path.Slice(1), in value, restoring))");
+            Line("return false;");
+            Close();
+            Line();
+            Line(Assign(member, "nested"));
+            Line("return true;");
+        }
+
+        private static string Assign(MemberModel member, string value) => member.Write == MemberWrite.With
+            ? $"component = component with {{ {member.Name} = {value} }};"
+            : $"component.{member.Name} = {value};";
+
+        private static IEnumerable<string> Convert(MemberModel member)
+        {
+            var target = member.ValueType;
+            switch (member.Kind)
+            {
+                case "Integer":
+                    switch (member.IntegerForm)
+                    {
+                        case "Unsigned64":
+                            yield return $"var converted = unchecked(({target})value.Integer);";
+                            break;
+                        case "Signed64":
+                            yield return "var converted = value.Integer;";
+                            break;
+                        default:
+                            yield return $"if (value.Integer < {target}.MinValue || value.Integer > {target}.MaxValue) {{ return false; }}";
+                            yield return $"var converted = ({target})value.Integer;";
+                            break;
+                    }
+
+                    break;
+                case "Key":
+                    yield return "if (value.Integer < 0) { return false; }";
+                    yield return $"var converted = new {target}(unchecked((ulong)value.Integer));";
+                    break;
+                case "Number":
+                    yield return target == "float" ? "var converted = (float)value.Number;" : "var converted = value.Number;";
+                    yield return $"if (!{target}.IsFinite(converted)) {{ return false; }}";
+                    break;
+                case "Boolean":
+                    yield return "var converted = value.Boolean;";
+                    break;
+                case "Text":
+                    yield return "var converted = value.Text ?? string.Empty;";
+                    break;
+                case "Guid":
+                    yield return "var converted = value.Guid;";
+                    break;
+                case "Color":
+                    yield return $"var converted = new {target} {{ PackedValue = value.PackedColor }};";
+                    break;
+                case "Tag":
+                    yield return $"var converted = {target}.None;";
+                    yield return $"if (!string.IsNullOrEmpty(value.Text) && !{target}.TryGet(value.Text!, out converted)) {{ return false; }}";
+                    break;
+                case "Enum":
+                    yield return $"var converted = unchecked(({target})value.Integer);";
+                    yield return "if (!global::System.Enum.IsDefined(converted)) { return false; }";
+                    break;
+                case "Flags":
+                    yield return $"if ((unchecked((ulong)value.Integer) & ~{member.FlagsMask}UL) != 0) {{ return false; }}";
+                    yield return $"var converted = unchecked(({target})value.Integer);";
+                    break;
+                case "Definition" or "TagQuery":
+                    yield return $"if (value.Reference is not {target} converted) {{ return false; }}";
+                    break;
+                default:
+                    throw new System.InvalidOperationException(member.Kind);
+            }
+        }
+
+        private static string Descriptor(MemberModel member)
+        {
+            var kind = member.Kind == "Key" ? "Integer" : member.Kind;
+            var flags = new List<string>();
+            if (member.IsReadOnly)
+            {
+                flags.Add("ReadOnly");
+            }
+
+            if (member.IsNotSaved)
+            {
+                flags.Add("NotSaved");
+            }
+
+            if (member.IsOptional)
+            {
+                flags.Add("Optional");
+            }
+
+            if (member.IsDerived)
+            {
+                flags.Add("Derived");
+            }
+
+            var flagText = flags.Count == 0
+                ? $"{Runtime}ComponentPropertyFlags.None"
+                : string.Join(" | ", flags.Select(flag => $"{Runtime}ComponentPropertyFlags.{flag}"));
+            var meaning = member.Meaning is null ? "default" : $"new(\"{member.Meaning}\")";
+            var nested = member.Kind == "Nested" ? $", nested: {member.NestedAccess}.Description" : "";
+            return $"new({member.Index}, \"{member.Name}\", {Runtime}ComponentPropertyKind.{kind}, typeof({member.ValueType}), {meaning}, {flagText}{nested})";
+        }
+
+        private void Open(string header)
+        {
+            Line(header);
+            Line("{");
+            _indent += "    ";
+        }
+
+        private void Close()
+        {
+            _indent = _indent.Substring(4);
+            Line("}");
+        }
+
+        private void Line(string text = "")
+        {
+            if (text.Length == 0)
+            {
+                _source.AppendLine();
+                return;
+            }
+
+            _source.Append(_indent).AppendLine(text);
+        }
+    }
+}

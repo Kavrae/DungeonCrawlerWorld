@@ -1,8 +1,9 @@
 using Engine.ECS.Components;
 using Engine.ECS.Entities;
-using Game.Spawning;
-using Game.Modules.Crawler.Components;
+using Engine.ECS.Properties;
 using Game.Blueprints;
+using Game.Modules.Crawler.Components;
+using Game.Spawning;
 
 namespace Game.World;
 
@@ -32,6 +33,7 @@ public enum ActionSourceKind : byte
 /// terrain type) the next 24, and the key the low 36 -- 68.7 billion keys, and 16.7 million
 /// identities. Making a source past either limit throws rather than aliasing.
 /// </remarks>
+[DescribedByHand(typeof(Game.ComponentProperties.ActionSourcePropertyAccess))]
 public readonly record struct ActionSource
 {
     private const int KeyBits = 36;
@@ -62,7 +64,7 @@ public readonly record struct ActionSource
     public EntityKey Key => new(_packed & KeyMask);
 
     /// <summary>The identity handle for Kind Entity; the terrain type id for Kind Terrain; the aura id for Kind Aura; 0 otherwise.</summary>
-    private int Detail => (int)((_packed >> KeyBits) & DetailMask);
+    internal int Detail => (int)((_packed >> KeyBits) & DetailMask);
 
     /// <summary>The terrain type for Kind Terrain; 0 otherwise.</summary>
     public ushort TerrainTypeId => Kind == ActionSourceKind.Terrain ? (ushort)Detail : (ushort)0;
@@ -98,6 +100,9 @@ public readonly record struct ActionSource
 
     /// <param name="auraId">The aura's session-local id (AuraCatalog).</param>
     public static ActionSource FromAura(byte auraId) => new(ActionSourceKind.Aura, EntityKey.None, auraId);
+
+    /// <summary>A source rebuilt from its parts, as a snapshot restore does (ActionSourcePropertyAccess); every other source comes from a factory.</summary>
+    internal static ActionSource FromParts(ActionSourceKind kind, EntityKey key, int detail) => new(kind, key, detail);
 
     public static readonly ActionSource Admin = new(ActionSourceKind.Admin, EntityKey.None, 0);
     public static readonly ActionSource AI = new(ActionSourceKind.AI, EntityKey.None, 0);

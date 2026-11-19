@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Properties;
 using Game.Modules.StatusEffects;
 using Game.World;
 
@@ -9,11 +10,13 @@ namespace Game.Modules.Poison.Components;
 /// 0-to-1 stack transition, removed only when RemainingDurationTicks reaches 0.
 /// </summary>
 /// <remarks>A timer-wheel timer (IScheduledTimer): writing NextTickFrame is all it takes to schedule it.</remarks>
-public struct PoisonTimerComponent(uint nextTickFrame, byte stackCount, ushort remainingDurationTicks, ActionSource source) : ITimedStatusEffectTimer<PoisonTimerComponent>
+[DescribedComponent]
+public partial struct PoisonTimerComponent(uint nextTickFrame, byte stackCount, ushort remainingDurationTicks, ActionSource source) : ITimedStatusEffectTimer<PoisonTimerComponent>
 {
     private uint _timerWheelMark;
 
     /// <summary>The simulation frame of the next damage tick (FrameDeadline).</summary>
+    [PropertyMeaning(ComponentPropertyMeaningNames.Frame)]
     public uint NextTickFrame { get; set; } = nextTickFrame;
 
     public byte StackCount { get; set; } = stackCount;
@@ -27,6 +30,4 @@ public struct PoisonTimerComponent(uint nextTickFrame, byte stackCount, ushort r
 
     public static PoisonTimerComponent Create(uint nextTickFrame, byte stackCount, ushort remainingDurationTicks, ActionSource source) =>
         new(nextTickFrame, stackCount, remainingDurationTicks, source);
-
-    public override readonly string ToString() => $"NextTickFrame : {NextTickFrame}\nStackCount : {StackCount}\nRemainingDurationTicks : {RemainingDurationTicks}\nSource : {Source}";
 }

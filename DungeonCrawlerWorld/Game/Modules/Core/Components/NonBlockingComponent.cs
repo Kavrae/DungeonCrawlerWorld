@@ -1,3 +1,5 @@
+using Engine.ECS.Properties;
+
 namespace Game.Modules.Core.Components;
 
 /// <summary>Represents the kind of non-blocking behavior a NonBlockingComponent instance grants.</summary>
@@ -15,9 +17,8 @@ public enum NonBlockingKind : byte
     Phasing = 1 << 1,
 }
 
-public readonly struct NonBlockingComponent(NonBlockingKind kind = NonBlockingKind.None)
+[DescribedComponent]
+public readonly partial struct NonBlockingComponent(NonBlockingKind kind = NonBlockingKind.None)
 {
-    public NonBlockingKind Kind { get; } = kind;
-
-    public override string ToString() => $"Kind : {Kind}";
+    public NonBlockingKind Kind { get; init; } = kind;
 }

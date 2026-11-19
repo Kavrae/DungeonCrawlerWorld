@@ -37,7 +37,7 @@ public static class ShopActions
         return ShopDeals.TryComplete(componentManager, itemCatalog, in deal, playerQuery).Refusal == ShopDealRefusal.None;
     }
 
-    /// <summary>Moves sourceEntityId's whole balance of currencyType to destinationEntityId, announcing Gold that reached a shop as a completed trade in which the giver got nothing back (ShopDealCompletedEvent).</summary>
+    /// <summary>Moves sourceEntityId's whole balance of currencyType to destinationEntityId, announcing Gold that reached a trading shop (TradingShops) as a completed trade in which the giver got nothing back (ShopDealCompletedEvent).</summary>
     /// <remarks>Every gesture that gives currency outright -- the currency row's Give and Give All, a currency drag -- goes through here, so each is announced the same way; to anything but a shop it is a plain transfer.</remarks>
     public static bool TryGiveCurrencyToShop(ComponentManager componentManager, EventBus eventBus, int sourceEntityId, int destinationEntityId, CurrencyType currencyType)
     {
@@ -49,7 +49,7 @@ public static class ShopActions
             return false;
         }
 
-        if (currencyType == CurrencyType.Gold && amountBefore > 0 && componentManager.GetPackedPool<ShopComponent>().Has(destinationEntityId))
+        if (currencyType == CurrencyType.Gold && amountBefore > 0 && TradingShops.IsTrading(componentManager, destinationEntityId))
         {
             eventBus.Publish(new ShopDealCompletedEvent(sourceEntityId, destinationEntityId, PlayerOfferValue: amountBefore, ShopOfferValue: 0, PlayerOfferGold: amountBefore, ShopOfferIsEmpty: true));
         }

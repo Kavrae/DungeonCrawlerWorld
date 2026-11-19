@@ -10,7 +10,7 @@ namespace Presentation.UI;
 /// minimizing keeps the inspection target and its title, so restoring shows the same tile or
 /// entity again. RecalculateMinimizedSize is overridden so minimizing
 /// never shrinks the title bar's width the way Window's default does (MinimumHeaderWidth) --
-/// this panel's width must always match PlayerHealthBarContent.Size.X (see
+/// this panel keeps its full width (HudChrome.InspectionWindowSize, see
 /// ShellBootstrapper), restored or not.
 /// </summary>
 public sealed class InspectionWindow(ElementServices services)

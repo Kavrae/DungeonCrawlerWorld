@@ -2,7 +2,6 @@ using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Game.Modules.Currency;
 using Game.Modules.Currency.Components;
-using Game.Modules.Death.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Shops.Components;
@@ -74,8 +73,7 @@ public static class ShopDeals
     /// <summary>What each offer is worth now, and why the deal can't complete, or None.</summary>
     public static ShopDealValuation Evaluate(ComponentManager componentManager, ItemCatalog itemCatalog, in ShopDeal deal, IPlayerQuery playerQuery)
     {
-        var shops = componentManager.GetPackedPool<ShopComponent>();
-        if (!shops.TryGetReadonly(deal.ShopEntityId, out var shop) || componentManager.GetPackedPool<DeadComponent>().Has(deal.ShopEntityId))
+        if (!TradingShops.TryGetTrading(componentManager, deal.ShopEntityId, out var shop))
         {
             return new ShopDealValuation(0, 0, ShopDealRefusal.NotAShop);
         }

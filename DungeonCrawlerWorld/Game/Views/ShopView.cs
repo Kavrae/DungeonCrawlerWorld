@@ -9,11 +9,13 @@ namespace Game.Views;
 /// <remarks>The pricing arithmetic itself (ShopStockPricing's bulk and band prices) reads no pool, so callers use it directly with what this returns.</remarks>
 public sealed class ShopView(ComponentManager componentManager)
 {
-    private readonly PackedComponentPool<ShopComponent> _shops = componentManager.GetPackedPool<ShopComponent>();
+    private readonly TradingShops _tradingShops = new(componentManager);
 
-    public bool IsShop(int entityId) => _shops.Has(entityId);
+    /// <inheritdoc cref="TradingShops.IsTrading(int)"/>
+    public bool IsTradingShop(int entityId) => _tradingShops.IsTrading(entityId);
 
-    public bool TryGetShop(int entityId, out ShopComponent shop) => _shops.TryGetReadonly(entityId, out shop);
+    /// <inheritdoc cref="TradingShops.TryGetTrading(int, out ShopComponent)"/>
+    public bool TryGetTradingShop(int entityId, out ShopComponent shop) => _tradingShops.TryGetTrading(entityId, out shop);
 
     /// <inheritdoc cref="ShopMarginPricing.ResolveEffectiveShop"/>
     public ShopComponent ResolveEffectiveShop(ShopComponent shop, int buyerOrSellerEntityId) =>

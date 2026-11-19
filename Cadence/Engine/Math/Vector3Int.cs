@@ -1,3 +1,5 @@
+using Engine.ECS.Properties;
+
 namespace Engine.Math;
 
 /// <summary>A 3D integer vector</summary>
@@ -6,7 +8,8 @@ namespace Engine.Math;
 /// when used as a dictionary key or array index.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public struct Vector3Int : IEquatable<Vector3Int>
+[DescribedValue]
+public partial struct Vector3Int : IEquatable<Vector3Int>
 {
     public int X;
     public int Y;
@@ -53,6 +56,7 @@ public struct Vector3Int : IEquatable<Vector3Int>
     public readonly int FlatIndex(Vector3Int size) => X + Y * size.X + Z * size.X * size.Y;
 
     /// <summary>Treating this instance as a size (X x Y x Z), the total number of cells -- the length a flat array backed by FlatIndex needs.</summary>
+    [NotAProperty]
     public readonly int Volume => X * Y * Z;
 
     public override readonly string ToString() => $"{{X:{X} Y:{Y} Z:{Z}}}";

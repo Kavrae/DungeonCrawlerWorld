@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Properties;
 
 namespace Game.Modules.Auras.Components;
 
@@ -10,21 +11,23 @@ namespace Game.Modules.Auras.Components;
 /// the power fresh from the aura grid and the effects from the aura's definition. A keyed
 /// timer-wheel timer (IKeyedScheduledTimer), keyed by AuraId.
 /// </remarks>
-public struct AuraExposureComponent(byte auraId, uint nextTickFrame) : IKeyedScheduledTimer
+[DescribedComponent]
+public partial struct AuraExposureComponent(byte auraId, uint nextTickFrame) : IKeyedScheduledTimer
 {
     private uint _timerWheelMark;
 
+    [ReadOnlyProperty]
+    [PropertyMeaning(GamePropertyMeanings.AuraId)]
     public byte AuraId { get; set; } = auraId;
 
     /// <summary>Whether the aura's latest tick landed nothing because the entity refused it (an immunity). While set, the refusal is not reported again.</summary>
     public bool Refused { get; set; }
 
     /// <summary>The simulation frame of this aura's next tick (FrameDeadline).</summary>
+    [PropertyMeaning(ComponentPropertyMeaningNames.Frame)]
     public uint NextTickFrame { get; set; } = nextTickFrame;
 
     readonly int IKeyedScheduledTimer.TimerKey => AuraId;
 
     uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
-
-    public override readonly string ToString() => $"AuraId : {AuraId}\nRefused : {Refused}\nNextTickFrame : {NextTickFrame}";
 }

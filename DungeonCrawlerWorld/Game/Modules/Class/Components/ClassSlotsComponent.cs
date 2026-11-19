@@ -1,3 +1,4 @@
+using Engine.ECS.Properties;
 using Game.Blueprints;
 
 namespace Game.Modules.Class.Components;
@@ -10,12 +11,15 @@ namespace Game.Modules.Class.Components;
 /// a sparse membership pool beside this one, which waits until something grants a class at runtime.
 /// Nothing does today: every class comes from a blueprint at build time.
 /// </remarks>
-public struct ClassSlotsComponent(ushort class1, ushort class2 = BlueprintRegistry.None)
+[DescribedComponent]
+public partial struct ClassSlotsComponent(ushort class1, ushort class2 = BlueprintRegistry.None)
 {
     public const ushort Empty = BlueprintRegistry.None;
 
+    [PropertyMeaning(GamePropertyMeanings.BlueprintId)]
     public ushort Class1 { get; set; } = class1;
 
+    [PropertyMeaning(GamePropertyMeanings.BlueprintId)]
     public ushort Class2 { get; set; } = class2;
 
     /// <summary>The class a creature counts as when only one can be meant -- the one shown beside its name.</summary>
@@ -40,6 +44,4 @@ public struct ClassSlotsComponent(ushort class1, ushort class2 = BlueprintRegist
             Class2 = classId;
         }
     }
-
-    public override readonly string ToString() => $"Class1 : {Class1}\nClass2 : {Class2}";
 }

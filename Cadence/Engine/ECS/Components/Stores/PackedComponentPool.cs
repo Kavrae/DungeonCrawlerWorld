@@ -1,11 +1,12 @@
 using System.Runtime.CompilerServices;
+using Engine.ECS.Properties;
 
 namespace Engine.ECS.Components.Stores;
 
 /// <summary> Sparse-set component storage for rare components, where a direct pool would waste index space. </summary>
 /// <remarks> The entity index is paged (see EntityPages), so a pool costs the id ranges its holders fall in rather than the world's entity capacity; dense storage grows geometrically (see DenseCapacityGrowth). </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspectableComponentPool, IEntityMembershipPool, IMemoryReportingComponentPool, IObservableComponentPool, IMembershipMaskedComponentPool where T : struct
+public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IDescribedComponentPool, IEntityMembershipPool, IMemoryReportingComponentPool, IObservableComponentPool, IMembershipMaskedComponentPool where T : struct
 {
     private readonly EntityPages<int> _denseIndexByEntity;
     private int[] _denseIndexToEntityIdMap;
@@ -265,11 +266,84 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         return ref _denseComponents[denseIndex];
     }
 
-    /// <summary>Returns the string representation of the component for the specified entity.</summary>
-    /// <param name="entityId">The ID of the entity to check.</param>
-    /// <param name="destination">The list to add the inspection data to.</param>
-    /// <returns>The number of inspection entries added.</returns>
-    public int CopyInspectionDataForEntity(int entityId, List<InspectedComponentEntry> destination)
+    /// <inheritdoc/>
+    public ComponentPropertyTable? PropertyTable => ComponentPropertyAccessOf<T>.Access?.Table;
+
+    /// <inheritdoc/>
+    public int ReadProperties(int entityId, ComponentPropertyVisitor visitor) => ReadInstanceProperties(entityId, 0, visitor) ? 1 : 0;
+
+    /// <inheritdoc/>
+    public bool ReadInstanceProperties(int entityId, int instance, ComponentPropertyVisitor visitor)
+    {
+        var denseIndex = instance == 0 ? DenseIndexOf(entityId) : -1;
+        return denseIndex >= 0 && ComponentPropertyPoolAccess.ReadInstance(in _denseComponents[denseIndex], 0, _denseVersions[denseIndex], visitor);
+    }
+
+    /// <inheritdoc/>
+    public bool WriteProperty(int entityId, int instance, ReadOnlySpan<int> path, in ComponentPropertyValue value, out string? refusal)
+    {
+        var denseIndex = instance == 0 ? DenseIndexOf(entityId) : -1;
+        if (denseIndex < 0)
+        {
+            refusal = ComponentPropertyRefusals.NoSuchInstance;
+            return false;
+        }
+
+        refusal = ComponentPropertyPoolAccess.TryEdit(in _denseComponents[denseIndex], path, in value, out var edited)
+            ?? PropertyWriteOwner?.BeginWrite(entityId, in edited);
+        if (refusal is not null)
+        {
+            return false;
+        }
+
+        try
+        {
+            using var write = WriteByDenseIndex(denseIndex);
+            write.Value = edited;
+        }
+        finally
+        {
+            PropertyWriteOwner?.EndWrite();
+        }
+
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public string? Restore(int entityId, IReadOnlyList<IReadOnlyList<ComponentPropertyLeaf>> instances)
+    {
+        if (DenseIndexOf(entityId) >= 0)
+        {
+            return $"{typeof(T).Name}: entity {entityId} already holds one, and a restore starts from none.";
+        }
+
+        var refusal = ComponentPropertyRestoring.TryBuildOne<T>(instances, out var built)
+            ?? PropertyWriteOwner?.BeginWrite(entityId, in built);
+        if (refusal is not null)
+        {
+            return refusal;
+        }
+
+        try
+        {
+            Add(entityId, built);
+        }
+        finally
+        {
+            PropertyWriteOwner?.EndWrite();
+        }
+
+        return null;
+    }
+
+    /// <summary>The pool's owner, asked about a component a table write or restore would store before it is stored: a relationship sets itself on its links, so a link it would refuse is never written and one it allows is checked once.</summary>
+    internal IComponentPropertyWriteOwner<T>? PropertyWriteOwner { get; set; }
+
+    /// <inheritdoc/>
+    public bool HoldsSeveralPerEntity => false;
+
+    /// <inheritdoc/>
+    public int CopyInstanceVersions(int entityId, List<uint> destination)
     {
         var denseIndex = DenseIndexOf(entityId);
         if (denseIndex < 0)
@@ -277,12 +351,33 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
             return 0;
         }
 
-        destination.Add(new InspectedComponentEntry(
-            ComponentType,
-            _denseComponents[denseIndex].ToString() ?? string.Empty,
-            _denseVersions[denseIndex]));
-
+        destination.Add(_denseVersions[denseIndex]);
         return 1;
+    }
+
+    /// <inheritdoc/>
+    public int? TimerKeyOf(int entityId, int instance) => null;
+
+    /// <inheritdoc/>
+    public bool TryFindInstanceByTimerKey(int entityId, int timerKey, out int instance)
+    {
+        instance = -1;
+        return false;
+    }
+
+    /// <inheritdoc/>
+    public object? ValueOf(int entityId, int instance)
+    {
+        var denseIndex = instance == 0 ? DenseIndexOf(entityId) : -1;
+        return denseIndex < 0 ? null : _denseComponents[denseIndex];
+    }
+
+    /// <inheritdoc/>
+    public bool TryFindInstanceHolding(int entityId, int preferredInstance, object value, out int instance)
+    {
+        instance = 0;
+        var denseIndex = DenseIndexOf(entityId);
+        return value is T held && denseIndex >= 0 && EqualityComparer<T>.Default.Equals(_denseComponents[denseIndex], held);
     }
 
     /// <summary>Gets the version of the component for the specified entity.</summary>

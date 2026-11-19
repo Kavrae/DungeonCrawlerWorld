@@ -4,8 +4,7 @@ namespace Engine.ECS.Components;
 /// <remarks>
 /// Implemented by every concrete pool store (Direct/Packed/Multi), so a new component type gets
 /// memory reporting automatically -- see ComponentMemoryTracker, which enumerates
-/// ComponentManager.AllPools filtering for this the same way ComponentInspector filters for
-/// IInspectableComponentPool.
+/// ComponentManager.AllPools filtering for this.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public interface IMemoryReportingComponentPool : IComponentPool

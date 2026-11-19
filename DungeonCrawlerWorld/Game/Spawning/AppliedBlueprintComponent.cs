@@ -1,3 +1,5 @@
+using Engine.ECS.Properties;
+
 namespace Game.Spawning;
 
 /// <summary>One blueprint part built onto an entity after it spawned (EntityFactory.Apply).</summary>
@@ -11,4 +13,7 @@ namespace Game.Spawning;
 /// <param name="BlueprintId">The applied part, as a BlueprintRegistry id.</param>
 /// <param name="Order">Its place among the entity's applied parts, counting from 0: a later one wins where parts disagree.</param>
 /// <cleanupVersion>1</cleanupVersion>
-public readonly record struct AppliedBlueprintComponent(ushort BlueprintId, ushort Order);
+[DescribedComponent]
+public readonly partial record struct AppliedBlueprintComponent(
+    [property: ReadOnlyProperty, PropertyMeaning(GamePropertyMeanings.BlueprintId)] ushort BlueprintId,
+    [property: ReadOnlyProperty] ushort Order);

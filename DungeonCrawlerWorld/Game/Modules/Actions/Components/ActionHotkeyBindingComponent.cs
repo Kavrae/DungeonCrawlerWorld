@@ -1,3 +1,5 @@
+using Engine.ECS.Properties;
+
 namespace Game.Modules.Actions.Components;
 
 /// <summary>
@@ -6,12 +8,13 @@ namespace Game.Modules.Actions.Components;
 /// <remarks>
 /// One ActionHotkeyBindingComponent per bound hotkey per entity.
 /// </remarks>
-public struct ActionHotkeyBindingComponent(HotkeySlot slot, Guid actionId) : IHotkeySlotBinding<Guid>
+[DescribedComponent]
+public partial struct ActionHotkeyBindingComponent(HotkeySlot slot, Guid actionId) : IHotkeySlotBinding<Guid>
 {
-    public HotkeySlot Slot { get; } = slot;
+    [ReadOnlyProperty]
+    public HotkeySlot Slot { get; init; } = slot;
+    [PropertyMeaning(GamePropertyMeanings.ActionId)]
     public Guid ActionId { get; set; } = actionId;
 
     readonly Guid IHotkeySlotBinding<Guid>.BoundId => ActionId;
-
-    public override readonly string ToString() => $"Slot : {Slot}\nActionId : {ActionId}";
 }

@@ -54,6 +54,9 @@ public sealed class Toggles(MultiComponentPool<ActiveToggleComponent> activeTogg
         return owner is not null;
     }
 
+    /// <summary>The next toggle key of this session, never 0: TurnOn's, and a snapshot restore's for a toggle it brings back (decision 17).</summary>
+    public uint IssueKey() => ++_lastKey;
+
     /// <summary>Switches a toggle on for holderEntityId and applies definition's held effects under its new key, which is returned.</summary>
     /// <remarks>
     /// The first periodic effects are due one interval later. On a holder that is already dead they
@@ -64,7 +67,7 @@ public sealed class Toggles(MultiComponentPool<ActiveToggleComponent> activeTogg
     /// <param name="placesAtHolderTile">For a toggle switched on in Ground mode: its entries placed once per activation go to the tile the holder stands on now (an aura it holds is anchored there), not on the holder.</param>
     public uint TurnOn(int holderEntityId, ActivatableReference owner, ActivatableDefinition definition, long now, bool placesAtHolderTile = false)
     {
-        var key = ++_lastKey;
+        var key = IssueKey();
         var nextTickFrame = definition.Toggle?.Periodic is not { } periodic
             ? FrameDeadline.Never
             : effectServices.DeadEntities.Has(holderEntityId) ? FrameDeadline.After(now, 0) : FrameDeadline.After(now, periodic.IntervalFrames);

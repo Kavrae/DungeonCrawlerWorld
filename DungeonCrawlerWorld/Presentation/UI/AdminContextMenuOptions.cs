@@ -7,8 +7,8 @@ using UIEngine.UI;
 namespace Presentation.UI;
 
 /// <summary>The Admin Mode entries the map's right-click menu offers, built from the session's AdminTools.</summary>
-/// <remarks>Adds its entries unconditionally; the caller decides whether Admin Mode is on.</remarks>
-public sealed class AdminContextMenuOptions(AdminTools adminTools)
+/// <remarks>Adds its entries unconditionally; the caller decides whether Admin Mode is on. showRefusal puts a refused command's reason where the player sees it (the cursor).</remarks>
+public sealed class AdminContextMenuOptions(AdminTools adminTools, Action<string> showRefusal)
 {
     /// <summary>Appends the tile's admin entries: the neighborhood under it with "Regenerate", then a heading naming the tile with "Spawn here", "Build stone wall" or "Remove wall", and "Teleport here".</summary>
     public void AddTileOptions(List<DropdownOption> options, Vector3Int tilePosition)
@@ -21,6 +21,7 @@ public sealed class AdminContextMenuOptions(AdminTools adminTools)
 
         var teleportAdminCommands = adminTools.TeleportAdminCommands;
         options.Add(new DropdownOption("Teleport here", null, teleportAdminCommands.CanTeleportPlayer(tilePosition), () => teleportAdminCommands.TryTeleportPlayer(tilePosition)));
+        AddRevertLastEditOption(options);
     }
 
     /// <summary>Appends one occupant's admin entries: "Apply" and "Grant loot box".</summary>
@@ -28,6 +29,26 @@ public sealed class AdminContextMenuOptions(AdminTools adminTools)
     {
         options.Add(DropdownOption.Opening("Apply", ApplyChoices(entityId)));
         options.Add(DropdownOption.Opening("Grant loot box", LootboxTypeChoices(entityId)));
+    }
+
+    /// <summary>"Revert last edit", while an inspection edit of an entity that still exists is applied: the same revert as the edited row's button, reachable once the inspector has moved on -- disabled with the reason when its instance can't be found, and a refusal of the value itself shown at the cursor.</summary>
+    private void AddRevertLastEditOption(List<DropdownOption> options)
+    {
+        var edits = adminTools.ComponentPropertyEdits;
+        if (edits.Latest() is not { } last)
+        {
+            return;
+        }
+
+        var label = $"Revert last edit ({last.Target.ComponentType.Name}.{last.PropertyName})";
+        var refusal = edits.RevertRefusal(last);
+        options.Add(new DropdownOption(refusal is null ? label : $"{label} ({refusal})", null, refusal is null, () =>
+        {
+            if (edits.Revert(last).Refusal is { } writeRefusal)
+            {
+                showRefusal(writeRefusal);
+            }
+        }));
     }
 
     /// <summary>A header naming the neighborhood, then "Regenerate" -- disabled with the reason when the streamer refuses.</summary>

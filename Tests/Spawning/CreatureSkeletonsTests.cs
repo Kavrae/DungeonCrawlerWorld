@@ -65,9 +65,7 @@ public sealed class CreatureSkeletonsTests
 
     private static List<Type> ComponentTypesOf(Session session, int entityId)
     {
-        var entries = new List<InspectedComponentEntry>();
-        new ComponentInspector(session.Ecs.ComponentManager).CopyInspectionDataForEntity(entityId, entries);
-        return entries.Select(static entry => entry.ComponentType).Distinct().ToList();
+        return Tests.ComponentProperties.ComponentSnapshots.Of(session.Ecs.ComponentManager, entityId).Select(static entry => entry.ComponentType).Distinct().ToList();
     }
 
     private static int FirstSkeletonOf(Session session, Guid raceId)

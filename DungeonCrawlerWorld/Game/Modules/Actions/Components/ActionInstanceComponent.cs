@@ -1,3 +1,5 @@
+using Engine.ECS.Properties;
+
 namespace Game.Modules.Actions.Components;
 
 /// <summary>One action granted to one entity by itself -- a wand, a learned scroll, an admin grant.</summary>
@@ -20,11 +22,12 @@ namespace Game.Modules.Actions.Components;
 /// the entity actually used, since a definition-granted action has no per-entity component to write
 /// a deadline into.
 /// </remarks>
-public struct ActionInstanceComponent(Guid actionId, ActionDefinition? overrideDefinition)
+[DescribedComponent]
+public partial struct ActionInstanceComponent(Guid actionId, ActionDefinition? overrideDefinition)
 {
-    public Guid ActionId { get; } = actionId;
+    [PropertyMeaning(GamePropertyMeanings.ActionId)]
+    [ReadOnlyProperty]
+    public Guid ActionId { get; init; } = actionId;
 
     public ActionDefinition? Override { get; set; } = overrideDefinition;
-
-    public override readonly string ToString() => $"ActionId : {ActionId}\nOverride : {(Override is null ? "none" : Override.Name)}";
 }

@@ -1,3 +1,4 @@
+using Engine.ECS.Properties;
 using Game.Modules.Inventory;
 
 namespace Game.Modules.Lootboxes;
@@ -12,6 +13,7 @@ public readonly record struct LootboxKind(Guid TypeId, LootboxRarity Rarity);
 /// <param name="Contents">What this box grants instead of its type and rarity's own contents; null for the usual contents.</param>
 /// <remarks>A box with Contents stacks only with boxes carrying equal contents, never with the usual box of its type and rarity.</remarks>
 /// <cleanupVersion>1</cleanupVersion>
+[DescribedDefinition]
 public sealed record LootboxReward(Guid TypeId, LootboxRarity Rarity, IItemContents? Contents = null)
 {
     public LootboxKind Kind => new(TypeId, Rarity);

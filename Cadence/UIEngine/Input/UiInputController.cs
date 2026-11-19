@@ -297,6 +297,25 @@ public sealed class UiInputController
     /// <summary>Focuses an element from outside -- a host calls this at startup to focus its main view, since an element's own hotkeys (see RouteHotkeysToFocusedElement) only fire while it holds focus.</summary>
     public void FocusElement(Element element) => SetFocus(element);
 
+    /// <summary>What a press on element focuses: element itself, unless it can't take focus and sits inside a control (a tab stop) -- content the control shows, such as a dropdown's label -- which is then focused instead.</summary>
+    private static Element ControlHoldingContent(Element element)
+    {
+        if (element.CanUserFocus)
+        {
+            return element;
+        }
+
+        for (var ancestor = element.ParentElement; ancestor is not null; ancestor = ancestor.ParentElement)
+        {
+            if (ancestor.IsTabStop)
+            {
+                return ancestor;
+            }
+        }
+
+        return element;
+    }
+
     /// <summary>See _defaultFocusElement.</summary>
     public void SetDefaultFocusElement(Element element) => _defaultFocusElement = element;
 
@@ -721,10 +740,11 @@ public sealed class UiInputController
                 // that window would otherwise redirect via NextFocusableDescendant into whatever
                 // unrelated child happens to be focusable -- clicking a window's
                 // Close button would focus its search box. Any other pressable (a toggle) is
-                // focused itself, whichever of its children was hit.
+                // focused itself, whichever of its children was hit, and so is a control that holds
+                // content (a dropdown's label: ControlHoldingContent).
                 if (_activeInteraction.Pressable is not Button)
                 {
-                    var focusCandidate = _activeInteraction.Pressable ?? _activeInteraction.Element;
+                    var focusCandidate = _activeInteraction.Pressable ?? ControlHoldingContent(_activeInteraction.Element);
                     SetFocus(focusCandidate is { CanUserFocus: true, Enabled: true } focusable ? focusable : null);
                 }
             }

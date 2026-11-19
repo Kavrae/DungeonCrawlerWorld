@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Engine.ECS.Properties;
 
 namespace Engine.ECS.Components.Stores;
 
@@ -8,7 +9,7 @@ namespace Engine.ECS.Components.Stores;
 /// Each entity's chain head, count and version live in a paged index (see EntityPages), held while the entity holds an instance, so a pool costs the id ranges its holders currently fall in rather than the world's entity capacity; dense storage grows geometrically (see DenseCapacityGrowth).
 /// </remarks>
 /// <cleanupVersion>2</cleanupVersion>
-public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IInspectableComponentPool, IEntityMembershipPool, IMemoryReportingComponentPool, IObservableComponentPool, IMembershipMaskedComponentPool where T : struct
+public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IDescribedComponentPool, IEntityMembershipPool, IMemoryReportingComponentPool, IObservableComponentPool, IMembershipMaskedComponentPool where T : struct
 {
     private static readonly EntityChain EmptyChain = new(-1, 0, 0);
 
@@ -197,7 +198,14 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
 
     /// <summary>Claims this pool as the source for one MultiTimerWheel, throwing if a wheel already drives it.</summary>
     /// <remarks>Called by the wheel's constructor. See TimerWheelClaim.</remarks>
-    internal void ClaimForTimerWheel() => _timerWheelClaim.Claim(typeof(T));
+    internal void ClaimForTimerWheel(Func<T, int> readTimerKey)
+    {
+        _timerWheelClaim.Claim(typeof(T));
+        _readTimerKey = readTimerKey;
+    }
+
+    /// <summary>Reads an instance's keyed-timer key, handed over by the timer wheel that drives the pool (its T is known to be an IKeyedScheduledTimer there); null for a pool no wheel drives.</summary>
+    private Func<T, int>? _readTimerKey;
 
     /// <summary> True if the specified entity has at least one component of this type. </summary>
     /// <param name="entityId">The ID of the entity to check.</param>
@@ -373,46 +381,171 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     /// <returns>The version of the component.</returns>
     public uint GetVersionByDenseIndex(int denseIndex) => _denseVersions[denseIndex];
 
-    /// <summary> Returns the string representation of every component instance the specified entity owns. </summary>
-    /// <remarks>Equal-value instances (by T's own equality) are grouped into a single entry with an "(xN)" count suffix, rather than one entry per instance -- unlike Direct/PackedComponentPool's single-component listing, an entity here may own many instances and a naive per-instance dump would flood inspection output.</remarks>
-    /// <param name="entityId">The ID of the entity to check.</param>
-    /// <param name="destination">The list to add the inspection data to.</param>
-    /// <returns>The number of inspection entries added.</returns>
-    public int CopyInspectionDataForEntity(int entityId, List<InspectedComponentEntry> destination)
+    /// <inheritdoc/>
+    public ComponentPropertyTable? PropertyTable => ComponentPropertyAccessOf<T>.Access?.Table;
+
+    /// <inheritdoc/>
+    public int ReadProperties(int entityId, ComponentPropertyVisitor visitor)
     {
-        ArgumentNullException.ThrowIfNull(destination);
+        if (ComponentPropertyAccessOf<T>.Access is null)
+        {
+            return 0;
+        }
 
-        var groups = new List<(T Value, int Count, uint MaxVersion)>();
-
+        var instance = 0;
         for (var denseIndex = GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = GetNextDenseIndex(denseIndex))
         {
-            var value = GetReadonlyByDenseIndex(denseIndex);
-            var version = GetVersionByDenseIndex(denseIndex);
-
-            var groupIndex = groups.FindIndex(group => EqualityComparer<T>.Default.Equals(group.Value, value));
-            if (groupIndex == -1)
-            {
-                groups.Add((value, 1, version));
-            }
-            else
-            {
-                var existing = groups[groupIndex];
-                groups[groupIndex] = (existing.Value, existing.Count + 1, System.Math.Max(existing.MaxVersion, version));
-            }
+            ComponentPropertyPoolAccess.ReadInstance(in _denseComponents[denseIndex], instance, _denseVersions[denseIndex], visitor);
+            instance++;
         }
 
-        foreach (var group in groups)
+        return instance;
+    }
+
+    /// <inheritdoc/>
+    public bool ReadInstanceProperties(int entityId, int instance, ComponentPropertyVisitor visitor)
+    {
+        var denseIndex = DenseIndexOfInstance(entityId, instance);
+        return denseIndex != -1 && ComponentPropertyPoolAccess.ReadInstance(in _denseComponents[denseIndex], instance, _denseVersions[denseIndex], visitor);
+    }
+
+    /// <inheritdoc/>
+    public bool WriteProperty(int entityId, int instance, ReadOnlySpan<int> path, in ComponentPropertyValue value, out string? refusal)
+    {
+        var denseIndex = DenseIndexOfInstance(entityId, instance);
+        if (denseIndex == -1)
         {
-            var text = group.Value.ToString() ?? string.Empty;
-            if (group.Count > 1)
-            {
-                text = $"{text} (x{group.Count})";
-            }
-
-            destination.Add(new InspectedComponentEntry(ComponentType, text, group.MaxVersion));
+            refusal = ComponentPropertyRefusals.NoSuchInstance;
+            return false;
         }
 
-        return groups.Count;
+        refusal = ComponentPropertyPoolAccess.TryEdit(in _denseComponents[denseIndex], path, in value, out var edited);
+        if (refusal is not null)
+        {
+            return false;
+        }
+
+        using var write = WriteByDenseIndex(denseIndex);
+        write.Value = edited;
+        return true;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>Each Add goes at the head of the chain, so they are added last first.</remarks>
+    public string? Restore(int entityId, IReadOnlyList<IReadOnlyList<ComponentPropertyLeaf>> instances)
+    {
+        if (GetFirstDenseIndex(entityId) != -1)
+        {
+            return $"{typeof(T).Name}: entity {entityId} already holds some, and a restore starts from none.";
+        }
+
+        var built = new T[instances.Count];
+        if (ComponentPropertyRestoring.TryBuildEach(instances, built) is { } refusal)
+        {
+            return refusal;
+        }
+
+        for (var instance = built.Length - 1; instance >= 0; instance--)
+        {
+            Add(entityId, built[instance]);
+        }
+
+        return null;
+    }
+
+    /// <inheritdoc/>
+    public bool HoldsSeveralPerEntity => true;
+
+    /// <inheritdoc/>
+    public int CopyInstanceVersions(int entityId, List<uint> destination)
+    {
+        var count = 0;
+        for (var denseIndex = GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = GetNextDenseIndex(denseIndex))
+        {
+            destination.Add(_denseVersions[denseIndex]);
+            count++;
+        }
+
+        return count;
+    }
+
+    /// <inheritdoc/>
+    public object? ValueOf(int entityId, int instance)
+    {
+        var denseIndex = DenseIndexOfInstance(entityId, instance);
+        return denseIndex == -1 ? null : _denseComponents[denseIndex];
+    }
+
+    /// <inheritdoc/>
+    public bool TryFindInstanceHolding(int entityId, int preferredInstance, object value, out int instance)
+    {
+        instance = -1;
+        if (value is not T held)
+        {
+            return false;
+        }
+
+        var preferredDenseIndex = DenseIndexOfInstance(entityId, preferredInstance);
+        if (preferredDenseIndex != -1 && EqualityComparer<T>.Default.Equals(_denseComponents[preferredDenseIndex], held))
+        {
+            instance = preferredInstance;
+            return true;
+        }
+
+        var position = 0;
+        for (var denseIndex = GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = GetNextDenseIndex(denseIndex), position++)
+        {
+            if (EqualityComparer<T>.Default.Equals(_denseComponents[denseIndex], held))
+            {
+                instance = position;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <inheritdoc/>
+    public int? TimerKeyOf(int entityId, int instance)
+    {
+        var denseIndex = DenseIndexOfInstance(entityId, instance);
+        return denseIndex != -1 && _readTimerKey is { } read ? read(_denseComponents[denseIndex]) : null;
+    }
+
+    /// <inheritdoc/>
+    public bool TryFindInstanceByTimerKey(int entityId, int timerKey, out int instance)
+    {
+        instance = 0;
+        if (_readTimerKey is { } read)
+        {
+            for (var denseIndex = GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = GetNextDenseIndex(denseIndex), instance++)
+            {
+                if (read(_denseComponents[denseIndex]) == timerKey)
+                {
+                    return true;
+                }
+            }
+        }
+
+        instance = -1;
+        return false;
+    }
+
+    /// <summary>The dense index of the entity's instance-th component, in chain order; -1 when it holds fewer.</summary>
+    private int DenseIndexOfInstance(int entityId, int instance)
+    {
+        if (instance < 0)
+        {
+            return -1;
+        }
+
+        var denseIndex = GetFirstDenseIndex(entityId);
+        for (var skipped = 0; skipped < instance && denseIndex != -1; skipped++)
+        {
+            denseIndex = GetNextDenseIndex(denseIndex);
+        }
+
+        return denseIndex;
     }
 
     /// <summary>Every in-place write's single exit: bumps the instance's and its entity's versions and tells ComponentChanged observers.</summary>

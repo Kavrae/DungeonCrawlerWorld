@@ -1,3 +1,4 @@
+using Engine.ECS.Properties;
 using Engine.Tags;
 using Game.Effects;
 using Microsoft.Xna.Framework;
@@ -23,6 +24,7 @@ namespace Game.Modules.Actions;
 /// Toggle makes the definition a toggle, whatever its activator: the activator still says how it is
 /// triggered, and Effects become what is held while it is on (see ToggleSpec).
 /// </remarks>
+[DescribedDefinition]
 public abstract record ActivatableDefinition(
     Guid Id,
     string Name,

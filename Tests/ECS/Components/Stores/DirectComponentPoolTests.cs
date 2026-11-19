@@ -146,18 +146,4 @@ public sealed class DirectComponentPoolTests
         Assert.AreEqual(9, pool.GetReadonly(0).Value);
         Assert.IsFalse(pool.Has(3));
     }
-
-    [TestMethod]
-    public void CopyInspectionDataForEntity_PresentComponent_AddsOneEntry()
-    {
-        var pool = new DirectComponentPool<TestComponent>(5, AverageMerge);
-        pool.Add(0, new TestComponent { Value = 3 });
-        var destination = new List<InspectedComponentEntry>();
-
-        var copied = pool.CopyInspectionDataForEntity(0, destination);
-
-        Assert.AreEqual(1, copied);
-        Assert.HasCount(1, destination);
-        Assert.AreEqual(typeof(TestComponent), destination[0].ComponentType);
-    }
 }

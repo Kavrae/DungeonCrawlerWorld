@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Properties;
 
 namespace Game.Modules.TerrainContacts.Components;
 
@@ -9,20 +10,21 @@ namespace Game.Modules.TerrainContacts.Components;
 /// terrain's definition every time they are needed.
 /// </summary>
 /// <remarks>A timer-wheel timer (IScheduledTimer): writing NextTickFrame is all it takes to schedule it.</remarks>
-public struct TerrainContactExposureComponent(uint nextTickFrame, ushort terrainTypeId) : IScheduledTimer
+[DescribedComponent]
+public partial struct TerrainContactExposureComponent(uint nextTickFrame, ushort terrainTypeId) : IScheduledTimer
 {
     private uint _timerWheelMark;
 
     /// <summary>The simulation frame the terrain's contact next applies again (FrameDeadline).</summary>
+    [PropertyMeaning(ComponentPropertyMeaningNames.Frame)]
     public uint NextTickFrame { get; set; } = nextTickFrame;
 
     /// <summary>The TerrainRegistry id of the terrain the entity is standing on.</summary>
+    [PropertyMeaning(GamePropertyMeanings.TerrainTypeId)]
     public ushort TerrainTypeId { get; set; } = terrainTypeId;
 
     /// <summary>Whether the contact's latest application landed nothing because the entity refused it (an immunity). While set, the refusal is not reported again.</summary>
     public bool Refused { get; set; }
 
     uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
-
-    public override readonly string ToString() => $"NextTickFrame : {NextTickFrame}\nTerrainTypeId : {TerrainTypeId}\nRefused : {Refused}";
 }

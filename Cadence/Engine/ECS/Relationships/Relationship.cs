@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Entities;
+using Engine.ECS.Properties;
 
 namespace Engine.ECS.Relationships;
 
@@ -24,7 +25,7 @@ namespace Engine.ECS.Relationships;
 /// own link is detached as SourceDestroyed just before its components go.
 /// </para>
 /// </remarks>
-public sealed class Relationship<TLink> : IRelationship where TLink : struct, IRelationshipLink
+public sealed class Relationship<TLink> : IRelationship, IComponentPropertyWriteOwner<TLink> where TLink : struct, IRelationshipLink
 {
     private readonly PackedComponentPool<TLink> _links;
     private readonly MultiComponentPool<RelatedSourceComponent<TLink>> _relatedSources;
@@ -47,6 +48,7 @@ public sealed class Relationship<TLink> : IRelationship where TLink : struct, IR
         _targetEntityIdBySourceEntityId = new EntityPages<int>(entityCapacity, empty: -1);
 
         links.ComponentChanged += OnLinkWritten;
+        links.PropertyWriteOwner = this;
         links.ComponentRemoving += OnLinkRemoving;
     }
 
@@ -222,68 +224,88 @@ public sealed class Relationship<TLink> : IRelationship where TLink : struct, IR
         SourceUnlinked?.Invoke(sourceEntityId, targetEntityId, in unlinkedLink, reason);
     }
 
+    /// <summary>Why the link would be refused if sourceEntityId held it, or null: what a property-table write asks before it stores a link, so a refused one is never written; an allowed one is resolved here and linked without a second check, as Link's is.</summary>
+    string? IComponentPropertyWriteOwner<TLink>.BeginWrite(int sourceEntityId, in TLink link)
+    {
+        if (TryResolveTarget(sourceEntityId, link.TargetKey, out var targetEntityId) is { } refusal)
+        {
+            return refusal;
+        }
+
+        _sourceEntityIdBeingLinked = sourceEntityId;
+        _targetEntityIdBeingLinked = targetEntityId;
+        return null;
+    }
+
+    void IComponentPropertyWriteOwner<TLink>.EndWrite()
+    {
+        _sourceEntityIdBeingLinked = -1;
+        _targetEntityIdBeingLinked = -1;
+    }
+
     /// <summary>Resolves a link written straight to the pool; a refused one is removed, leaving the source unlinked, before the refusal is thrown.</summary>
     private int ResolveWrittenTargetOrRemoveLink(int sourceEntityId, EntityKey targetKey)
     {
-        try
-        {
-            return ResolveTargetOrThrow(sourceEntityId, targetKey);
-        }
-        catch (InvalidOperationException)
+        if (TryResolveTarget(sourceEntityId, targetKey, out var targetEntityId) is { } refusal)
         {
             _links.Remove(sourceEntityId);
-            throw;
-        }
-    }
-
-    /// <summary>The entity targetKey names, checked as sourceEntityId's target; the hierarchy is checked only when the target changes.</summary>
-    private int ResolveTargetOrThrow(int sourceEntityId, EntityKey targetKey)
-    {
-        if (!_entityKeys.TryGetEntityId(targetKey, out var targetEntityId))
-        {
-            throw new InvalidOperationException($"{typeof(TLink).Name}: entity {sourceEntityId} can't be linked to {targetKey}, which is no living entity.");
-        }
-
-        if (_destroyingEntityIds.Contains(targetEntityId))
-        {
-            throw new InvalidOperationException($"{typeof(TLink).Name}: entity {sourceEntityId} can't be linked to {targetEntityId}, which is being destroyed.");
-        }
-
-        if (targetEntityId == sourceEntityId)
-        {
-            throw new InvalidOperationException($"{typeof(TLink).Name}: entity {sourceEntityId} can't be linked to itself.");
-        }
-
-        if (Spec.Acyclic && _targetEntityIdBySourceEntityId.Get(sourceEntityId) != targetEntityId)
-        {
-            ThrowIfBreaksHierarchy(sourceEntityId, targetEntityId);
+            throw new InvalidOperationException(refusal);
         }
 
         return targetEntityId;
     }
 
-    /// <summary>Throws if linking sourceEntityId to targetEntityId would close a cycle, or make any chain through it -- its ancestors above, its descendants below -- longer than MaximumDepth.</summary>
-    private void ThrowIfBreaksHierarchy(int sourceEntityId, int targetEntityId)
+    /// <summary>The entity targetKey names, checked as sourceEntityId's target; throws the refusal.</summary>
+    private int ResolveTargetOrThrow(int sourceEntityId, EntityKey targetKey) =>
+        TryResolveTarget(sourceEntityId, targetKey, out var targetEntityId) is { } refusal
+            ? throw new InvalidOperationException(refusal)
+            : targetEntityId;
+
+    /// <summary>The entity targetKey names, checked as sourceEntityId's target: null when it may be linked, else why not. The hierarchy is checked only when the target changes.</summary>
+    private string? TryResolveTarget(int sourceEntityId, EntityKey targetKey, out int targetEntityId)
+    {
+        if (!_entityKeys.TryGetEntityId(targetKey, out targetEntityId))
+        {
+            return $"{typeof(TLink).Name}: entity {sourceEntityId} can't be linked to {targetKey}, which is no living entity.";
+        }
+
+        if (_destroyingEntityIds.Contains(targetEntityId))
+        {
+            return $"{typeof(TLink).Name}: entity {sourceEntityId} can't be linked to {targetEntityId}, which is being destroyed.";
+        }
+
+        if (targetEntityId == sourceEntityId)
+        {
+            return $"{typeof(TLink).Name}: entity {sourceEntityId} can't be linked to itself.";
+        }
+
+        if (Spec.Acyclic && _targetEntityIdBySourceEntityId.Get(sourceEntityId) != targetEntityId)
+        {
+            return HierarchyRefusalOf(sourceEntityId, targetEntityId);
+        }
+
+        return null;
+    }
+
+    /// <summary>Why linking sourceEntityId to targetEntityId would break the hierarchy -- close a cycle, or make any chain through it (its ancestors above, its descendants below) longer than MaximumDepth -- or null.</summary>
+    private string? HierarchyRefusalOf(int sourceEntityId, int targetEntityId)
     {
         var linksAboveSource = 0;
         for (var ancestorEntityId = targetEntityId; ancestorEntityId >= 0; ancestorEntityId = _targetEntityIdBySourceEntityId.Get(ancestorEntityId))
         {
             if (ancestorEntityId == sourceEntityId)
             {
-                throw new InvalidOperationException($"{typeof(TLink).Name}: linking entity {sourceEntityId} to {targetEntityId} would close a cycle.");
+                return $"{typeof(TLink).Name}: linking entity {sourceEntityId} to {targetEntityId} would close a cycle.";
             }
 
             if (++linksAboveSource > Spec.MaximumDepth)
             {
-                ThrowChainTooLong(sourceEntityId, targetEntityId);
+                return ChainTooLong(sourceEntityId, targetEntityId);
             }
         }
 
         var linksAllowedBelowSource = Spec.MaximumDepth - linksAboveSource;
-        if (LinksBelow(sourceEntityId, linksAllowedBelowSource) > linksAllowedBelowSource)
-        {
-            ThrowChainTooLong(sourceEntityId, targetEntityId);
-        }
+        return LinksBelow(sourceEntityId, linksAllowedBelowSource) > linksAllowedBelowSource ? ChainTooLong(sourceEntityId, targetEntityId) : null;
     }
 
     /// <summary>The longest chain of links from entityId's sources down, 0 for an entity nothing is linked to -- or, once it passes linksAllowed, any length past it.</summary>
@@ -308,8 +330,8 @@ public sealed class Relationship<TLink> : IRelationship where TLink : struct, IR
         return longestChain;
     }
 
-    private void ThrowChainTooLong(int sourceEntityId, int targetEntityId) =>
-        throw new InvalidOperationException($"{typeof(TLink).Name}: linking entity {sourceEntityId} to {targetEntityId} would make a chain longer than {Spec.MaximumDepth}.");
+    private string ChainTooLong(int sourceEntityId, int targetEntityId) =>
+        $"{typeof(TLink).Name}: linking entity {sourceEntityId} to {targetEntityId} would make a chain longer than {Spec.MaximumDepth}.";
 
     private void ThrowIfNotAcyclic()
     {

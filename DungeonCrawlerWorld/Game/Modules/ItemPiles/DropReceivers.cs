@@ -3,7 +3,7 @@ using Engine.ECS.Components.Stores;
 using Game.Modules.Containers.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.ItemPiles.Components;
-using Game.Modules.Shops.Components;
+using Game.Modules.Shops;
 
 namespace Game.Modules.ItemPiles;
 
@@ -26,7 +26,7 @@ public sealed class DropReceivers(ComponentManager componentManager)
 {
     private readonly PackedComponentPool<ItemPileComponent> _piles = componentManager.GetPackedPool<ItemPileComponent>();
     private readonly PackedComponentPool<ContainerComponent> _containers = componentManager.GetPackedPool<ContainerComponent>();
-    private readonly PackedComponentPool<ShopComponent> _shops = componentManager.GetPackedPool<ShopComponent>();
+    private readonly TradingShops _tradingShops = new(componentManager);
     private readonly PackedComponentPool<DeadComponent> _deadEntities = componentManager.GetPackedPool<DeadComponent>();
 
     /// <summary>What among occupants, other than dropperEntityId, a drop goes into; receiverEntityId is the shop or container, -1 for the ground.</summary>
@@ -52,7 +52,7 @@ public sealed class DropReceivers(ComponentManager componentManager)
                 continue;
             }
 
-            if (_shops.Has(occupantEntityId))
+            if (_tradingShops.IsTrading(occupantEntityId))
             {
                 receiverEntityId = occupantEntityId;
                 return DropReceiverKind.Shop;

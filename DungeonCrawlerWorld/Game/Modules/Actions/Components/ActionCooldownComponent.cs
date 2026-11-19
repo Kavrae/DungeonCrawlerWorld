@@ -1,3 +1,5 @@
+using Engine.ECS.Properties;
+
 namespace Game.Modules.Actions.Components;
 
 /// <summary>When one of an entity's actions can be used again.</summary>
@@ -12,12 +14,14 @@ namespace Game.Modules.Actions.Components;
 /// frame by EntityActions. See ActionInstanceComponent's own doc comment for the countdown system
 /// this replaced.
 /// </remarks>
-public struct ActionCooldownComponent(Guid actionId, uint readyAtFrame)
+[DescribedComponent]
+public partial struct ActionCooldownComponent(Guid actionId, uint readyAtFrame)
 {
-    public Guid ActionId { get; } = actionId;
+    [PropertyMeaning(GamePropertyMeanings.ActionId)]
+    [ReadOnlyProperty]
+    public Guid ActionId { get; init; } = actionId;
 
     /// <summary>The simulation frame from which the action can be used again.</summary>
+    [PropertyMeaning(ComponentPropertyMeaningNames.Frame)]
     public uint ReadyAtFrame { get; set; } = readyAtFrame;
-
-    public override readonly string ToString() => $"ActionId : {ActionId}\nReadyAtFrame : {ReadyAtFrame}";
 }

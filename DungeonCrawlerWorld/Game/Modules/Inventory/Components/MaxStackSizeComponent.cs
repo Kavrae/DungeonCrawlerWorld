@@ -1,3 +1,5 @@
+using Engine.ECS.Properties;
+
 namespace Game.Modules.Inventory.Components;
 
 /// <summary>
@@ -11,9 +13,8 @@ namespace Game.Modules.Inventory.Components;
 /// Achievements module -- Achievements writes it via IAchievementDefinition.ApplyReward, Inventory
 /// only ever reads it.
 /// </summary>
-public readonly struct MaxStackSizeComponent(ushort value)
+[DescribedComponent]
+public readonly partial struct MaxStackSizeComponent(ushort value)
 {
-    public ushort Value { get; } = value;
-
-    public override readonly string ToString() => $"Value : {Value}";
+    public ushort Value { get; init; } = value;
 }

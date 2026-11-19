@@ -1,3 +1,5 @@
+using Engine.ECS.Properties;
+
 namespace Game.Modules.Inventory.Components;
 
 /// <summary>
@@ -7,9 +9,8 @@ namespace Game.Modules.Inventory.Components;
 /// DirectComponentPool has no Remove -- re-enabling merges IsDisabled back to false rather than
 /// removing the component.
 /// </summary>
-public struct InventoryDisabledComponent(bool isDisabled)
+[DescribedComponent]
+public partial struct InventoryDisabledComponent(bool isDisabled)
 {
     public bool IsDisabled { get; set; } = isDisabled;
-
-    public override readonly string ToString() => $"IsDisabled : {IsDisabled}";
 }

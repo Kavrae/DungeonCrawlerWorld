@@ -109,7 +109,7 @@ internal static class TestMapWindows
 
         windowService.RegisterFactory(() => new MapWindow(
             services, mapView, playerActionGate, mapViewState, eventBus,
-            camera, mapRenderer, mapGameOverlay, actionTargeting, playerMovement, contextMenuController, floatingTextController, floatingTextRenderer, new AdminContextMenuOptions(TestAdminTools.Create()), new PointerState()));
+            camera, mapRenderer, mapGameOverlay, actionTargeting, playerMovement, contextMenuController, floatingTextController, floatingTextRenderer, new AdminContextMenuOptions(TestAdminTools.Create(), static _ => { }), new PointerState()));
 
         var mapWindow = windowService.CreateElement<MapWindow>(null, new ElementOptions
         {

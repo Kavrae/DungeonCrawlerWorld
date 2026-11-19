@@ -1,3 +1,5 @@
+using Engine.ECS.Properties;
+
 namespace Game.Modules.Shops.Components;
 
 /// <summary>
@@ -8,11 +10,12 @@ namespace Game.Modules.Shops.Components;
 /// decoupled from those stacks for exactly that reason -- PreferredStockLevel is what the shop
 /// settles toward, not what it currently holds.
 /// </summary>
-public readonly struct ShopStockPreferenceComponent(Guid itemDefinitionId, byte preferredStockLevel)
+[DescribedComponent]
+public readonly partial struct ShopStockPreferenceComponent(Guid itemDefinitionId, byte preferredStockLevel)
 {
-    public Guid ItemDefinitionId { get; } = itemDefinitionId;
+    [PropertyMeaning(GamePropertyMeanings.ItemDefinitionId)]
+    [ReadOnlyProperty]
+    public Guid ItemDefinitionId { get; init; } = itemDefinitionId;
 
-    public byte PreferredStockLevel { get; } = preferredStockLevel;
-
-    public override readonly string ToString() => $"ItemDefinitionId : {ItemDefinitionId}\nPreferredStockLevel : {PreferredStockLevel}";
+    public byte PreferredStockLevel { get; init; } = preferredStockLevel;
 }

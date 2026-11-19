@@ -127,7 +127,7 @@ public sealed class CurrencyRowContent(
         List<DropdownOption> options = [];
         var openSecondaryTargetEntityId = getSecondaryTargetEntityId();
 
-        if (element.EntityId == world.PlayerEntityId && (openSecondaryTargetEntityId is not { } openTarget || !_shopView.IsShop(openTarget)))
+        if (element.EntityId == world.PlayerEntityId && (openSecondaryTargetEntityId is not { } openTarget || !_shopView.IsTradingShop(openTarget)))
         {
             AddDropOption(options, "Drop", ItemDrop.AllOf(element.Type));
             AddDropOption(options, "Drop All", ItemDrop.AllCurrency);
@@ -138,7 +138,7 @@ public sealed class CurrencyRowContent(
             return options;
         }
 
-        var secondaryIsShop = _shopView.IsShop(secondaryTargetEntityId);
+        var secondaryIsShop = _shopView.IsTradingShop(secondaryTargetEntityId);
 
         if (element.EntityId == world.PlayerEntityId && secondaryTargetEntityId != world.PlayerEntityId)
         {

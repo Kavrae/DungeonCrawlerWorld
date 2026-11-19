@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Properties;
 using Game.Modules.StatusEffects;
 using Game.World;
 
@@ -11,11 +12,13 @@ namespace Game.Modules.Burning.Components;
 /// reset it.
 /// </summary>
 /// <remarks>A timer-wheel timer (IScheduledTimer): writing NextTickFrame is all it takes to schedule it.</remarks>
-public struct BurningTimerComponent(uint nextTickFrame, byte stackCount, ActionSource source) : IScheduledTimer, IStatusEffectStackCount
+[DescribedComponent]
+public partial struct BurningTimerComponent(uint nextTickFrame, byte stackCount, ActionSource source) : IScheduledTimer, IStatusEffectStackCount
 {
     private uint _timerWheelMark;
 
     /// <summary>The simulation frame of the next damage tick (FrameDeadline).</summary>
+    [PropertyMeaning(ComponentPropertyMeaningNames.Frame)]
     public uint NextTickFrame { get; set; } = nextTickFrame;
 
     /// <summary>
@@ -28,6 +31,4 @@ public struct BurningTimerComponent(uint nextTickFrame, byte stackCount, ActionS
     public ActionSource Source { get; set; } = source;
 
     uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
-
-    public override readonly string ToString() => $"NextTickFrame : {NextTickFrame}\nStackCount : {StackCount}\nSource : {Source}";
 }

@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Properties;
 
 namespace Game.Modules.Actions.Components;
 
@@ -27,7 +28,8 @@ namespace Game.Modules.Actions.Components;
 /// <param name="definition">The definition as it was when the windup started, which is what resolving it applies.</param>
 /// <param name="selection">What the caster aimed at.</param>
 /// <param name="readyAtFrame">The frame the windup ends and resolves -- the lock's own UnlockedAtFrame.</param>
-public struct PendingWindupComponent(ActivatableReference activatable, ActivatableDefinition definition, TargetSelection selection, uint readyAtFrame) : IScheduledTimer
+[DescribedComponent]
+public partial struct PendingWindupComponent(ActivatableReference activatable, ActivatableDefinition definition, TargetSelection selection, uint readyAtFrame) : IScheduledTimer
 {
     /// <summary>What the windup resolves into.</summary>
     public ActivatableReference Activatable { get; set; } = activatable;
@@ -39,6 +41,7 @@ public struct PendingWindupComponent(ActivatableReference activatable, Activatab
     public TargetSelection Selection { get; set; } = selection;
 
     /// <summary>The frame this windup completes on.</summary>
+    [PropertyMeaning(ComponentPropertyMeaningNames.Frame)]
     public uint ReadyAtFrame { get; set; } = readyAtFrame;
 
     /// <summary>The hotkey slot an item's activation came from, or null; the slot that follows the unit if resolving moves it to another stack.</summary>
@@ -57,6 +60,4 @@ public struct PendingWindupComponent(ActivatableReference activatable, Activatab
     uint IScheduledTimer.NextTickFrame { readonly get => ReadyAtFrame; set => ReadyAtFrame = value; }
 
     uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
-
-    public override readonly string ToString() => $"Activatable : {Activatable}\nReadyAtFrame : {ReadyAtFrame}\nSelection : {Selection}";
 }

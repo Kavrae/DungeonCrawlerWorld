@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Properties;
 
 namespace Game.Modules.Health.Components;
 
@@ -10,17 +11,18 @@ namespace Game.Modules.Health.Components;
 /// </remarks>
 /// <param name="lastDamagedFrame">The frame the holder last took recorded damage.</param>
 /// <param name="expiresAtFrame">The frame the wheel next checks whether the ledger has gone quiet.</param>
-public struct DamageLedgerExpiryComponent(uint lastDamagedFrame, uint expiresAtFrame) : IScheduledTimer
+[DescribedComponent]
+public partial struct DamageLedgerExpiryComponent(uint lastDamagedFrame, uint expiresAtFrame) : IScheduledTimer
 {
     private uint _timerWheelMark;
 
+    [PropertyMeaning(ComponentPropertyMeaningNames.Frame)]
     public uint LastDamagedFrame { get; set; } = lastDamagedFrame;
 
+    [PropertyMeaning(ComponentPropertyMeaningNames.Frame)]
     public uint ExpiresAtFrame { get; set; } = expiresAtFrame;
 
     uint IScheduledTimer.NextTickFrame { readonly get => ExpiresAtFrame; set => ExpiresAtFrame = value; }
 
     uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
-
-    public override readonly string ToString() => $"LastDamagedFrame : {LastDamagedFrame}\nExpiresAtFrame : {ExpiresAtFrame}";
 }

@@ -1,3 +1,4 @@
+using Engine.ECS.Properties;
 using Game.Modules.Lootboxes;
 
 namespace Game.Modules.Achievements.Components;
@@ -6,10 +7,12 @@ namespace Game.Modules.Achievements.Components;
 /// <param name="achievementId">The achievement that owes the box.</param>
 /// <param name="reward">The box, as the achievement declared it when it unlocked.</param>
 /// <cleanupVersion>1</cleanupVersion>
-public readonly struct UnclaimedAchievementLootboxComponent(Guid achievementId, LootboxReward reward)
+[DescribedComponent]
+public readonly partial struct UnclaimedAchievementLootboxComponent(Guid achievementId, LootboxReward reward)
 {
-    public Guid AchievementId { get; } = achievementId;
-    public LootboxReward Reward { get; } = reward;
-
-    public override readonly string ToString() => $"AchievementId : {AchievementId}\nReward : {Reward.Rarity} {Reward.TypeId}";
+    [PropertyMeaning(GamePropertyMeanings.AchievementId)]
+    [ReadOnlyProperty]
+    public Guid AchievementId { get; init; } = achievementId;
+    [ReadOnlyProperty]
+    public LootboxReward Reward { get; init; } = reward;
 }

@@ -1143,6 +1143,14 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
         ClearUndoHistory();
     }
 
+    /// <summary>Replaces the whole text as SetText does, but with the caret at the start, so a value too long for the box shows its beginning -- for a field showing a value rather than text being typed on.</summary>
+    public void SetTextShowingStart(string text)
+    {
+        SetTextAndAutoSize(text);
+        MoveCaretTo(0);
+        ClearUndoHistory();
+    }
+
     private void SetTextAndAutoSize(string newText)
     {
         var changed = newText != OriginalText;

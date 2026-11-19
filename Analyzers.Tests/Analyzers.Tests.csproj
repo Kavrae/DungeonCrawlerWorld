@@ -18,6 +18,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Cadence\Analyzers\Analyzers.csproj" />
+    <!-- The property-table generator's tests compile their samples against Engine.ECS.Properties, and run what it emits. -->
+    <ProjectReference Include="..\Cadence\Engine\Engine.csproj" />
   </ItemGroup>
 
   <ItemGroup>

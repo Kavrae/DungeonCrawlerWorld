@@ -32,7 +32,7 @@ public sealed class MultiTimerWheel<T> where T : struct, IKeyedScheduledTimer
         ArgumentNullException.ThrowIfNull(componentPool);
         ArgumentNullException.ThrowIfNull(simulationScope);
 
-        componentPool.ClaimForTimerWheel();
+        componentPool.ClaimForTimerWheel(static timer => timer.TimerKey);
 
         _pool = componentPool;
         _scope = simulationScope;

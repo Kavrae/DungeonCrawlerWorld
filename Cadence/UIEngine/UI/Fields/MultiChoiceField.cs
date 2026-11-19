@@ -1,7 +1,5 @@
-using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
-using UIEngine.Rendering;
 using UIEngine.UI.Chrome;
 using UIEngine.UI.ColorPalettes;
 
@@ -18,14 +16,25 @@ public sealed class MultiChoiceField(ElementServices services, DropdownControlle
 {
     private static float HorizontalTextInset => WindowChrome.ControlTextInset;
 
-    private readonly SpriteFontBase _font = services.FontService.GetFont(FontChrome.DefaultFontSize);
     private readonly SortedSet<int> _chosen = [];
 
     private IReadOnlyList<string> _choices = [];
     private string _chosenLabel = string.Empty;
+    private string _placeholder = string.Empty;
+
+    /// <summary>What the field shows -- the chosen labels, else the placeholder -- left of the arrow, cut with "..." to the room there.</summary>
+    private Label? _shownText;
 
     /// <summary>Shown when nothing is chosen.</summary>
-    public string Placeholder { get; set; } = string.Empty;
+    public string Placeholder
+    {
+        get => _placeholder;
+        set
+        {
+            _placeholder = value;
+            ShowChosen();
+        }
+    }
 
     /// <summary>The chosen choices' indices, in order.</summary>
     public IReadOnlyList<int> ChosenIndices => [.. _chosen];
@@ -37,11 +46,21 @@ public sealed class MultiChoiceField(ElementServices services, DropdownControlle
 
     public override bool IsTabStop => Enabled;
 
+    /// <summary>The text starts past the left inset.</summary>
+    protected override float LeadingTileInset => HorizontalTextInset;
+
+    /// <summary>The list arrow's room, as a DropdownField keeps it, which the text never grows into.</summary>
+    protected override float TrailingTileInset => DropdownField.ArrowReserve;
+
     public override void Build(Element? parent, ElementOptions options)
     {
         base.Build(parent, options);
 
-        _canContainChildren = false;
+        _placeholder = string.Empty;
+        _shownText = null;
+        _canContainChildren = true;
+        _childrenTileMode = ChildElementTileMode.Horizontal;
+        ContentPadding = Vector2.Zero;
     }
 
     public void Configure(IReadOnlyList<string> choices, IEnumerable<int> chosenIndices)
@@ -111,10 +130,38 @@ public sealed class MultiChoiceField(ElementServices services, DropdownControlle
         }
 
         _chosenLabel = BuildChosenLabel();
+        ShowChosen();
         ChoicesChanged?.Invoke(ChosenIndices);
     }
 
     private string BuildChosenLabel() => string.Join(", ", _chosen.Select(index => _choices[index]));
+
+    /// <summary>Shows the chosen labels, else the placeholder in ghost colour, in the text label -- built the first time there is something to show.</summary>
+    private void ShowChosen()
+    {
+        var text = _chosen.Count == 0 ? _placeholder : _chosenLabel;
+        if (_shownText is null)
+        {
+            if (text.Length == 0)
+            {
+                return;
+            }
+
+            _shownText = ElementPoolService.CreateElement<Label>(this, new ElementOptions
+            {
+                Layout = new ElementLayoutOptions { DisplayMode = ElementDisplayMode.Fill, FillsRemaining = true },
+                Chrome = new ElementChromeOptions { CanUserFocus = false },
+                Text = new TextOptions { Text = text },
+            });
+            AddChild(_shownText);
+        }
+
+        _shownText.TextColor = _chosen.Count == 0 ? WindowPalette.GhostTextOnLightColor : WindowPalette.BodyTextColor;
+        _shownText.SetText(text);
+    }
+
+    /// <summary>Draws the list arrow, as a DropdownField does; the text is the label child's.</summary>
+    public override void DrawContent(GameTime gameTime) => DropdownField.DrawArrow(Render.Batch, LocalContentRectangle);
 
     /// <summary>Draws the focus mark over everything else while focused.</summary>
     public override void Draw(GameTime gameTime)
@@ -125,17 +172,5 @@ public sealed class MultiChoiceField(ElementServices services, DropdownControlle
         {
             DrawFocusIndicator(Rectangle);
         }
-    }
-
-    public override void DrawContent(GameTime gameTime)
-    {
-        var text = _chosen.Count == 0 ? Placeholder : _chosenLabel;
-        if (text.Length == 0)
-        {
-            return;
-        }
-
-        var color = _chosen.Count == 0 ? WindowPalette.GhostTextOnLightColor : WindowPalette.BodyTextColor;
-        LabelRenderer.DrawLeftAligned(Render.Batch, _font, text, new Vector2(HorizontalTextInset, 0), ContentSize - new Vector2(HorizontalTextInset * 2, 0), color);
     }
 }

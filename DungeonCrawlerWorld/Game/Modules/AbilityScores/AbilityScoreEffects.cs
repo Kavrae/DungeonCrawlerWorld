@@ -128,6 +128,15 @@ public static class AbilityScoreEffects
         recomputedScores.Value.SetTotal(type, newTotal);
     }
 
+    /// <summary>Recomputes and stores Total for every ability score the entity was granted -- what an outside write of a base or a modifier (Admin Mode's edits) leaves to be done.</summary>
+    public static void RecomputeAll(ComponentManager componentManager, int entityId)
+    {
+        foreach (var type in AllTypes)
+        {
+            RecomputeAbilityScore(componentManager, entityId, type);
+        }
+    }
+
     private static MultiComponentPool<StatModifierComponent> StatModifiersOf(ComponentManager componentManager) =>
         componentManager.GetMultiPool<StatModifierComponent>();
 

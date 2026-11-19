@@ -1,3 +1,5 @@
+using Engine.ECS.Properties;
+
 namespace Game.Modules.Class.Components;
 
 /// <summary>Where a class an entity holds came from -- what removes it again, and whose name a grant it makes is attributed to.</summary>
@@ -30,23 +32,24 @@ public enum ClassGrantKind : byte
 /// this and ClassQueries are storage ahead of their first consumer: the floor-end event, the
 /// class-selection UI, the advancement rules and the residue roll are all still to come (TODO.md).
 /// </remarks>
-public struct ClassMembershipComponent(ushort classId, ClassGrantKind grantedBy, byte acquisitionOrder, ushort expiresAfterFloor = ClassMembershipComponent.Permanent)
+[DescribedComponent]
+public partial struct ClassMembershipComponent(ushort classId, ClassGrantKind grantedBy, byte acquisitionOrder, ushort expiresAfterFloor = ClassMembershipComponent.Permanent)
 {
     /// <summary>The ExpiresAfterFloor of a membership that never expires on its own.</summary>
     public const ushort Permanent = 0;
 
-    public ushort ClassId { get; } = classId;
+    [PropertyMeaning(GamePropertyMeanings.BlueprintId)]
+    [ReadOnlyProperty]
+    public ushort ClassId { get; init; } = classId;
 
-    public ClassGrantKind GrantedBy { get; } = grantedBy;
+    public ClassGrantKind GrantedBy { get; init; } = grantedBy;
 
     /// <summary>Where this class sits in the order the entity acquired its classes -- what a subclass derives from, since a later class can depend on an earlier one.</summary>
-    public byte AcquisitionOrder { get; } = acquisitionOrder;
+    public byte AcquisitionOrder { get; init; } = acquisitionOrder;
 
     /// <summary>The floor after which this class is removed, or Permanent.</summary>
-    public ushort ExpiresAfterFloor { get; } = expiresAfterFloor;
+    [PropertyMeaning(GamePropertyMeanings.Floor)]
+    public ushort ExpiresAfterFloor { get; init; } = expiresAfterFloor;
 
     public readonly bool IsPermanent => ExpiresAfterFloor == Permanent;
-
-    public override readonly string ToString() =>
-        $"ClassId : {ClassId}\nGrantedBy : {GrantedBy}\nAcquisitionOrder : {AcquisitionOrder}\nExpiresAfterFloor : {(IsPermanent ? "never" : ExpiresAfterFloor)}";
 }
