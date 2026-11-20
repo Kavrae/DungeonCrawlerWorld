@@ -119,6 +119,6 @@ public sealed class Folder : Element
         var iconTopLeft = HeaderAbsolutePosition + (HeaderSize - _iconSize) / 2f;
 
 
-        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _sprite, _fallbackGlyphFontMeasurer, _fallbackGlyph, Color.Black, iconTopLeft, _iconSize, Color.White);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _sprite, _fallbackGlyphFontMeasurer, _fallbackGlyph, Color.Black, iconTopLeft, _iconSize, SpriteFit.Contain, Color.White);
     }
 }

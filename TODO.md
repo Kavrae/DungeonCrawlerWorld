@@ -3334,11 +3334,6 @@ menu listing every option -- depends on Context menu / mouse button coverage's r
 generalized "popup a list of choices" primitive). Should also cover sorting by a stat (e.g. wand
 charges) once per-slot divergence gives items stats worth sorting by -- the option list may need to be
 built dynamically per tab, not a fixed list.
-
-#### Search icon that expands into a search bar
-
-Both the Tab search box and the item-name search box are always-visible today. Space-efficient
-alternative: a small icon expanding into the box on click (ghost text/debounce unchanged), collapsing
 back when empty and unfocused. Pure presentation change.
 
 #### Inventory tab reordering + custom-tag trailing tab
@@ -3552,22 +3547,6 @@ as if a key were pressed, a ready shape for "Replay by recording input" and "In-
 (Global).
 
 ### Medium Priority
-
-#### Sprites taller than a tile render wrongly outside the map
-
-A sprite more than one tile tall (a tall creature, a shrine, anything whose manifest entry reaches above its tile --
-IMPLEMENTATION-NOTES "Tall sprites, wall faces and tops, and the sprite manifest") doesn't render correctly in the
-inspection window's icon (`InspectionWindowContent`'s subject and terrain blocks, `EntityIconElement`, a fixed
-40x40 square). The map draws it right: `MapRenderer` places a sprite by its entry's size and pivot
-(`SpritePlacementTiles`/`SpritePlacementMath`) inside the reach box, while an icon has only its square.
-- **Verify every place a sprite is drawn for the same bug**, and fix each the same way: `EntityIconElement` (inspector,
-  loot and container windows), `IconElement` and `Button.SetIcon`, `InventoryItemStackCell`, `CurrencyElement`,
-  `ActivatableDetailsSections` (Item Details), `AbilityScoreWindowController`, `DragGhostRenderer`, `Dropdown` and
-  `ListFilterChips` rows, `Folder`, and the Workshop's `RecordRow`, `GameInspectorSource`, `ControlGalleryTab` and
-  Sprites tab (`SpriteCellDrawer`, which may be right already, since it previews placement).
-- **Decide:** how a tall sprite fits a square -- scaled down whole to the square keeping its aspect (likely), or
-  cropped to its footprint -- and do it once, in the shared drawing helper (`SpriteOrGlyphRenderer`/`SpriteRenderer`),
-  rather than per call site.
 
 #### Tooltip indicators
 

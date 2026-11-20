@@ -34,7 +34,7 @@ public sealed class SpriteCellDrawer(SpriteSheetService spriteSheetService, Func
 
         var source = cell.SourceRectangle;
         var tint = cell.TintColor is { } cellTint ? new Color(cellTint.R, cellTint.G, cellTint.B, cellTint.A) : Color.White;
-        SpriteRenderer.Draw(target, texture, new Rectangle(source.X, source.Y, source.Width, source.Height), topLeft, size, tint * alphaMultiplier, SpriteCellTransform.Of(cell));
+        SpriteRenderer.Draw(target, texture, new Rectangle(source.X, source.Y, source.Width, source.Height), topLeft, size, SpriteFit.Fill, tint * alphaMultiplier, SpriteCellTransform.Of(cell));
     }
 
     /// <summary>A flat rectangle's outline, thickness pixels wide, inside it.</summary>

@@ -5,18 +5,19 @@ using SpriteFormat;
 namespace UIEngine.Rendering;
 
 /// <summary>
-/// Draws a spritesheet region stretched to fill an arbitrary pixel footprint, turned and flipped as its
-/// manifest cell says. Decoupled from any world or store -- callers resolve
+/// Draws a spritesheet region into a pixel rectangle, stretched over it or fitted inside it (SpriteFit), turned and
+/// flipped as its manifest cell says. Decoupled from any world or store -- callers resolve
 /// which entity/texture/source-region/position/tint to use and pass those in as plain values, mirroring
 /// LabelRenderer's role for text.
 /// </summary>
 /// <remarks>Both a plain and a turned or flipped cell draw into the same whole-pixel rectangle (PixelRectangle), so one never lands a pixel off the other.</remarks>
 public static class SpriteRenderer
 {
-    public static void Draw<TTarget>(TTarget target, Texture2D texture, Rectangle sourceRectangle, Vector2 footprintTopLeft, Vector2 footprintSize, Color tint, SpriteCellTransform transform = default, SpriteDrawStyle style = default)
+    public static void Draw<TTarget>(TTarget target, Texture2D texture, Rectangle sourceRectangle, Vector2 topLeft, Vector2 size, SpriteFit fit, Color tint, SpriteCellTransform transform = default, SpriteDrawStyle style = default)
         where TTarget : ISpriteDrawTarget
     {
-        var destinationRectangle = PixelRectangle.Snapped(footprintTopLeft, footprintSize);
+        var (fittedTopLeft, fittedSize) = SpriteFitMath.Fitted(fit, topLeft, size, new Point(sourceRectangle.Width, sourceRectangle.Height), transform);
+        var destinationRectangle = PixelRectangle.Snapped(fittedTopLeft, fittedSize);
         if (transform.IsNone)
         {
             target.Draw(texture, destinationRectangle, sourceRectangle, tint, style);

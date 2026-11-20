@@ -14,6 +14,7 @@ using Game.Spawning;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
+using Presentation.UI.Characteristics;
 using Presentation.UI.ColorPalettes;
 using Presentation.UI.Looting;
 using UIEngine;
@@ -47,7 +48,7 @@ namespace Presentation.UI.Content;
 /// destroys a corpse (see CLAUDE.md's Death notes), so a killed target just keeps showing, now
 /// with DeadComponent visible in the dump.</item>
 /// </list>
-/// A single subject's block (icon+name/race/class rows, HP bar, description) is shared by both
+/// A single subject's block (icon beside its name/race/class rows and HP bar, then description) is shared by both
 /// modes via BuildSubjectBlock. Every child tiles vertically via the host window's own
 /// ChildElementTileMode.Vertical (see ShellBootstrapper) rather than manual Y math; a spacer
 /// (with a centered 1px TextDivider line) after each subject's block supplies the padding between
@@ -77,11 +78,14 @@ public sealed class InspectionWindowContent(
 {
     private const string UnsimulatedLabel = "Unsimulated -- spawn defaults";
 
-    private const float IconSize = 40f;
+    private const float IconSize = 80f;
     private const float RowHeight = 16f;
     private const float RowTextGap = 6f;
     private const float BarHeight = 8f;
-    private const float BarWidthFraction = 0.75f;
+    private const float CharacteristicIconSize = 20f;
+    private const float CharacteristicIconGap = 4f;
+    private const float CharacteristicRowGapAbove = 6f;
+    private const float CharacteristicRowGapBelow = 2f;
     private const float BlockPadding = 12f;
     private const float SeparatorHeight = 1f;
     private const float SeparatorWidthFraction = 0.75f;
@@ -486,13 +490,12 @@ public sealed class InspectionWindowContent(
         npcDecisions.Inspect(-1);
     }
 
-    /// <summary>One subject's block -- icon+name/race/class rows, HP bar (entities with a SimpleHealthComponent or BodyPartComponent only), description, then a padded separator -- shared by Basic's per-occupant loop and Detail's single followed entity.</summary>
+    /// <summary>One subject's block -- the icon, beside it the name/race/class rows and the HP bar (entities with a SimpleHealthComponent or BodyPartComponent only), then the description and a padded separator -- shared by Basic's per-occupant loop and Detail's single followed entity.</summary>
     private void BuildSubjectBlock(int entityId, float blockWidth) => BuildSubjectBlock(entityId, ReadSubject(entityId), blockWidth);
 
     private void BuildSubjectBlock(int entityId, SubjectView subject, float blockWidth)
     {
         BuildHeaderRow(entityId, subject, blockWidth);
-        BuildHealthRowIfPresent(subject.HealthFraction, blockWidth);
         AddDescriptionRow(subject.Description, blockWidth);
         BuildSpacer(blockWidth);
     }
@@ -560,11 +563,11 @@ public sealed class InspectionWindowContent(
     /// <summary>The tile's structure or terrain, after its occupants: icon and name, then its description -- the same shape as an entity's block, minus what a cell doesn't have (race, class, health).</summary>
     private void BuildTerrainBlock(TerrainView terrain, float blockWidth)
     {
-        var header = CreateHeaderWindow(blockWidth, rowCount: 1);
+        var header = CreateHeaderWindow(blockWidth, RowHeight, hasIcon: true);
         var icon = CreateIcon(header);
         icon.Configure(terrain.Visual, new Vector2(IconSize, IconSize));
 
-        AddTextRow(header, IconSize + RowTextGap, 0, HeaderTextWidth(blockWidth), terrain.Name);
+        AddTextRow(header, IconSize + RowTextGap, 0f, HeaderTextWidth(blockWidth), terrain.Name);
         AddDescriptionRow(terrain.Description, blockWidth);
         BuildSpacer(blockWidth);
     }
@@ -573,15 +576,15 @@ public sealed class InspectionWindowContent(
     private void BuildAuraBlock(AuraAtCell aura, float blockWidth)
     {
         var namesItsSource = aura.Credit.Kind != ActionSourceKind.Aura;
-        var header = CreateHeaderWindow(blockWidth, rowCount: namesItsSource ? 3 : 2);
+        var header = CreateHeaderWindow(blockWidth, (namesItsSource ? 3 : 2) * RowHeight, hasIcon: false);
         var textWidth = System.Math.Max(0f, blockWidth - WindowChrome.Padding * 2);
         var rowIndex = 0;
 
-        AddTextRow(header, 0, rowIndex++, textWidth, $"Aura: {auraView.NameOf(aura.AuraId)}");
-        AddTextRow(header, 0, rowIndex++, textWidth, $"Strength: {aura.Power}");
+        AddTextRow(header, 0, rowIndex++ * RowHeight, textWidth, $"Aura: {auraView.NameOf(aura.AuraId)}");
+        AddTextRow(header, 0, rowIndex++ * RowHeight, textWidth, $"Strength: {aura.Power}");
         if (namesItsSource)
         {
-            AddTextRow(header, 0, rowIndex, textWidth, $"From: {actionSourceNaming.Describe(aura.Credit)}");
+            AddTextRow(header, 0, rowIndex * RowHeight, textWidth, $"From: {actionSourceNaming.Describe(aura.Credit)}");
         }
 
         AddDescriptionRow(auraView.DescriptionOf(aura.AuraId), blockWidth);
@@ -590,30 +593,90 @@ public sealed class InspectionWindowContent(
 
     private void BuildHeaderRow(int entityId, SubjectView subject, float blockWidth)
     {
-        var rowCount = 1 + (subject.RaceName is null ? 0 : 1) + (subject.ClassName is null ? 0 : 1) + (subject.IsUnsimulatedDefaults ? 1 : 0);
-        var header = CreateHeaderWindow(blockWidth, rowCount);
+        var textRowCount = 1 + (subject.RaceName is null ? 0 : 1) + (subject.ClassName is null ? 0 : 1) + (subject.IsUnsimulatedDefaults ? 1 : 0) + (subject.HealthFraction is null ? 0 : 1);
+        var characteristicIcons = mapView.TryGetOccupant(entityId, out var occupant) ? CharacteristicIcons.For(occupant) : [];
+        var characteristicRowHeight = characteristicIcons.Count == 0 ? 0f : CharacteristicRowGapAbove + CharacteristicIconSize + CharacteristicRowGapBelow;
+        var header = CreateHeaderWindow(blockWidth, textRowCount * RowHeight + characteristicRowHeight, hasIcon: true);
         var icon = CreateIcon(header);
         icon.Configure(entityId, new Vector2(IconSize, IconSize));
 
         var textX = IconSize + RowTextGap;
         var textWidth = HeaderTextWidth(blockWidth);
-        var rowIndex = 0;
+        var y = 0f;
 
-        AddTextRow(header, textX, rowIndex++, textWidth, subject.Name);
+        AddTextRow(header, textX, y, textWidth, subject.Name);
+        y += RowHeight;
 
         if (subject.RaceName is { } raceName)
         {
-            AddTextRow(header, textX, rowIndex++, textWidth, $"Race: {raceName}");
+            AddTextRow(header, textX, y, textWidth, $"Race: {raceName}");
+            y += RowHeight;
         }
 
         if (subject.ClassName is { } className)
         {
-            AddTextRow(header, textX, rowIndex++, textWidth, $"Class: {className}");
+            AddTextRow(header, textX, y, textWidth, $"Class: {className}");
+            y += RowHeight;
         }
 
         if (subject.IsUnsimulatedDefaults)
         {
-            AddTextRow(header, textX, rowIndex, textWidth, UnsimulatedLabel);
+            AddTextRow(header, textX, y, textWidth, UnsimulatedLabel);
+            y += RowHeight;
+        }
+
+        if (characteristicIcons.Count > 0)
+        {
+            AddCharacteristicIconRow(header, textX, y + CharacteristicRowGapAbove, textWidth, characteristicIcons);
+            y += characteristicRowHeight;
+        }
+
+        if (subject.HealthFraction is { } healthFraction)
+        {
+            AddHealthBar(header, textX, y, textWidth, healthFraction);
+        }
+    }
+
+    /// <summary>The entity's characteristic icons, left to right, each its own tooltip.</summary>
+    private void AddCharacteristicIconRow(Window header, float x, float y, float width, IReadOnlyList<CharacteristicIcon> icons)
+    {
+        var row = elementPoolService.CreateElement<Window>(header, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Horizontal, ChildGap = CharacteristicIconGap },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, y), Size = new Vector2(width, CharacteristicIconSize), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+            Content = new ElementContentOptions { ContentColor = Color.Transparent },
+        });
+        row.ContentPadding = Vector2.Zero;
+        header.AddChild(row);
+
+        var iconOptions = new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+            Layout = new ElementLayoutOptions { Size = new Vector2(CharacteristicIconSize, CharacteristicIconSize), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+            Content = new ElementContentOptions { ContentColor = Color.Transparent },
+        };
+
+        foreach (var characteristic in icons)
+        {
+            Element element;
+            if (characteristic.Footprint is { } footprint)
+            {
+                var footprintIcon = elementPoolService.CreateElement<FootprintIconElement>(row, iconOptions);
+                footprintIcon.Configure(footprint, WindowPalette.TitleTextColor);
+                element = footprintIcon;
+            }
+            else
+            {
+                var symbolIcon = elementPoolService.CreateElement<IconElement>(row, iconOptions);
+                symbolIcon.Configure(characteristic.SpriteName, characteristic.Glyph, WindowPalette.TitleTextColor, new Vector2(CharacteristicIconSize, CharacteristicIconSize));
+                element = symbolIcon;
+            }
+
+            element.ContentPadding = Vector2.Zero;
+            element.TooltipText = characteristic.TooltipText;
+            row.AddChild(element);
         }
     }
 
@@ -621,13 +684,10 @@ public sealed class InspectionWindowContent(
     private static float HeaderTextWidth(float blockWidth) =>
         System.Math.Max(0f, blockWidth - WindowChrome.Padding * 2 - (IconSize + RowTextGap));
 
-    private Window CreateHeaderWindow(float blockWidth, int rowCount)
+    /// <summary>A header as tall as its icon or its rows, whichever is taller, plus padding above and below.</summary>
+    private Window CreateHeaderWindow(float blockWidth, float rowsHeight, bool hasIcon)
     {
-        // header's outer height isn't externally constrained (unlike its width, see
-        // HeaderTextWidth), so it grows by WindowChrome.Padding on top and bottom -- the icon/text
-        // keep their original sizes exactly, with real breathing room added around them, rather
-        // than being squeezed into a smaller box.
-        var headerHeight = System.Math.Max(IconSize, rowCount * RowHeight) + WindowChrome.Padding * 2;
+        var headerHeight = (hasIcon ? System.Math.Max(IconSize, rowsHeight) : rowsHeight) + WindowChrome.Padding * 2;
 
         var header = elementPoolService.CreateElement<Window>(_body, new ElementOptions
         {
@@ -653,12 +713,12 @@ public sealed class InspectionWindowContent(
         return icon;
     }
 
-    private void AddTextRow(Window parent, float x, int rowIndex, float width, string text)
+    private void AddTextRow(Window parent, float x, float y, float width, string text)
     {
         var row = elementPoolService.CreateElement<TextWindow>(parent, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, rowIndex * RowHeight), Size = new Vector2(width, RowHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, y), Size = new Vector2(width, RowHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
             Text = new TextOptions { Text = text, TextColor = WindowPalette.TitleTextColor },
@@ -666,40 +726,18 @@ public sealed class InspectionWindowContent(
         parent.AddChild(row);
     }
 
-    private void BuildHealthRowIfPresent(float? fraction, float blockWidth)
+    /// <summary>The HP bar as one of the header's right-column rows, as wide as the column and centred in the row's height.</summary>
+    private void AddHealthBar(Window header, float x, float y, float width, float healthFraction)
     {
-        if (fraction is not { } healthFraction)
-        {
-            return;
-        }
-
-        var rowHeight = BarHeight + WindowChrome.Padding * 2;
-        var row = elementPoolService.CreateElement<Window>(_body, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { Size = new Vector2(blockWidth, rowHeight), DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-        });
-        _body.AddChild(row);
-
-        // row's outer width is a hard constraint (must not exceed blockWidth); its outer height
-        // above already grew by WindowChrome.Padding on top and bottom instead, so the bar keeps
-        // its original BarHeight exactly, positioned at row's own (now padding-inset) content
-        // origin -- see HealthWindow.AddBarRow's own doc comment for the same reasoning.
-        var availableWidth = blockWidth - WindowChrome.Padding * 2;
-        var barWidth = availableWidth * BarWidthFraction;
-        var barX = (availableWidth - barWidth) / 2f;
-
-        var bar = elementPoolService.CreateElement<FractionBarElement>(row, new ElementOptions
+        var bar = elementPoolService.CreateElement<FractionBarElement>(header, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(barX, 0), Size = new Vector2(barWidth, BarHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, y + (RowHeight - BarHeight) / 2f), Size = new Vector2(width, BarHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
         bar.Configure(healthFraction, hasResource: true, HealthBarPalette.OutlineColor, HealthBarPalette.FractionColor);
-        row.AddChild(bar);
+        header.AddChild(bar);
     }
 
     private void AddDescriptionRow(string description, float blockWidth)

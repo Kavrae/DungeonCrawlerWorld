@@ -73,11 +73,46 @@ public void FillRectangle(Rectangle destination, Color color, SpriteDrawStyle st
     public void GlyphWithNoSprite_IsDrawnCentredThroughTheTarget_WithTheStyle()
     {
         var target = new RecordingDrawTarget();
-        var drawn = SpriteOrGlyphRenderer.Draw(target, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), null, TestFonts.Shared.GetTextMeasurer(TestFonts.Shared.GetFont(18)), "g", Color.Red, new Vector2(0, 0), new Vector2(32, 32), Color.White, outline: false, style: Style);
+        var drawn = SpriteOrGlyphRenderer.Draw(target, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), null, TestFonts.Shared.GetTextMeasurer(TestFonts.Shared.GetFont(18)), "g", Color.Red, new Vector2(0, 0), new Vector2(32, 32), SpriteFit.Contain, Color.White, outline: false, style: Style);
 
         Assert.IsTrue(drawn);
         Assert.AreEqual(1, target.Strings.Count);
         Assert.AreEqual(Style, target.Strings[0].Style);
+    }
+
+    [TestMethod]
+    public void ContainedSprite_DrawsTheFittedWholePixelRectangle()
+    {
+        var target = new RecordingDrawTarget();
+        var source = new Rectangle(0, 0, 16, 32);
+
+        SpriteRenderer.Draw(target, null!, source, new Vector2(0.5f, 0), new Vector2(41, 40), SpriteFit.Contain, Color.White);
+
+        Assert.AreEqual(new Rectangle(11, 0, 20, 40), target.Rectangles.Single().Destination);
+    }
+
+    [TestMethod]
+    public void FilledSprite_IsStretchedOverTheRectangle()
+    {
+        var target = new RecordingDrawTarget();
+        var source = new Rectangle(0, 0, 16, 32);
+
+        SpriteRenderer.Draw(target, null!, source, Vector2.Zero, new Vector2(40, 40), SpriteFit.Fill, Color.White);
+
+        Assert.AreEqual(new Rectangle(0, 0, 40, 40), target.Rectangles.Single().Destination);
+    }
+
+    [TestMethod]
+    public void ContainedQuarterTurnedSprite_IsCentredOnTheFittedRectangle_ScaledToItsTurnedSize()
+    {
+        var target = new RecordingDrawTarget();
+        var source = new Rectangle(0, 0, 16, 32);
+
+        SpriteRenderer.Draw(target, null!, source, Vector2.Zero, new Vector2(40, 40), SpriteFit.Contain, Color.White, new SpriteFormat.SpriteCellTransform(90, false, false));
+
+        var draw = target.TransformedDraws.Single();
+        Assert.AreEqual(new Vector2(20, 30), draw.Position);
+        Assert.AreEqual(new Vector2(20f / 16f, 40f / 32f), draw.Scale);
     }
 
     /// <summary>SpriteBatch's rectangle shapes reach the target's rectangle draw unchanged, plain unless a style is given.</summary>

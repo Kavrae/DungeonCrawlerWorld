@@ -2165,6 +2165,33 @@ kill credit uses, with no entity left out; omitted when the credit is the aura i
 `Description` (content key `d`, written for the player). The list is re-read only when the tile or
 `AuraView.Version` changes, and the window rebuilds only when it differs.
 
+**Subject block layout and characteristic icons (2026-11-20).** An entity's and a tile's portrait are 80 px. Beside
+an entity's portrait, the right column stacks:
+- name, race, class and "Unsimulated";
+- the characteristic icon row, with 6 px above it so a full icon never touches the text;
+- the health bar, as wide as the column.
+
+The header is as tall as the portrait or the column, whichever is taller, and an aura block, which has no portrait, is
+as tall as its rows.
+
+A **characteristic icon** is a small icon with its own tooltip, one per thing worth telling about the entity at a
+glance:
+- `CharacteristicIcon` is a value: tooltip text, then a sprite name and glyph or a footprint.
+- `CharacteristicIcons.For(OccupantView)` lists an entity's icons in order. A new icon is an entry there, not a new
+  element, and the inspector builds each with `IconElement` or `FootprintIconElement`.
+- Icons are never compared side by side, so each must read alone.
+
+The first icon is **Size**:
+- The category is Game's one rule, `EntitySizeCategories.Of(footprint, kind)` (`Game.Blueprints`): Tiny when the
+  entity is Tiny, else the footprint's largest dimension (1 Normal, 2 Large, 3 Huge; a 1x2 is Large).
+- Tiny draws `⁘` (sprite name `characteristic-size-tiny`). Any other size draws the entity's own footprint, one
+  square per tile (`FootprintIconElement`), on the scale of the largest footprint
+  (`ResolvedBlueprint.MaximumFootprintTiles`). A 1x1 is visibly smaller than a 2x2, and a larger maximum later only
+  makes the squares smaller.
+- The tooltip is `Size : <category>` then `Footprint : <columns>x<rows>`.
+- It is read from `IMapViewQuery.TryGetOccupant`, which a skeleton answers, so an unsimulated creature shows its size
+  without being built.
+
 ### HealthWindow
 
 Red-heart `Button` (`HealthWindowController`) opens
@@ -2534,6 +2561,25 @@ so creatures kept their looks when it moved out of Game.
   are not in the manifest (they are `TerrainDefinition.LinkGroup`); an old file's `LinkGroup` is dropped.
 - `Tests/SpriteManifestFormat` parses the checked-in `Content/SpriteManifest.json` and re-serializes it
   byte for byte.
+
+### Sprite fit outside the map (2026-11-20)
+
+**A sprite drawn outside the map keeps its width-to-height ratio.** It is scaled as large as fits its container,
+then placed on the container's bottom edge, centred across, so a tall creature or shrine shows whole in a square icon
+and a wide sprite stands on its feet. A quarter-turned cell fits by its turned shape. A glyph is unchanged: it is
+already centred on its ink.
+
+How it's built:
+- `SpriteFit` (`Fill`, `Contain`) is a required parameter of `SpriteRenderer.Draw` and `SpriteOrGlyphRenderer.Draw`,
+  so every call site states its mode and none keeps a stretch by default. The rectangle comes from
+  `SpriteFitMath.Contain` and is snapped through `PixelRectangle`.
+- `Fill` is the map's placed sprites and the Workshop's placement and link previews (`SpriteCellDrawer`): placement
+  (`SpritePlacementTiles`) has already sized their rectangle, and what they show is the map.
+- Everything else is `Contain`: every icon (through `IconElement` for buttons, details, rows and chips), item cells,
+  currency, the drag ghost, folders, the hotbar's radial fill, floating-text icons, and the map's loot-bag and charging
+  badges, which are icons over the map rather than placed sprites.
+- Every icon reaches the drawing through `SpriteOrGlyphRenderer`, so a new sprite drawn anywhere goes through it too,
+  never a texture draw of its own.
 
 ## Pause modality
 

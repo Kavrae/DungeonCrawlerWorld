@@ -256,7 +256,7 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
         var spriteTint = isGreyedOut ? Color.Gray : Color.White;
         var glyphColor = isGreyedOut ? Color.Gray : _glyphColor;
 
-        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, _sprite, _iconGlyphFontMeasurer, _glyph, glyphColor, Vector2.Zero, iconSize, spriteTint);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, _sprite, _iconGlyphFontMeasurer, _glyph, glyphColor, Vector2.Zero, iconSize, SpriteFit.Contain, spriteTint);
 
         if (IsToggledOn)
         {

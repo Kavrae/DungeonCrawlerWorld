@@ -15,7 +15,7 @@ namespace UIEngine.Rendering;
 /// </summary>
 public static class SpriteOrGlyphRenderer
 {
-    /// <summary>Draws sprite if present, else glyph if non-empty. Returns whether anything was actually drawn. outline defaults false -- a map passes true, since its glyphs sit over arbitrary terrain colours; an icon on a fixed window background doesn't need it.</summary>
+    /// <summary>Draws sprite if present, else glyph if non-empty. Returns whether anything was actually drawn. fit places a sprite only; a glyph is centred on its ink either way. outline defaults false -- a map passes true, since its glyphs sit over arbitrary terrain colours; an icon on a fixed window background doesn't need it.</summary>
     public static bool Draw<TTarget>(
         TTarget target,
         SpriteSheetService spriteSheetService,
@@ -25,6 +25,7 @@ public static class SpriteOrGlyphRenderer
         Color glyphColor,
         Vector2 topLeft,
         Vector2 size,
+        SpriteFit fit,
         Color spriteTint,
         float alphaMultiplier = 1f,
         bool outline = false,
@@ -35,7 +36,7 @@ public static class SpriteOrGlyphRenderer
         {
             var texture = spriteSheetService.GetTexture(spriteView.Sheet);
             var tint = spriteView.Tint is { } cellTint ? Multiply(spriteTint, cellTint) : spriteTint;
-            SpriteRenderer.Draw(target, texture, spriteView.SourceRectangle, topLeft, size, tint * alphaMultiplier, spriteView.Transform, style);
+            SpriteRenderer.Draw(target, texture, spriteView.SourceRectangle, topLeft, size, fit, tint * alphaMultiplier, spriteView.Transform, style);
             return true;
         }
 

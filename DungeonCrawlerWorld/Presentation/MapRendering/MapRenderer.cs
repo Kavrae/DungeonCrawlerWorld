@@ -499,14 +499,14 @@ public sealed class MapRenderer : IDisposable
         var style = visual.DrawStyle with { Glow = glow, GroundRowY = groundRowY };
         if (visual.Sprite is not { } sprite)
         {
-            return SpriteOrGlyphRenderer.Draw(batch, _spriteSheetService, (SpriteView?)null, fontMeasurer, visual.Glyph, visual.GlyphColor, footprintTopLeft, footprintSize, Color.White, alphaMultiplier, outline: true, style);
+            return SpriteOrGlyphRenderer.Draw(batch, _spriteSheetService, (SpriteView?)null, fontMeasurer, visual.Glyph, visual.GlyphColor, footprintTopLeft, footprintSize, SpriteFit.Fill, Color.White, alphaMultiplier, outline: true, style);
         }
 
         var (drawnTopLeft, drawnSize) = footprintTiles is { } tiles
             ? SpritePlacementMath.DrawnRectangle(footprintTopLeft, footprintSize, tiles, new Point(sprite.SourceRectangle.Width, sprite.SourceRectangle.Height), sprite.Placement)
             : (footprintTopLeft, footprintSize);
         drawnTop = drawnTopLeft.Y;
-        return SpriteOrGlyphRenderer.Draw(batch, _spriteSheetService, sprite, fontMeasurer, string.Empty, Color.White, drawnTopLeft, drawnSize, Color.White, alphaMultiplier, outline: true, style);
+        return SpriteOrGlyphRenderer.Draw(batch, _spriteSheetService, sprite, fontMeasurer, string.Empty, Color.White, drawnTopLeft, drawnSize, SpriteFit.Fill, Color.White, alphaMultiplier, outline: true, style);
     }
 
     /// <summary>One Tiny occupant in the tile's 3x3 sub-grid, at the cell for how many of the tile's Tiny occupants were drawn before it, lit along its tile's row. Returns whether anything was drawn, so an occupant with no visual doesn't take a cell.</summary>
@@ -576,7 +576,7 @@ public sealed class MapRenderer : IDisposable
         var badgeSize = new Vector2(tileSize.X, tileSize.Y) * LootBagBadgeSizeFraction;
         var badgePosition = new Vector2(footprintTopLeft.X + footprintSize.X - badgeSize.X, footprintTopLeft.Y);
 
-        SpriteOrGlyphRenderer.Draw(batch, _spriteSheetService, lootBagSprite, _badgeFontMeasurer, string.Empty, Color.White, badgePosition, badgeSize, Color.White, outline: true, style: style);
+        SpriteOrGlyphRenderer.Draw(batch, _spriteSheetService, lootBagSprite, _badgeFontMeasurer, string.Empty, Color.White, badgePosition, badgeSize, SpriteFit.Contain, Color.White, outline: true, style: style);
     }
 
     /// <summary>
@@ -598,7 +598,7 @@ public sealed class MapRenderer : IDisposable
         var badgePosition = new Vector2(footprintTopLeft.X + (footprintSize.X - badgeSize.X) / 2f, cueTop - badgeSize.Y);
 
         SpriteView? actionSprite = action.SpriteName is { } spriteName && _spriteSheetService.Sprites.TryGetFirst(spriteName, out var icon) ? icon : null;
-        SpriteOrGlyphRenderer.Draw(batch, _spriteSheetService, actionSprite, _badgeFontMeasurer, action.Glyph, action.GlyphColor, badgePosition, badgeSize, Color.White, outline: true);
+        SpriteOrGlyphRenderer.Draw(batch, _spriteSheetService, actionSprite, _badgeFontMeasurer, action.Glyph, action.GlyphColor, badgePosition, badgeSize, SpriteFit.Contain, Color.White, outline: true);
     }
 
     private void DrawEntityIcons(SpriteEffectBatch batch, int entityId, EntityStatusView status, Vector2 footprintTopLeft, Vector2 footprintSize, Point tileSize, float cueTop)

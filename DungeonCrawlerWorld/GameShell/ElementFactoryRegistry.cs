@@ -3,6 +3,7 @@ using Game.Bootstrap;
 using Presentation.MapRendering;
 using Presentation.UI;
 using Presentation.UI.AbilityScores;
+using Presentation.UI.Characteristics;
 using Presentation.UI.Content;
 using Presentation.UI.FloatingText;
 using Presentation.UI.Inventory;
@@ -92,6 +93,7 @@ public static class ElementFactoryRegistry
         elementPool.RegisterFactory(() => new TradeWindow(
             services, inventoryServices, world, contextMenuController, mapViewState));
         elementPool.RegisterFactory(() => new EntityIconElement(services, sprites, mapView));
+        elementPool.RegisterFactory(() => new FootprintIconElement(services));
 
         elementPool.RegisterFactory(() => new InspectionWindow(services));
         elementPool.RegisterFactory(() => new ItemDetailsWindow(services, actionCatalog, catalogs.GameplayTags, views.ActionStateView, world));

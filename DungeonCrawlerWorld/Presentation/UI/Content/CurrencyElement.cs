@@ -88,7 +88,7 @@ public sealed class CurrencyElement(ElementServices services, SpriteSheetService
         // "Gold : 10" then the sprite immediately after, not stranded at the far side of the row.
         var iconPosition = new Vector2(textPosition.X + textSize.X + IconGap, 0);
         SpriteView? sprite = spriteSheetService.Sprites.TryGetFirst(spriteName, out var spriteView) ? spriteView : null;
-        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, sprite, _glyphFontMeasurer, glyph, glyphColor, iconPosition, IconSize, Color.White);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, sprite, _glyphFontMeasurer, glyph, glyphColor, iconPosition, IconSize, SpriteFit.Contain, Color.White);
     }
 
     /// <summary>Picks up this row's currency. The ghost is IconSize -- the square icon alone; the whole "Gold : 10 [sprite]" bounds stretched it horizontally.</summary>

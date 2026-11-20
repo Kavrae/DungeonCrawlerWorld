@@ -38,7 +38,7 @@ public sealed class RadialFillRenderer(SpriteSheetService? spriteSheetService = 
 
         if (Sprite is { } sprite && spriteSheetService is not null)
         {
-            SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, sprite, glyphFontMeasurer, Glyph, GlyphColor, position, size, SpriteTint, alphaMultiplier);
+            SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, sprite, glyphFontMeasurer, Glyph, GlyphColor, position, size, SpriteFit.Contain, SpriteTint, alphaMultiplier);
         }
         else
         {

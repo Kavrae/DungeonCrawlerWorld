@@ -29,6 +29,6 @@ public static class DragGhostRenderer
         Vector2 size)
     {
         var topLeft = centerPosition - size / 2f;
-        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, sprite, glyphFontMeasurer, glyph, glyphColor, topLeft, size, Color.White, Alpha);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, sprite, glyphFontMeasurer, glyph, glyphColor, topLeft, size, SpriteFit.Contain, Color.White, Alpha);
     }
 }

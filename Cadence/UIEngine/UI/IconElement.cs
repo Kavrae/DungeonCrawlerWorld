@@ -47,6 +47,6 @@ public sealed class IconElement(ElementServices services, SpriteSheetService spr
     public override void DrawContent(GameTime gameTime)
     {
         var isDisabled = PressableElement.IsHeldByDisabledControl(this);
-        SpriteOrGlyphRenderer.Draw(Render.Batch, spriteSheetService, _sprite, _glyphFontMeasurer, _glyph, isDisabled ? Color.Gray : _glyphColor, Vector2.Zero, ContentSize, isDisabled ? Color.Gray : Color.White);
+        SpriteOrGlyphRenderer.Draw(Render.Batch, spriteSheetService, _sprite, _glyphFontMeasurer, _glyph, isDisabled ? Color.Gray : _glyphColor, Vector2.Zero, ContentSize, SpriteFit.Contain, isDisabled ? Color.Gray : Color.White);
     }
 }

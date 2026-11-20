@@ -121,7 +121,7 @@ public sealed class FloatingTextRenderer(
     private void DrawStatusEffectIcon(SpriteEffectBatch spriteBatch, SpriteFontBase font, StatusEffectType effectType, Vector2 topLeft, float size, float alpha)
     {
         var glyph = _statusEffectDisplays.TryGet(effectType, out var display) ? display.Glyph : "?";
-        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, GetStatusEffectSprite(effectType), _fontService.GetTextMeasurer(font), glyph, FloatingTextPalette.GetStatusEffectColor(effectType), topLeft, new Vector2(size, size), Color.White, alpha, outline: true);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, GetStatusEffectSprite(effectType), _fontService.GetTextMeasurer(font), glyph, FloatingTextPalette.GetStatusEffectColor(effectType), topLeft, new Vector2(size, size), SpriteFit.Contain, Color.White, alpha, outline: true);
     }
 
     private SpriteView? GetStatusEffectSprite(StatusEffectType effectType)
