@@ -139,7 +139,11 @@ games' own dodge timings -- the numbers used are TODO.md's own, not independentl
   GroundOnly activator's) lands on the cursor tile in range -- a potion splashes; Target mode marks the
   target on the cursor tile in range, else (a TargetingSelf map click) the player, else the target in
   range nearest the cursor, or nearest the player with the cursor off the map -- searched only
-  `MapViewState.TargetSearchDistanceTiles` (default 2, Manhattan) around that point. Nothing to land on, or a
+  `MapViewState.TargetSearchDistanceTiles` (default 2, Manhattan) around that point. That search is fuzzy
+  targeting (2026-11-20): equally near tiles go to the one whose target Target mode prefers on a single
+  tile -- Blocking, then Tiny, then Phasing (`MarkingPriority`, `TargetResolution.MarkingPriorityAt`, the
+  same rule as `PickMarked`) -- and only then to the one nearer the player. Ground mode never searches: it
+  is exactly the tile aimed at (a wall excepted). Nothing to land on, or a
   refused confirm, leaves it armed with nothing paid. "Off the map" includes over another window: the
   map reads a hovered tile only while `PointerState.IsOver` it (`PointerState.HoveredElement`, the
   element the input handlers were handed that frame), so a hotbar click isn't aimed at the tile under

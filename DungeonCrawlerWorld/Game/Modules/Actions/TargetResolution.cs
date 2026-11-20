@@ -197,6 +197,33 @@ public sealed class TargetResolution(
     /// <remarks>The rule every resolve applies through its walls (TargetLineOfSight.PlacementWalls), named for a caller choosing a tile: an NPC, or the player's aim falling back to a tile near a wall.</remarks>
     public bool IsTargetableTile(Vector3Int tile) => !walls.BlocksSight(tile.X, tile.Y, tile.Z);
 
+    /// <summary>The kind of entity Target mode would mark on tile (PickMarked), or null when it would mark nothing there.</summary>
+    /// <remarks>How a search for a target near a missed aim orders tiles that are equally near it, so it prefers what Target mode prefers on one tile.</remarks>
+    public MarkingPriority? MarkingPriorityAt(Vector3Int tile)
+    {
+        var blockingEntityId = map.GetEntityIdAt(tile);
+        if (blockingEntityId != -1 && !deadEntities.Has(blockingEntityId))
+        {
+            return MarkingPriority.Blocking;
+        }
+
+        var kinds = NonBlockingKind.None;
+        foreach (var occupantId in map.GetOccupantEntityIdSpanAt(tile))
+        {
+            if (!deadEntities.Has(occupantId))
+            {
+                kinds |= NonBlockingQueries.CombinedKind(nonBlocking, occupantId);
+            }
+        }
+
+        if ((kinds & NonBlockingKind.Tiny) != 0)
+        {
+            return MarkingPriority.Tiny;
+        }
+
+        return (kinds & NonBlockingKind.Phasing) != 0 ? MarkingPriority.Phasing : null;
+    }
+
     /// <summary>The entity Target mode marks on tile: a living Blocking one, else a Tiny one (several: picked by a roll seeded from tile and now), else a Phasing one. Null for none.</summary>
     public int? PickMarked(Vector3Int tile, long now)
     {

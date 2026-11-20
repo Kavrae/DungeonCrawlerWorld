@@ -607,6 +607,28 @@ public sealed class MapWindowTests
         Assert.IsNull(mapViewState.ArmedActionId);
     }
 
+    /// <summary>A missed aim with two targets equally near the cursor marks the one Target mode prefers on a single tile -- a Blocking one over a Tiny one -- even when the Tiny one is nearer the player.</summary>
+    [TestMethod]
+    public void HandleHotkeys_PressingArmedSlotAgainInTargetMode_WithTargetsEquallyNearTheCursor_PrefersTheBlockingOne()
+    {
+        var (world, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapViewState.TargetingMode = TargetingMode.Target;
+        RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
+        PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(104, 100, 0));
+        componentManager.GetMultiPool<NonBlockingComponent>().Add(2, new NonBlockingComponent(NonBlockingKind.Tiny));
+        var tinyTransform = componentManager.GetDirectPool<TransformComponent>().GetReadonly(2);
+        world.ConvertToNonBlocking(2, ref tinyTransform);
+        PlaceTestTarget(world, componentManager, entityId: 3, new Vector3Int(104, 102, 0));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(104, 101, 0)));
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+
+        var pending = componentManager.GetPackedPool<PendingActionActivationComponent>().GetReadonly(PlayerEntityId);
+        Assert.AreEqual(new Vector3Int(104, 102, 0), pending.Selection.AimedTile, "Blocking before Tiny, before nearness to the player.");
+        Assert.AreEqual(world.EntityKeys.GetKey(3), pending.Selection.MarkedEntity);
+    }
+
     /// <summary>In Target mode with the cursor off the map (or over another window, such as the hotbar), a re-press picks the target nearest the player.</summary>
     [TestMethod]
     public void HandleHotkeys_PressingArmedSlotAgainInTargetMode_WithTheCursorOffTheMap_PicksTheTargetNearestThePlayer()

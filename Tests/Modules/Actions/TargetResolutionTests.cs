@@ -106,6 +106,29 @@ public sealed class TargetResolutionTests
     }
 
     [TestMethod]
+    public void MarkingPriorityAt_NamesTheKindPickMarkedWouldMark()
+    {
+        var session = BuildSession();
+        Assert.IsNull(session.Resolution.MarkingPriorityAt(TargetPosition));
+
+        var phasingId = session.Spawn(PhasingFairy.Id, TargetPosition);
+        Assert.AreEqual(MarkingPriority.Phasing, session.Resolution.MarkingPriorityAt(TargetPosition));
+
+        var tinyId = session.Spawn(TinyGoblin.Id, TargetPosition);
+        Assert.AreEqual(MarkingPriority.Tiny, session.Resolution.MarkingPriorityAt(TargetPosition));
+
+        var blockingId = session.Spawn(Goblin.Id, TargetPosition);
+        Assert.AreEqual(MarkingPriority.Blocking, session.Resolution.MarkingPriorityAt(TargetPosition));
+
+        session.Components.Merge(blockingId, new DeadComponent(ActionSource.Admin, 0));
+        session.Components.Merge(tinyId, new DeadComponent(ActionSource.Admin, 0));
+        Assert.AreEqual(MarkingPriority.Phasing, session.Resolution.MarkingPriorityAt(TargetPosition), "The dead are never marked.");
+
+        session.Components.Merge(phasingId, new DeadComponent(ActionSource.Admin, 0));
+        Assert.IsNull(session.Resolution.MarkingPriorityAt(TargetPosition));
+    }
+
+    [TestMethod]
     public void TargetModeOnAnEmptyTile_MarksNothing_AndLandsOnTheTile()
     {
         var session = BuildSession();

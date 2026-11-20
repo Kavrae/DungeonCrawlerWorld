@@ -31,6 +31,9 @@ public sealed class TargetingView(TargetResolution targetResolution)
     public TargetSelection SelectEntity(int casterEntityId, IActionActivator activator, int targetEntityId) =>
         targetResolution.SelectEntity(casterEntityId, activator, targetEntityId);
 
+    /// <inheritdoc cref="TargetResolution.MarkingPriorityAt"/>
+    public MarkingPriority? MarkingPriorityAt(Vector3Int tile) => targetResolution.MarkingPriorityAt(tile);
+
     /// <inheritdoc cref="TargetResolution.IsTargetableTile"/>
     public bool IsTargetableTile(Vector3Int tile) => targetResolution.IsTargetableTile(tile);
 

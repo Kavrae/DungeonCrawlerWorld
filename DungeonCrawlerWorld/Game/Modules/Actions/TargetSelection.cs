@@ -14,6 +14,19 @@ public enum TargetingMode : byte
     Ground,
 }
 
+/// <summary>What kind of entity Target mode marks on a tile, in its order of preference: the first is the most wanted.</summary>
+public enum MarkingPriority : byte
+{
+    /// <summary>A living Blocking entity.</summary>
+    Blocking,
+
+    /// <summary>A living Tiny entity, with no living Blocking one on the tile.</summary>
+    Tiny,
+
+    /// <summary>A living Phasing entity, with no living Blocking or Tiny one on the tile.</summary>
+    Phasing,
+}
+
 /// <summary>What the caster chose when confirming an activation, carried on the request and the windup until TargetResolution turns it into tiles.</summary>
 /// <remarks>
 /// Built by TargetResolution.Select (or SelectEntity), never field by field: MaximumRange and AreaSize are

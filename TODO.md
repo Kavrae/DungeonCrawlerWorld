@@ -1679,15 +1679,6 @@ actions that take several aims, using Baldur's Gate 3 as the benchmark for how c
   at confirm and resolves them together, or one after another (Scorching Ray's rays), which the action declares.
 - **Content to test it with:** Magic Missile with 3 darts (manual), and an automatic multi-target spell for an NPC.
 
-#### Fuzzy targeting
-
-Version 2 of "an area effect that attaches to one entity attaches to the entity on its center tile"
-(aura stage 3, `PLAN-aura-stage-3.md`). In Target mode only: prefer the entity on the center tile; if
-the center tile is empty, take an entity on a tile adjacent to it instead, so a slightly missed click
-on a crowd or a large entity still lands on someone. Decide the order among several adjacent
-candidates (the same Blocking, then Tiny, then Phasing priority Target mode uses on one tile is the
-likely start). Ground mode never does this: it is exactly the tiles aimed at.
-
 #### Anchored effects: a maximum distance from the caster
 
 Version 2 of "an anchored effect is cancelled when it is too far from its caster" (aura stage 3).

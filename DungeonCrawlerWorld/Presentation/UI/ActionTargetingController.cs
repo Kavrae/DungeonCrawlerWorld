@@ -838,7 +838,8 @@ public sealed class ActionTargetingController(
     /// on the tile in reach nearest it within MapViewState.TargetSearchDistanceTiles, ties going to the one nearer the
     /// player. Target mode marks the target on cursorTile when it is in reach; else, for a TargetingSelf map click, the
     /// player; else the target in reach nearest cursorTile, or nearest the player with the cursor off
-    /// the map, within MapViewState.TargetSearchDistanceTiles of it. False when there is nothing to land on.
+    /// the map, within MapViewState.TargetSearchDistanceTiles of it -- among equally near ones a Blocking target, then a
+    /// Tiny one, then a Phasing one (NearestTargetTile). False when there is nothing to land on.
     /// </remarks>
     /// <param name="fallsBackFromUntargetableTile">False for a tile that is a direction rather than the cursor (Dodge's WASD step), which lands there or nowhere.</param>
     /// <param name="aimedTile">The tile aimed at -- for Dodge, the tile it steps to.</param>
@@ -894,7 +895,7 @@ public sealed class ActionTargetingController(
             return true;
         }
 
-        if (cursorTileInReach is { } hoveredTile && IsTargetAt(activator, hoveredTile, now))
+        if (cursorTileInReach is { } hoveredTile && TargetPriorityAt(hoveredTile) is not null)
         {
             aimedTile = hoveredTile;
             selection = targetingView.Select(playerEntityId, activator, mode, hoveredTile, now);
@@ -908,7 +909,7 @@ public sealed class ActionTargetingController(
             return true;
         }
 
-        if (NearestTargetTile(activator, nearestTo: cursorTile ?? playerPosition, tiebreakTile: playerPosition, now) is not { } nearestTargetTile)
+        if (NearestTargetTile(nearestTo: cursorTile ?? playerPosition, tiebreakTile: playerPosition) is not { } nearestTargetTile)
         {
             return false;
         }
@@ -918,20 +919,32 @@ public sealed class ActionTargetingController(
         return true;
     }
 
-    /// <summary>The tile the armed thing can be aimed at holding a target nearest nearestTo, no further from it than MapViewState.TargetSearchDistanceTiles, ties going to the one nearer tiebreakTile; null when there is none.</summary>
-    /// <remarks>Reads _aimableTiles, which RefreshTargetableTiles has just brought up to date.</remarks>
-    private Vector3Int? NearestTargetTile(IActionActivator activator, Vector3Int nearestTo, Vector3Int tiebreakTile, long now)
+    /// <summary>The tile the armed thing can be aimed at holding a target nearest nearestTo, no further from it than MapViewState.TargetSearchDistanceTiles; null when there is none.</summary>
+    /// <remarks>
+    /// Equally near tiles go to the one whose target Target mode prefers on a single tile (MarkingPriority: Blocking, then
+    /// Tiny, then Phasing), then to the one nearer tiebreakTile. Reads _aimableTiles, which RefreshTargetableTiles has just
+    /// brought up to date.
+    /// </remarks>
+    private Vector3Int? NearestTargetTile(Vector3Int nearestTo, Vector3Int tiebreakTile)
     {
-        _targetCandidateTilesBuffer.Clear();
+        Vector3Int? nearestTile = null;
+        var nearestRank = (NearestToDistance: int.MaxValue, Priority: int.MaxValue, TiebreakDistance: int.MaxValue);
         foreach (var tile in _aimableTiles)
         {
-            if (GridDistance.IsWithinRoundedRadius(nearestTo, tile, mapViewState.TargetSearchDistanceTiles) && IsTargetAt(activator, tile, now))
+            if (!GridDistance.IsWithinRoundedRadius(nearestTo, tile, mapViewState.TargetSearchDistanceTiles) || TargetPriorityAt(tile) is not { } priority)
             {
-                _targetCandidateTilesBuffer.Add(tile);
+                continue;
+            }
+
+            var rank = (GridDistance.ManhattanDistance(nearestTo, tile), (int)priority, GridDistance.ManhattanDistance(tiebreakTile, tile));
+            if (rank.CompareTo(nearestRank) < 0)
+            {
+                nearestTile = tile;
+                nearestRank = rank;
             }
         }
 
-        return ClosestPointSelector.SelectClosest(nearestTo, tiebreakTile, CollectionsMarshal.AsSpan(_targetCandidateTilesBuffer));
+        return nearestTile;
     }
 
     /// <summary>The tile the armed thing can be aimed at nearest nearestTo, no further from it than MapViewState.TargetSearchDistanceTiles, ties going to the one nearer tiebreakTile; null when there is none.</summary>
@@ -950,22 +963,9 @@ public sealed class ActionTargetingController(
         return ClosestPointSelector.SelectClosest(nearestTo, tiebreakTile, CollectionsMarshal.AsSpan(_targetCandidateTilesBuffer));
     }
 
-    /// <summary>Whether something other than the player stands on tile to be targeted: its blocking occupant, else an entity Target mode would mark there.</summary>
-    private bool IsTargetAt(IActionActivator activator, Vector3Int tile, long now)
-    {
-        var occupantEntityId = world.GetEntityIdAt(tile);
-        if (occupantEntityId != -1)
-        {
-            return occupantEntityId != world.PlayerEntityId;
-        }
-
-        if (world.GetOccupantEntityIdSpanAt(tile).IsEmpty)
-        {
-            return false;
-        }
-
-        return targetingView.Select(world.PlayerEntityId, activator, TargetingMode.Target, tile, now).HasMarkedEntity;
-    }
+    /// <summary>The kind of target Target mode would mark on tile (TargetingView.MarkingPriorityAt), or null when there is none or the player stands there.</summary>
+    private MarkingPriority? TargetPriorityAt(Vector3Int tile) =>
+        world.GetEntityIdAt(tile) == world.PlayerEntityId ? null : targetingView.MarkingPriorityAt(tile);
 
     private bool IsArmedSelfTargeting()
     {
