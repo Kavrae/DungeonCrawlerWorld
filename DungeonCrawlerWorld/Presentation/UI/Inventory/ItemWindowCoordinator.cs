@@ -79,9 +79,9 @@ public sealed class ItemWindowCoordinator
         // At most one of the two is ever open, so whichever isn't answers null.
         Inventory.GetSecondaryTargetEntityId = () => _secondaryInventory.OpenTargetEntityId ?? _shop.OpenTargetEntityId;
 
-        ItemDetails = new ItemDetailsWindowController(elementPoolService, inventoryView, itemCatalog, Inventory, mapWindow, shellServices.PointerState, itemWindows);
+        ItemDetails = new ItemDetailsWindowController(elementPoolService, inventoryView, itemCatalog, Inventory, mapWindow, shellServices.PointerState, itemWindows, ItemDetailsMode);
         ItemDetails.Initialize(layers);
-        _comparisonPopup = new ItemDetailsWindowController(elementPoolService, inventoryView, itemCatalog, Inventory, mapWindow, shellServices.PointerState, itemWindows, closesOnPressOutside: false, closesWhenPointerLeaves: false);
+        _comparisonPopup = new ItemDetailsWindowController(elementPoolService, inventoryView, itemCatalog, Inventory, mapWindow, shellServices.PointerState, itemWindows, ItemDetailsMode, closesOnPressOutside: false, closesWhenPointerLeaves: false, isComparisonPane: true);
         _comparisonPopup.Initialize(layers);
 
         ItemComparison = new ItemComparisonController(_mapViewState, ItemDetails, _comparisonPopup, shellServices.CursorTextContent, entityId => WindowHoldingItemsOf(entityId, trade));
@@ -126,6 +126,9 @@ public sealed class ItemWindowCoordinator
     public InventoryWindowController Inventory { get; }
 
     public ItemDetailsWindowController ItemDetails { get; }
+
+    /// <summary>The mode the player chose for Item Details, shared by Item Details and the comparison popup for the session.</summary>
+    public ItemDetailsModeSetting ItemDetailsMode { get; } = new();
 
     public ItemComparisonController ItemComparison { get; }
 

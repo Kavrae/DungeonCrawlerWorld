@@ -543,6 +543,17 @@ public sealed class InventoryGridContent(
         return cellRows.Get(new ShopPricingRowsKey(target.Definition, stackQuantity, inputs), static key => ComputeShopRows(key.Definition, key.StackQuantity, key.Inputs));
     }
 
+    public (int Buy, int Sell)? ReferencePricesFor(in ItemHoverTarget target)
+    {
+        if (!TryGetShopRowsInputs(target.Definition, out var inputs))
+        {
+            return null;
+        }
+
+        var shop = new ShopComponent(inputs.AcceptedItems, inputs.BuyMultiplier, inputs.SellMultiplier);
+        return (ShopActions.ComputeBuyPrice(shop, target.Definition), ShopActions.ComputeSellPrice(shop, target.Definition));
+    }
+
     /// <summary>Everything the shop pricing rows are built from -- the cache key for them, so they're rebuilt only when one changes.</summary>
     private readonly record struct ShopPricingRowsKey(ItemDefinition Definition, ushort? StackQuantity, ShopRowsInputs Inputs);
 

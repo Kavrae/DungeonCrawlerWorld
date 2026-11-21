@@ -25,7 +25,7 @@ public static class EffectModifiers
 
         return context.TargetEntityId == EffectContext.NoTargetEntity
             ? scaled
-            : StatModifierMath.GetEffectiveValue(context.Services.StatModifiers, context.TargetEntityId, incoming, scaled, context.ActivatorTags);
+            : StatModifierMath.GetEffectiveValue(context.Services.StatModifiers, context.TargetEntityId, incoming, scaled, context.ActivatorTags, context.AmountPreview?.Contributions);
     }
 
     /// <summary>Scales amount as Scale does, rounded to the nearest whole number and clamped to 0..ushort.MaxValue.</summary>
@@ -39,7 +39,7 @@ public static class EffectModifiers
     /// <summary>Scales amount through Outgoing modifiers on context.SourceEntityId alone, for an amount whose Incoming pass is applied further on (damage, at HealthDamage).</summary>
     public static float ScaleOutgoing(in EffectContext context, float amount, StatModifierTarget outgoing) =>
         context.SourceEntityId is { } sourceEntityId
-            ? StatModifierMath.GetEffectiveValue(context.Services.StatModifiers, sourceEntityId, outgoing, amount, context.ActivatorTags)
+            ? StatModifierMath.GetEffectiveValue(context.Services.StatModifiers, sourceEntityId, outgoing, amount, context.ActivatorTags, context.AmountPreview?.Contributions)
             : amount;
 
     /// <summary>amount rounded to the nearest whole number and clamped to 0..ushort.MaxValue: how every scaled whole-number amount is made one.</summary>

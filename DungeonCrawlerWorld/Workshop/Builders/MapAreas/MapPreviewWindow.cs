@@ -3,6 +3,7 @@ using Game.Bootstrap;
 using Game.Floors;
 using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
+using Presentation.UI;
 using Presentation.UI.Details;
 using UIEngine.Fonts;
 using UIEngine.UI;
@@ -51,7 +52,7 @@ public sealed class MapPreviewWindow(ElementServices services, AreaPreviewCache 
         (-1, 1, "↙"), (0, 1, "↓"), (1, 1, "↘"),
     ];
 
-    private readonly ActivatableDetailsSections _sections = new(services.ElementPoolService, services.FontService, catalogs.ActionCatalog, catalogs.GameplayTags);
+    private readonly ActivatableDetailsSections _sections = new(services.ElementPoolService, services.FontService, catalogs.ActionCatalog, EffectTextNames.Of(catalogs));
     private readonly Dictionary<Guid, ulong> _seedsByArea = [];
     private readonly List<(MapLayer Layer, Button Button)> _layerButtons = [];
     private readonly List<(int DeltaX, int DeltaY, Button Button)> _arrowButtons = [];

@@ -351,10 +351,7 @@ public sealed class ItemActivationSystem : ISystem, IItemWindupResolver
             PotionCooldownEffects.Reset(system._componentManager, targetEntityId, _cooldownFrames, system._now);
     }
 
-    private float ComputeScrollScaleMultiplier(int sourceEntityId) =>
-        AbilityScoreQueries.TryGetComponent(_abilityScores, sourceEntityId, AbilityScoreType.Intelligence, out var intelligence)
-            ? ScrollScalingEffects.ComputeScaleMultiplier(intelligence.Total)
-            : 1.0f;
+    private float ComputeScrollScaleMultiplier(int sourceEntityId) => ScrollScalingEffects.MultiplierFor(_abilityScores, sourceEntityId);
 
     /// <summary>
     /// Decrements this specific wand's own Charges by one, uniformly whether it's the first shot

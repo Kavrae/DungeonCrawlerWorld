@@ -107,7 +107,7 @@ public sealed class ItemWindowCoordinatorTests
         elementPool.RegisterFactory<CurrencyElement>(() => new CurrencyElement(TestElementServices.For(elementPool, fontService), spriteSheetService));
         elementPool.RegisterFactory<TargetShapePreviewElement>(() => new TargetShapePreviewElement(TestElementServices.For(elementPool, fontService)));
         elementPool.RegisterFactory<EntityIconElement>(() => new EntityIconElement(TestElementServices.For(elementPool, fontService), spriteSheetService, mapView));
-        elementPool.RegisterFactory<ItemDetailsWindow>(() => new ItemDetailsWindow(TestElementServices.For(elementPool, fontService), new ActionCatalog(), TestGameplayTags.BuiltIn, inventoryServices.ActionStateView, world));
+        elementPool.RegisterFactory<ItemDetailsWindow>(() => new ItemDetailsWindow(TestElementServices.For(elementPool, fontService), new ActionCatalog(), new EffectTextNames(TestGameplayTags.BuiltIn), inventoryServices.ActionStateView, TestActionStateViews.Previews(componentManager), world));
         elementPool.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(TestElementServices.For(elementPool, fontService), inventoryServices, world, contextMenuController, mapViewState));
         elementPool.RegisterFactory<SecondaryInventoryWindow>(() => new SecondaryInventoryWindow(TestElementServices.For(elementPool, fontService), inventoryServices, world, contextMenuController, mapViewState, entityNaming: entityNaming, healthView: healthView, actionSourceNaming: TestActionSources.Naming(terrain, entityKeys: componentManager.Keys)));
         elementPool.RegisterFactory<ShopWindow>(() => new ShopWindow(TestElementServices.For(elementPool, fontService), inventoryServices, world, contextMenuController, mapViewState, entityNaming: entityNaming));
@@ -390,6 +390,8 @@ public sealed class ItemWindowCoordinatorTests
     private sealed class NoShopPricing : IItemShopPricingSource
     {
         public IReadOnlyList<TooltipRow>? ShopPricingRowsFor(in ItemHoverTarget target) => null;
+
+        public (int Buy, int Sell)? ReferencePricesFor(in ItemHoverTarget target) => null;
     }
 
     /// <summary>Two potions in the player's inventory, the inventory open, and compare mode started on the first.</summary>
@@ -578,13 +580,78 @@ public sealed class ItemWindowCoordinatorTests
         DescendantsOf(window).OfType<Button>().Select(ButtonContent.TextOf);
 
     [TestMethod]
-    public void ItemDetails_ForAComparableStack_HasCompareAndNoStopComparison()
+    public void ItemDetails_ForAComparableStack_HasCompareAndTheModeButton_AndNoStopComparison()
     {
         var harness = Build();
 
         var window = OpenItemDetailsOnAPlayerPotion(harness, out _);
 
-        CollectionAssert.AreEqual(new[] { "Compare" }, ButtonLabels(window).ToArray());
+        CollectionAssert.AreEquivalent(new[] { "Compare", "Advanced" }, ButtonLabels(window).ToArray());
+    }
+
+    [TestMethod]
+    public void TheButtons_SitOnTheNameRow_RightOfTheName()
+    {
+        var harness = Build();
+        var window = OpenItemDetailsOnAPlayerPotion(harness, out _);
+        var name = harness.ItemCatalog.Get(PotionItemId).Name;
+
+        foreach (var button in DescendantsOf(window).OfType<Button>())
+        {
+            var row = button.ParentElement!;
+            var nameLine = row.ChildElements.OfType<TextWindow>().Single(line => line.OriginalText == name);
+            Assert.IsGreaterThanOrEqualTo(nameLine.Rectangle.Right, button.Rectangle.Left, $"{ButtonContent.TextOf(button)} overlaps the name.");
+        }
+    }
+
+    [TestMethod]
+    public void TheComparedItem_HasNoButtons_WhileTheAnchorHasStopComparison()
+    {
+        var (harness, _, otherStackId) = BuildComparingTwoPotions();
+        HoverOtherPotion(harness, otherStackId);
+
+        var anchor = harness.Coordinator.ItemDetails.Window!;
+        var compared = harness.Layers[UiLayer.DynamicHud].OfType<ItemDetailsWindow>().Single(window => !ReferenceEquals(window, anchor));
+        anchor.Update(new GameTime());
+        compared.Update(new GameTime());
+
+        CollectionAssert.AreEqual(new[] { "Stop Comparison" }, ButtonLabels(anchor).ToArray());
+        Assert.IsFalse(ButtonLabels(compared).Any(), string.Join(", ", ButtonLabels(compared)));
+    }
+
+    [TestMethod]
+    public void TheModeButton_SwitchesToTheModeItNames_AndTheChoiceSurvivesReopening()
+    {
+        var harness = Build();
+        var window = OpenItemDetailsOnAPlayerPotion(harness, out _);
+        Assert.AreEqual(DetailsMode.Simple, window.ShownMode);
+
+        var modeButton = DescendantsOf(window).OfType<Button>().Single(button => ButtonContent.TextOf(button) == "Advanced");
+        modeButton.HandleClick(modeButton.Rectangle.Center);
+        window.Update(new GameTime());
+
+        Assert.AreEqual(DetailsMode.Advanced, window.ShownMode);
+        CollectionAssert.AreEquivalent(new[] { "Compare", "Simple" }, ButtonLabels(window).ToArray());
+
+        harness.Coordinator.ItemDetails.Close();
+        var reopened = OpenItemDetailsOnAPlayerPotion(harness, out _);
+        Assert.AreEqual(DetailsMode.Advanced, reopened.ShownMode);
+    }
+
+    [TestMethod]
+    public void Comparing_ShowsSimple_AndHidesTheModeButton_ThenStoppingRestoresTheChoice()
+    {
+        var harness = Build();
+        harness.Coordinator.ItemDetailsMode.Toggle();
+        var window = OpenItemDetailsOnAPlayerPotion(harness, out var stackInstanceId);
+        Assert.AreEqual(DetailsMode.Advanced, window.ShownMode);
+
+        harness.Coordinator.ItemComparison.Arm(PlayerEntityId, stackInstanceId);
+        window.Update(new GameTime());
+
+        Assert.AreEqual(DetailsMode.Simple, window.ShownMode);
+        CollectionAssert.DoesNotContain(ButtonLabels(window).ToList(), "Simple");
+        Assert.AreEqual(DetailsMode.Advanced, harness.Coordinator.ItemDetailsMode.Chosen);
     }
 
     [TestMethod]

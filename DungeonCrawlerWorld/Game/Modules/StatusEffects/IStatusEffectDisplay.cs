@@ -25,6 +25,9 @@ public interface IStatusEffectDisplay
     /// <summary>The most stacks of EffectType an entity can hold; 1 for an effect that doesn't stack, whose count isn't worth showing.</summary>
     int MaxStacks { get; }
 
+    /// <summary>How long one of the ticks a grant's duration is counted in lasts (StatusEffectGrant.DurationTicks), in frames; null for an effect that takes no duration.</summary>
+    ushort? FramesPerDurationTick { get; }
+
     /// <summary>This entity's remaining duration for EffectType as of frame now, in frames, or null if it isn't actually active on this entity (no timer component present).</summary>
     /// <param name="now">The simulation frame to measure from -- timers store absolute deadlines, so "remaining" depends on when you ask.</param>
     int? GetRemainingDurationFrames(int entityId, long now);

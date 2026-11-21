@@ -2,7 +2,7 @@ using Engine.Modules;
 
 namespace Engine.Tags;
 
-/// <summary>The gameplay tags one build's modules declared -- each one's display name and description -- and the domains they declared.</summary>
+/// <summary>The gameplay tags one build's modules declared -- each one's display names and description -- and the domains they declared.</summary>
 /// <remarks>
 /// Built once from the module set and frozen. A tag outside it may still be interned in the process (another build, a
 /// mod that failed validation), but is not usable in this build: code that accepts content checks it here, and a field
@@ -11,10 +11,10 @@ namespace Engine.Tags;
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class GameplayTagRegistry
 {
-    private readonly Dictionary<GameplayTag, (string DisplayName, string Description)> _tags;
+    private readonly Dictionary<GameplayTag, DeclaredTag> _tags;
     private readonly Dictionary<GameplayTagDomain, (string Description, GameplayTag[] Accepted)> _domains;
 
-    private GameplayTagRegistry(Dictionary<GameplayTag, (string DisplayName, string Description)> tags, Dictionary<GameplayTagDomain, (string Description, GameplayTag[] Accepted)> domains)
+    private GameplayTagRegistry(Dictionary<GameplayTag, DeclaredTag> tags, Dictionary<GameplayTagDomain, (string Description, GameplayTag[] Accepted)> domains)
     {
         _tags = tags;
         _domains = domains;
@@ -36,7 +36,7 @@ public sealed class GameplayTagRegistry
 
         declarations.Validate();
         return new GameplayTagRegistry(
-            declarations.Tags.ToDictionary(entry => entry.Key, entry => (entry.Value.DisplayName ?? entry.Key.LastSegment, entry.Value.Description!)),
+            declarations.Tags.ToDictionary(entry => entry.Key, entry => DeclaredTag.Of(entry.Key, entry.Value)),
             declarations.Domains.ToDictionary(entry => entry.Key, entry => (entry.Value.Description, entry.Value.Accepted.ToArray())));
     }
 
@@ -47,6 +47,10 @@ public sealed class GameplayTagRegistry
     /// <summary>The name a player reads for tag: its declared display name, otherwise its last segment ("Fire" for "Damage.Fire").</summary>
     /// <exception cref="InvalidOperationException">tag is not declared in this build.</exception>
     public string GetDisplayName(GameplayTag tag) => Get(tag).DisplayName;
+
+    /// <summary>The name a player reads for several of what tag names ("Spells"): its declared plural display name, otherwise its display name.</summary>
+    /// <exception cref="InvalidOperationException">tag is not declared in this build.</exception>
+    public string GetPluralDisplayName(GameplayTag tag) => Get(tag).PluralDisplayName;
 
     /// <summary>What tag means, as its declaration describes it.</summary>
     /// <exception cref="InvalidOperationException">tag is not declared in this build.</exception>
@@ -131,7 +135,7 @@ public sealed class GameplayTagRegistry
         }
     }
 
-    private (string DisplayName, string Description) Get(GameplayTag tag) =>
+    private DeclaredTag Get(GameplayTag tag) =>
         _tags.TryGetValue(tag, out var entry)
             ? entry
             : throw new InvalidOperationException($"Gameplay tag '{tag}' is not declared by any module in this build.");
@@ -140,6 +144,15 @@ public sealed class GameplayTagRegistry
         _domains.TryGetValue(domain, out var entry)
             ? entry
             : throw new InvalidOperationException($"The {domain} gameplay tag domain is not declared by any module in this build.");
+
+    private readonly record struct DeclaredTag(string DisplayName, string PluralDisplayName, string Description)
+    {
+        public static DeclaredTag Of(GameplayTag tag, GameplayTagDeclarationSet.TagEntry entry)
+        {
+            var displayName = entry.DisplayName ?? tag.LastSegment;
+            return new DeclaredTag(displayName, entry.PluralDisplayName ?? displayName, entry.Description!);
+        }
+    }
 
     private static string Article(GameplayTagDomain domain) => "AEIOU".Contains(char.ToUpperInvariant(domain.Name[0])) ? "an" : "a";
 }

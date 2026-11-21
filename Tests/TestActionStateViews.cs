@@ -25,6 +25,10 @@ internal static class TestActionStateViews
     public static ActionStateView Over(ComponentManager componentManager, ActionCatalog? actionCatalog = null, ItemCatalog? itemCatalog = null) =>
         new(componentManager, EntityActions(componentManager, actionCatalog), itemCatalog ?? new ItemCatalog(), localTierRoster: null, EffectServicesOver(componentManager));
 
+    /// <summary>An ActivationPreviews over a test's own pools, as Over's ActionStateView sees them.</summary>
+    public static ActivationPreviews Previews(ComponentManager componentManager) =>
+        new(EffectServicesOver(componentManager), new Engine.ECS.Systems.SimulationClock());
+
     /// <summary>The services an ActionStateView asks activation effects through, over a test's own mana and stat modifier pools (empty ones where it registered none).</summary>
     public static EffectServices EffectServicesOver(ComponentManager componentManager) =>
         TestActionEffects.Services(componentManager, new EntityKeys(), new EventBus(), new MathUtility(),

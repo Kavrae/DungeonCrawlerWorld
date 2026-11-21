@@ -37,6 +37,13 @@ public sealed record ChainedEffect(float TriggerChance, IReadOnlyList<Effect> Tr
     }
 
     /// <remarks>TriggerChance is scaled by Outgoing/IncomingProcChance (EffectModifiers) before it is rolled.</remarks>
+    /// <summary>The chance to trigger; the triggered entries preview their own amounts.</summary>
+    public void PreviewAmounts(in EffectContext context, EffectAmountPreview preview)
+    {
+        preview.Begin(EffectAmount.ProcChance, TriggerChance);
+        preview.End(EffectModifiers.Scale(in context, TriggerChance, StatModifierTarget.OutgoingProcChance, StatModifierTarget.IncomingProcChance));
+    }
+
     public EffectOutcome Apply(in EffectContext context)
     {
         if (context.ChainDepth >= MaxChainDepth ||

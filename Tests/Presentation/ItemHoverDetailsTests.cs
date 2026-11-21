@@ -37,6 +37,8 @@ public sealed class ItemHoverDetailsTests
     private sealed class NoShopPricing : IItemShopPricingSource
     {
         public IReadOnlyList<TooltipRow>? ShopPricingRowsFor(in ItemHoverTarget target) => null;
+
+        public (int Buy, int Sell)? ReferencePricesFor(in ItemHoverTarget target) => null;
     }
 
     private static (ItemHoverDetails Hover, CursorTextContent Label, RecordingPopup Popup) Build()

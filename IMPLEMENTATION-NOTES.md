@@ -2092,6 +2092,71 @@ Level Up and Skill Up join later as new `FloatingTextKind` values.
 `TargetShapePreviewGeometry`/`Element` (`Presentation/UI/`) -- all take plain `Game.Modules.Actions`
 types, so a future Magic Menu gets them free. Frame counts always shown as seconds.
 
+### Item Details: simple and advanced modes, values as used
+
+PLAN-item-details-complete.md (complete 2026-11-20) has the decisions, each phase as built, and the comparison with
+FF14 and WoW.
+
+**Modes:**
+- Item Details is **Simple** by default, and the mode button on the name row switches it to **Advanced**. The button
+  is labelled with the mode it switches to.
+- The choice is `ItemWindowCoordinator.ItemDetailsMode` (`ItemDetailsModeSetting`), shared by both Item Details
+  popups for the session; a user setting is a TODO.
+- Comparison is always simple: `ItemDetailsWindow.ShownMode` is Simple while comparing, and the comparison popup is
+  `AlwaysSimple`.
+- The Workshop's details are always advanced.
+- Simple leaves out:
+  - Shape, Range and Area Size, which the grid shows;
+  - Immediate timing (Delayed and Freecast show as one word);
+  - body parts, "Locked Duration", the aura's edge strength and description;
+  - every change and breakdown tooltip.
+
+**Wording.** Every effect is one sentence with its duration last ("Poison immunity for 5m", "x4 Caution for 2s"),
+from `EffectFormatting.FormatEntry(entry, EffectTextNames, DetailsMode, previews)`:
+- An entry with no case prints its type name, and `EffectFormattingTests` fails any built-in record that does.
+- `EffectTextNames` carries tags (with plural names, `GameplayTagRegistry.GetPluralDisplayName`), terrain, status
+  tick lengths (`IStatusEffectDisplay.FramesPerDurationTick`), modifier sources and items. Each is optional, with a
+  raw-name fallback, so the hover and hotbar summaries need none of them.
+- There is no "Stackable" line: buffs from one source are meant never to stack (Game TODO "Buffs and debuffs from the
+  same source don't stack").
+
+**Values as used.** The player is the source and the target has no modifiers:
+- Each entry works out its own amounts with `IEffectEntry.PreviewAmounts`, beside `Apply` and through the same
+  helpers.
+- While previewing, `EffectContext.AmountPreview` is set. `StatModifierMath.GetEffectiveValue` and
+  `AbilityScoreTagBonus.Compute` then record each step they fold in as a `ValueContribution`, and `EffectDurations`
+  records a scroll's multiplier.
+- A percentage of the target's maximum keeps only its multipliers (`EffectAmountPreview.EndFraction`).
+- `GameViews.ActivationPreviews` runs a preview for the player (`Preview`), for an aura at a strength (`PreviewAura`,
+  through `AuraDefinition.MagnitudeAt`, the tick's own rule) and gives a change stamp, so Item Details rebuilds only
+  when the player's modifiers or ability scores change.
+- Advanced mode shows a changed value's change after it, "(+7)" or "(x2)", green for a rise and red for a fall,
+  drawn as its own element (`LineStyle`, `ActivatableDetailsSections.AddStatLine`).
+- Its tooltip is "Base", each step, then "Total" (`PreviewedValueText`).
+
+**Comparison.** A better line shows its difference from the best of the others ("(+25%)", in its `StatUnit`). Worse,
+tied and exclusive lines show none.
+
+**Sections, top to bottom:**
+- the name, with the buttons top-right;
+- "Active", the blocker and "Cooling down";
+- Effects, each `AuraSourceGrant` followed by its aura's section: a heading, "Each second" at the grant's strength,
+  the reach as a diamond shaded by falloff, and in advanced mode the source and edge strengths, the strength rules,
+  the edge's effects and the description;
+- Cost;
+- Activation (a toggle has no grid or targeting lines);
+- Resources (a wand's charges);
+- Opens into (`ItemFactsText.Contents`);
+- the description;
+- the gold row ("Sell price", or "Buy price, sell price"; the open shop's flat prices through
+  `IItemShopPricingSource.ReferencePricesFor`, else `GoldValue`);
+- the Shop section;
+- the restrictions (`ItemRestrictions.Of`, today only "Untradable");
+- the tags.
+
+**One screen.** Every built-in item fits a 1600x900 window with about half to spare (tallest 456 px). A stacked
+comparison of two Wands of Fireball is about 886 px. Side-by-side comparison panes are the fix if that ever overflows.
+
 ### Inventory tabs/search/sort/GridControl/Toggle
 
 - Auto-generated per-category tabs (`InventoryTagQueries.GetItemCategoryCounts`): one per `Item.*` tag

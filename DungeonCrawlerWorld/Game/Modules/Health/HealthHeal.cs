@@ -153,15 +153,18 @@ public static class HealthHeal
         return ScaleByHealingModifiers(statModifiers, sourceEntityId, targetEntityId, activatorTags, amount);
     }
 
-    /// <summary>amount through OutgoingHealing (sourceEntityId, if known) then IncomingHealing (targetEntityId).</summary>
-    internal static float ScaleByHealingModifiers(MultiComponentPool<StatModifierComponent> statModifiers, int? sourceEntityId, int targetEntityId, GameplayTagSet activatorTags, float amount)
+    /// <summary>amount through OutgoingHealing (sourceEntityId, if known) then IncomingHealing (targetEntityId, unless it is negative: no target, as when a heal is previewed).</summary>
+    /// <param name="contributions">Receives each modifier that counted, when given (StatModifierMath.GetEffectiveValue).</param>
+    internal static float ScaleByHealingModifiers(MultiComponentPool<StatModifierComponent> statModifiers, int? sourceEntityId, int targetEntityId, GameplayTagSet activatorTags, float amount, List<ValueContribution>? contributions = null)
     {
         if (sourceEntityId is { } source)
         {
-            amount = StatModifierMath.GetEffectiveValue(statModifiers, source, StatModifierTarget.OutgoingHealing, amount, activatorTags);
+            amount = StatModifierMath.GetEffectiveValue(statModifiers, source, StatModifierTarget.OutgoingHealing, amount, activatorTags, contributions);
         }
 
-        return StatModifierMath.GetEffectiveValue(statModifiers, targetEntityId, StatModifierTarget.IncomingHealing, amount, activatorTags);
+        return targetEntityId < 0
+            ? amount
+            : StatModifierMath.GetEffectiveValue(statModifiers, targetEntityId, StatModifierTarget.IncomingHealing, amount, activatorTags, contributions);
     }
 
     /// <summary>Shared by the Simple path here and every ComplexHealthHeal path -- publishes EntityHealedEvent only when the player is involved as either entityId or sourceEntityId, mirroring HealthDamage.Apply's identical playerInvolved gate.</summary>

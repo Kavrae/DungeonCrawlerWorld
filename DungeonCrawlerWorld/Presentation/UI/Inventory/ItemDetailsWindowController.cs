@@ -29,8 +29,10 @@ public sealed class ItemDetailsWindowController(
     MapWindow mapWindow,
     PointerState pointerState,
     ElementGroup itemWindows,
+    ItemDetailsModeSetting modeSetting,
     bool closesOnPressOutside = true,
-    bool closesWhenPointerLeaves = true) : ILightDismissable
+    bool closesWhenPointerLeaves = true,
+    bool isComparisonPane = false) : ILightDismissable
 {
     /// <summary>How far below and right of the cursor the popup's top-left lands, so a double-click on the item never lands on the popup's edge.</summary>
     private static readonly Vector2 CursorOffset = new(16, 16);
@@ -207,14 +209,15 @@ public sealed class ItemDetailsWindowController(
         });
         window.Configure(target.EntityId, stackInstanceId, target.Definition, widthSourceWindow.ContentSize.X, comparedAgainst, shopPricing);
         window.Closed += HandleClosed;
-        if (OnCompareRequested is not null)
-        {
-            window.OnCompareRequested = (compareEntityId, compareStackInstanceId) => OnCompareRequested?.Invoke(compareEntityId, compareStackInstanceId);
-        }
-
+        window.OnCompareRequested = OnCompareRequested is null || isComparisonPane
+            ? null
+            : (compareEntityId, compareStackInstanceId) => OnCompareRequested?.Invoke(compareEntityId, compareStackInstanceId);
         window.OnUpdated = HandleWindowUpdated;
         window.IsComparing = () => IsPinned;
         window.OnStopComparisonRequested = () => OnStopComparisonRequested?.Invoke();
+        window.ChosenMode = () => modeSetting.Chosen;
+        window.OnModeToggleRequested = modeSetting.Toggle;
+        window.AlwaysSimple = isComparisonPane;
         window.Initialize();
         _layers.Add(UiLayer.DynamicHud, window);
         _layers.OpenMenuWindow(window); // Menu Mode, same as the player's own Inventory window and a corpse window.

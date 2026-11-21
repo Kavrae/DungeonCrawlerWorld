@@ -39,6 +39,16 @@ public interface IEffectEntry
     /// <summary>The stat modifier pairs that scale this entry's amounts (EffectModifiers): Outgoing on its cause, Incoming on its target. Empty for an entry with no amount.</summary>
     IReadOnlyList<(StatModifierTarget Outgoing, StatModifierTarget Incoming)> AmountModifiers => [];
 
+    /// <summary>Works out each amount this entry carries as Apply would in context, into preview, changing nothing.</summary>
+    /// <remarks>
+    /// context carries preview (EffectContext.AmountPreview), so the helpers Apply scales through record each step. An
+    /// amount that depends on the target (a percentage of its maximum health) is left out; the target is the
+    /// context's, usually none. Does nothing for an entry with no amount.
+    /// </remarks>
+    void PreviewAmounts(in EffectContext context, EffectAmountPreview preview)
+    {
+    }
+
     /// <summary>Whether what this entry grants lasts until something takes it back: no duration and no expiry of its own.</summary>
     /// <remarks>A toggle may hold such an entry only if it is an IReversibleEffectEntry; the build refuses one that isn't (ToggleContentValidation).</remarks>
     bool GrantsUntilRevoked => false;

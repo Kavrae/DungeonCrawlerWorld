@@ -20,6 +20,9 @@ public interface IItemShopPricingSource
 {
     /// <summary>The pricing rows for target, or null when no shop is open; the same list instance while nothing it is built from changes.</summary>
     IReadOnlyList<TooltipRow>? ShopPricingRowsFor(in ItemHoverTarget target);
+
+    /// <summary>The open shop's flat buy and sell prices for target -- before its stock moves them (ShopActions.ComputeBuyPrice/ComputeSellPrice) -- or null when no shop is open.</summary>
+    (int Buy, int Sell)? ReferencePricesFor(in ItemHoverTarget target);
 }
 
 /// <summary>The Item Details popup as hovering sees it.</summary>

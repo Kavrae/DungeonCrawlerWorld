@@ -18,8 +18,8 @@ public sealed class ToggleTextTests
     [TestMethod]
     public void ASpellThatIsNotAToggle_DescribesItsCostAsWhatUsingItTakes()
     {
-        Assert.AreEqual("To use: Drains 15 mana", CostText.ActivationLine(TestContent.Action(BuiltInActionIds.Fireball), gameplayTags: null));
-        Assert.IsNull(CostText.UpkeepLine(TestContent.Action(BuiltInActionIds.Fireball), gameplayTags: null));
+        Assert.AreEqual("To use: Drains 15 mana", CostText.ActivationLine(TestContent.Action(BuiltInActionIds.Fireball), EffectTextNames.None));
+        Assert.IsNull(CostText.UpkeepLine(TestContent.Action(BuiltInActionIds.Fireball), EffectTextNames.None));
     }
 
     [TestMethod]
@@ -27,7 +27,7 @@ public sealed class ToggleTextTests
     {
         var action = TestContent.Action(BuiltInActionIds.Fireball) with { ActivationEffects = [new Effect([new ManaDrain(5), new HealthDrain(3)])] };
 
-        Assert.AreEqual("To use: Drains 5 mana; Drains 3 health", CostText.ActivationLine(action, gameplayTags: null));
+        Assert.AreEqual("To use: Drains 5 mana; Drains 3 health", CostText.ActivationLine(action, EffectTextNames.None));
     }
 
     [TestMethod]
@@ -35,8 +35,8 @@ public sealed class ToggleTextTests
     {
         var action = TestContent.Action(BuiltInActionIds.ToxicAura);
 
-        Assert.IsNull(CostText.ActivationLine(action, gameplayTags: null));
-        Assert.AreEqual("While on, every 1s: Drains 1 mana", CostText.UpkeepLine(action, gameplayTags: null));
+        Assert.IsNull(CostText.ActivationLine(action, EffectTextNames.None));
+        Assert.AreEqual("While on, every 1s: Drains 1 mana", CostText.UpkeepLine(action, EffectTextNames.None));
     }
 
     [TestMethod]
@@ -44,8 +44,8 @@ public sealed class ToggleTextTests
     {
         var item = TestContent.Item(BuiltInItemIds.ToxicIdol) with { ActivationEffects = [new Effect([new ManaDrain(5)])] };
 
-        Assert.AreEqual("To turn on: Drains 5 mana", CostText.ActivationLine(item, gameplayTags: null));
-        Assert.IsNull(CostText.UpkeepLine(item, gameplayTags: null));
+        Assert.AreEqual("To turn on: Drains 5 mana", CostText.ActivationLine(item, EffectTextNames.None));
+        Assert.IsNull(CostText.UpkeepLine(item, EffectTextNames.None));
     }
 
     [TestMethod]
@@ -69,8 +69,8 @@ public sealed class ToggleTextTests
     [TestMethod]
     public void AToggleHeldAura_IsNotDescribedAsPermanent()
     {
-        var line = EffectFormatting.FormatEntry(TestContent.Item(BuiltInItemIds.ToxicIdol).Effects[0].Entries[0], gameplayTags: null);
+        var line = EffectFormatting.FormatEntry(TestContent.Item(BuiltInItemIds.ToxicIdol).Effects[0].Entries[0], EffectTextNames.None, DetailsMode.Simple);
 
-        Assert.AreEqual("Grants a Poison aura (size 4, power 16)", line);
+        Assert.AreEqual("Grants a size 4 Poison aura with strength 16", line);
     }
 }

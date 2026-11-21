@@ -472,7 +472,7 @@ public sealed class AuraSystem : ISystem
 
         var context = new EffectContext(_effectServices, credit, SourceEntityId: null, entityId, definition.EffectName, definition.Tags, now)
         {
-            Magnitude = definition.Magnitude == AuraMagnitude.Flat ? 1f : power,
+            Magnitude = definition.MagnitudeAt(power),
             AnnouncesRefusal = !exposure.Refused,
         };
 

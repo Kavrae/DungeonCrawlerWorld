@@ -1,5 +1,5 @@
-using Engine.Tags;
 using Game.Modules.Actions;
+using Game.Views;
 using Microsoft.Xna.Framework;
 using UIEngine.Fonts;
 using UIEngine.UI;
@@ -16,10 +16,11 @@ namespace Presentation.UI.Details;
 public sealed class ActionDetailsWindow(
     ElementServices services,
     ActionCatalog actionCatalog,
-    GameplayTagRegistry gameplayTags)
+    EffectTextNames names,
+    ActivationPreviews? activationPreviews = null)
     : Window(services)
 {
-    private readonly ActivatableDetailsSections _sections = new(services.ElementPoolService, services.FontService, actionCatalog, gameplayTags);
+    private readonly ActivatableDetailsSections _sections = new(services.ElementPoolService, services.FontService, actionCatalog, names);
 
     private ActionDefinition? _definition;
     private float _contentWidth;
@@ -57,12 +58,13 @@ public sealed class ActionDetailsWindow(
         var width = _contentWidth - ContentPadding.X * 2;
 
         _sections.BuildNameRow(this, _definition, width);
-        _sections.BuildEffectsSection(this, _definition, width, PlainLineColor);
+        _sections.BuildEffectsSection(this, _definition, DetailsMode.Advanced, width, PlainLineStyle, auraPreviews: activationPreviews is null ? null : activationPreviews.PreviewAura);
         _sections.BuildCostSection(this, _definition, width);
-        _sections.BuildActivationSection(this, _definition.Activator, width, PlainLineColor);
+        _sections.BuildActivationSection(this, _definition.Activator, DetailsMode.Advanced, width, PlainLineStyle, isToggle: _definition.Toggle is not null);
+        _sections.BuildResourcesSection(this, _definition.Activator, width, PlainLineStyle);
         _sections.BuildDescriptionSection(this, _definition, width);
         _sections.BuildTagsSection(this, _definition, width);
     }
 
-    private static Color PlainLineColor(ItemComparisonStat stat) => ActivatableDetailsSections.BodyTextColor;
+    private static LineStyle PlainLineStyle(ItemComparisonStat stat) => LineStyle.Of(stat);
 }

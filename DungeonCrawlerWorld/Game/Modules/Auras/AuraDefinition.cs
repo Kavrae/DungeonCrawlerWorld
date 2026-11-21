@@ -53,6 +53,9 @@ public sealed record AuraDefinition(
     /// <summary>Whether an entity in range holds an exposure to this aura at all.</summary>
     public bool HasEffects => Effects.Count > 0;
 
+    /// <summary>What the amounts its effects carry are multiplied by where its power is power (EffectContext.Magnitude): the power for a Power aura, 1 for a Flat one.</summary>
+    public float MagnitudeAt(float power) => Magnitude == AuraMagnitude.Flat ? 1f : power;
+
     /// <summary>What the aura's damage and healing are named after: its name and "Aura".</summary>
     public string EffectName { get; } = $"{Name} Aura";
 

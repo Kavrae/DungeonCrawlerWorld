@@ -96,7 +96,7 @@ public static class ElementFactoryRegistry
         elementPool.RegisterFactory(() => new FootprintIconElement(services));
 
         elementPool.RegisterFactory(() => new InspectionWindow(services));
-        elementPool.RegisterFactory(() => new ItemDetailsWindow(services, actionCatalog, catalogs.GameplayTags, views.ActionStateView, world));
+        elementPool.RegisterFactory(() => new ItemDetailsWindow(services, actionCatalog, EffectTextNames.Of(catalogs, views.ActionSourceNaming), views.ActionStateView, views.ActivationPreviews, world));
         elementPool.RegisterFactory(() => new CurrencyElement(services, sprites));
         elementPool.RegisterFactory(() => new TargetShapePreviewElement(services));
     }

@@ -14,8 +14,11 @@ namespace Game.Modules.StatusEffects;
 /// </summary>
 /// <param name="getRemainingDurationFrames">(timer, now) -> frames remaining as of now.</param>
 /// <param name="getSource">The source the timer records; null for an effect whose timer records none.</param>
-public sealed class TimerBasedStatusEffectDisplay<T>(StatusEffectType effectType, string glyph, int maxStacks, PackedComponentPool<T> timers, Func<T, long, int> getRemainingDurationFrames, Func<T, Game.World.ActionSource>? getSource = null) : IStatusEffectDisplay where T : struct, IStatusEffectStackCount
+/// <param name="framesPerDurationTick">How long one tick of a granted duration lasts, for an effect that takes one; null otherwise.</param>
+public sealed class TimerBasedStatusEffectDisplay<T>(StatusEffectType effectType, string glyph, int maxStacks, PackedComponentPool<T> timers, Func<T, long, int> getRemainingDurationFrames, Func<T, Game.World.ActionSource>? getSource = null, ushort? framesPerDurationTick = null) : IStatusEffectDisplay where T : struct, IStatusEffectStackCount
 {
+    public ushort? FramesPerDurationTick { get; } = framesPerDurationTick;
+
     public Game.World.ActionSource? GetSource(int entityId) =>
         getSource is not null && timers.TryGetReadonly(entityId, out var timer) ? getSource(timer) : null;
 

@@ -72,6 +72,19 @@ public sealed record StatusEffectGrant(
         : StatusEffectTypeFacts.PolarityOf(Type) == StatModifierPolarity.Buff ? TimedBuffModifiers
         : TimedDebuffModifiers;
 
+    /// <summary>The stacks granted -- for a TopUpTo, the level topped up to -- and the duration, in the effect's own ticks.</summary>
+    public void PreviewAmounts(in EffectContext context, EffectAmountPreview preview)
+    {
+        preview.Begin(EffectAmount.Stacks, StackCount, context.Magnitude);
+        preview.End(EffectModifiers.ScaleToUShort(in context, StackCount * context.Magnitude, StatModifierTarget.OutgoingStatusStacks, StatModifierTarget.IncomingStatusStacks));
+
+        if (DurationTicks is { } durationTicks)
+        {
+            preview.Begin(EffectAmount.Duration, durationTicks);
+            preview.End(EffectDurations.Scale(in context, durationTicks, StatusEffectTypeFacts.PolarityOf(Type)) ?? 0);
+        }
+    }
+
     public EffectOutcome Apply(in EffectContext context)
     {
         var services = context.Services;

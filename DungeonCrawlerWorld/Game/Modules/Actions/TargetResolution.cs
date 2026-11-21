@@ -61,10 +61,7 @@ public sealed class TargetResolution(
             return activator.Targeting;
         }
 
-        var multiplier = AbilityScoreQueries.TryGetComponent(abilityScores, casterEntityId, AbilityScoreType.Intelligence, out var intelligence)
-            ? ScrollScalingEffects.ComputeScaleMultiplier(intelligence.Total)
-            : 1.0f;
-        return ScrollScalingEffects.ScaleTargeting(activator.Targeting, multiplier);
+        return ScrollScalingEffects.ScaleTargeting(activator.Targeting, ScrollScalingEffects.MultiplierFor(abilityScores, casterEntityId));
     }
 
     /// <summary>The selection for casterEntityId activating activator at aimedTile in mode, marking whoever stands there if Target mode applies.</summary>

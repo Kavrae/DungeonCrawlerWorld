@@ -1,4 +1,3 @@
-using Engine.Tags;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Inventory;
 
@@ -9,8 +8,8 @@ namespace Presentation.UI.Content;
 public static class ItemHoverSummary
 {
     /// <param name="showCharges">False where the tooltip stands for several stacks that could hold different charges (a merged cell), so no single number would be true.</param>
-    /// <param name="gameplayTags">Names a tag an effect line mentions; null falls back to the tag's own name.</param>
-    public static string For(ItemDefinition definition, bool showCharges, GameplayTagRegistry? gameplayTags = null)
+    /// <param name="names">Names what a cost line mentions; null falls back to raw names (EffectTextNames.None).</param>
+    public static string For(ItemDefinition definition, bool showCharges, EffectTextNames? names = null)
     {
         var summary = definition.Summary;
         if (ToggleText.IsLit(definition))
@@ -30,7 +29,7 @@ public static class ItemHoverSummary
             summary += $"\nCharges: {wandActivator.Charges}/{wandActivator.MaxCharges}";
         }
 
-        foreach (var line in CostText.Lines(definition, gameplayTags))
+        foreach (var line in CostText.Lines(definition, names ?? EffectTextNames.None))
         {
             summary += $"\n{line}";
         }

@@ -896,6 +896,37 @@ developer and are tracked in one place.
 
 ### High Priority
 
+#### Buffs and debuffs from the same source don't stack
+
+A second buff or debuff from the same source refreshes the first instead of adding beside it. This rewards using
+different effects together and stops an item being used again and again for a bigger bonus.
+
+**The problem today.** A `StatModifierGrant` stacks by default (`StatModifierStacking.Add`). Drinking Draught of
+Insulation twice holds two -50% Fire Damage modifiers. Every potion's modifier stacks with itself the same way, which
+is the exploit.
+
+**The rule:**
+- **What counts as the source.** "Source" is what granted the effect: the action, the item, the aura, or the terrain. It
+  is not the entity that used it. Two Draughts of Insulation are the same source. A Draught of Insulation and a fire
+  resistance spell are different sources, so they stack.
+- **What a second grant does.** It refreshes the first's duration and keeps one modifier. It never holds two.
+- **Status effects already work this way.** Poison and Burning refresh up to a set maximum of stacks per type.
+
+**Work:**
+- **Make refreshing the only behaviour.** `RefreshFromSameSource` (Holy Ground's blessing) and `RefreshFromAnySource`
+  (an aura's tick, whose credited source changes) already refresh.
+  - Remove `Add`, or make it something no built-in uses.
+  - Key "same source" on the granting definition's Guid. Today it is keyed on `context.Source`, an `ActionSource` that
+    names an entity, so two different potions drunk by one player count as the same source.
+- **Decide the edge cases:**
+  - Two different items with the same effect: they stack, because the source differs.
+  - A stronger grant from the same source arriving while a weaker one runs: keep the stronger, or take the newer.
+  - Immunities and activation disables (`StatusEffectImmunityGrant`, `ActivationDisableGrant`) follow the same rule.
+- **Check the content.** Read every master record with a `StatModifierGrant` and confirm none relies on stacking with
+  itself.
+- **Item Details.** It shows no "Stackable" line, because nothing stacks with itself. If an exception is ever allowed,
+  it gets a line then.
+
 #### TOP PRIORITY: Dodge targeting for a player larger than 1x1
 
 Reported 2026-11-13. Every other shape is laid out around the caster's whole footprint (a Huge 3x3 player's area is
@@ -2995,6 +3026,28 @@ To settle when designing it:
 
 ### High Priority
 
+#### Vertically centred text centres on its body, not its descenders
+
+Text centred in a box sits too high: the Workshop's tab buttons (Auras, Map, Sprites, Controls) show more space below
+the words than above them. `LabelRenderer` centres a line against the font's `LineHeight`
+(`GetCenteredPosition`, `GetLeftAlignedPosition`, `GetRightAlignedPosition`: `(footprint height - LineHeight) / 2`),
+and `LineHeight` includes the descender (the tails of g, p, y). Most text has few descenders, so the visible body of
+the line sits above the box's middle.
+
+Fix:
+- Centre on the middle of the text's body instead: the span between the baseline and the cap height, or between the
+  baseline and the x-height. Choose by look, on a mix of capitals and lower case.
+- A descender may then reach below the centred body. It still stays inside the box for any box at least `LineHeight`
+  tall.
+- The font gives the metrics once per font, not per string, like `LineHeight` today. `FontStashTextMeasurer` already
+  keeps ink centres for glyphs.
+- One rule in `LabelRenderer` covers `Label`, buttons, tabs, menu rows and every other caller.
+- Check `TextWindow.DrawContent`, the one direct `DrawString`, against the same rule.
+- Single glyphs (icons, markers) already centre on their own ink (`SpriteOrGlyphRenderer`) and are not changed.
+
+Check by eye: tab buttons, dropdown and context-menu rows, Item Details lines and the hotbar's key labels. The space
+above and below the letters should look even.
+
 #### TOP PRIORITY: "Loot All" / "Take All" button on loot windows
 
 A button on the loot window (`SecondaryInventoryWindow`) that moves everything it holds -- every item stack and all
@@ -3101,20 +3154,6 @@ controller end to end (`UiInputControllerTests`, `ScrollbarInputTests`, `TextBox
 `Update(keyboard, mouse)`), which should keep passing unchanged as the proof nothing moved. The outcome may be
 "split these N, leave the rest"; the point is a controller small enough that a new input feature has one obvious
 home -- the engine IDE (epic child 5) will add its own.
-
-#### Item Details for toggle items: show what the toggle holds
-
-Item Details (`ItemDetailsWindow`) describes a toggle item (`ToggleItemActivator`, e.g. Toxic Idol)
-as if it were a self-targeted activation. Fix:
-- **Effects** are the effects held while the toggle is on (`ItemDefinition.Effects`); say so.
-- **Shape**: show the shape of the toggled effect -- an aura's diamond of its size -- instead of the
-  activation's "Self" shape preview.
-- **Activation** still shows, as it carries the turn-on costs and timing (`ToggleSpec.ActivationEffects`,
-  the windup) and the upkeep (`ToggleSpec.Periodic`).
-- **Aura size and power** are separate lines on the effect, not folded into its text: today's
-  "Grants a Poison aura (size 4, power 16)" (`EffectFormatting.FormatAuraSourceGrant`) and the
-  Summary's "(range 4)" lose them. The Item Details comparison already keys them separately
-  (`ItemComparisonStatExtraction`, `effect:aura:{id}:size` and `:power`).
 
 #### Item Details for the targeting model
 
@@ -3539,6 +3578,33 @@ as if a key were pressed, a ready shape for "Replay by recording input" and "In-
 
 ### Medium Priority
 
+#### Improved targeting preview
+
+Item Details shows reach in two ways. Activations get a grid (`TargetShapePreviewElement`, through
+`TargetShapePreviewGeometry`): plain cells with distance numbers along one row. Auras get a diamond shaded toward their
+glow colour (`ActivatableDetailsSections.BuildAuraSection`). Neither shows a path, a minimum range, or the aim against
+the area.
+
+Design one visualization that is better and consistent across range, area and auras:
+- **Strength in colour.** Use one colour scale for how strong an effect is at each cell: an aura's falloff, a damage
+  area, or anything else that varies with distance.
+- **Range and area apart.** Show where the user can aim, with the minimum range left out, separately from what the
+  effect covers once aimed.
+- **Indicators, possibly:**
+  - a caster marker (today a gold dot on the caster's cell);
+  - a target marker on the aimed cell;
+  - a footprint for a larger caster.
+- **A hover popup, possibly:** a small preview in Item Details that opens a larger one on hover, so the window keeps
+  to one screen (the one-screen rule in PLAN-item-details-complete.md).
+- **An animation, possibly:**
+  - the activation travelling along its path (Projectile or Lobbed, `PathTracer`), then its area appearing where it
+    lands;
+  - it never plays by itself: the player starts it, and it can be replayed.
+- **Consistency.** Use the same look wherever reach is drawn, and decide whether the map's targeting highlight and
+  telegraph share it ("Targeting indicator improvements").
+- **Overlap.** Coordinate with "Item Details for the targeting model", which covers the path, wall and range settings
+  the preview should show.
+
 #### Tooltip indicators
 
 A small marker on an element that has a tooltip, for menus and panels where nothing else says one is there (the
@@ -3676,12 +3742,13 @@ Items and actions are described in several places, each assembled its own way:
   `Summary`, the cost lines (`CostText`) and the blocker.
 - The inventory's hover tooltip (`ItemHoverSummary`): "Active", `Summary`, "Target: <shape>", a wand's
   charges, the cost lines.
-- Item Details (`ItemDetailsWindow`): sections for effects ("While on" for a toggle), "Cost", "Activation"
-  (`ItemComparisonStatExtraction`), description, value and tags. Actions have no equivalent.
-Bring them to one structure: the same order and wording for the same facts (targeting appears for items
-but not actions, charges only in the inventory), one place that builds the lines for both items and
-actions, and a decision on what belongs in a hover summary versus Item Details. Costs now appear on the
-hotbar badge and in text: decide whether the hover summary repeats them.
+- Item Details (`ItemDetailsWindow`): simple and advanced modes, values as used, and aura sections (IMPLEMENTATION-NOTES
+  "Item Details: simple and advanced modes, values as used"). Actions have no in-game equivalent; the Workshop's Action
+  Details shares its sections.
+Bring the two hover summaries in line with Item Details: the same order and wording for the same facts (their effect
+text already comes from `EffectFormatting` and `CostText`; the inventory's still shows "Target: <shape>" and charges,
+which Item Details now puts in the targeting preview and Resources), and a decision on what belongs in a hover summary
+versus Item Details. Costs now appear on the hotbar badge and in text: decide whether the hover summary repeats them.
 
 #### Telegraph whether an incoming attack is aimed at the ground or at you
 
@@ -4408,6 +4475,13 @@ Needs Options menu (above). Settings for the Floating Text feature (`IMPLEMENTAT
 on/off, per-kind toggles (damage taken, healing, regen, status stacks, Dodge/Immune, and later XP/Level
 Up/Skill Up), and possibly text size and duration. Persisted through Data storage (Global) once it
 covers more than window geometry -- specifically its "Layered config files" user layer.
+
+#### Default Item Details mode on the options menu
+
+Needs Options menu (above). A setting, **Default Item Mode**: Simple or Advanced (default Simple). It is the mode Item
+Details opens in at the start of a session (PLAN-item-details-complete.md, "The two modes"). The mode button beside
+Compare still switches it for the rest of the session without changing the setting. Comparison is always Simple,
+whatever the setting.
 
 #### Keybindings page on the options menu
 

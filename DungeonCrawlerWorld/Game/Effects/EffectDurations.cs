@@ -27,6 +27,10 @@ public static class EffectDurations
         }
 
         var scaled = value * context.DurationScaleMultiplier;
+        if (context.DurationScaleMultiplier != 1f)
+        {
+            context.AmountPreview?.Add(ValueContribution.Multiplier(ValueContributionKind.ScrollIntelligence, context.DurationScaleMultiplier));
+        }
 
         var outgoingTarget = polarity == StatModifierPolarity.Buff ? StatModifierTarget.OutgoingBuffDuration : StatModifierTarget.OutgoingDebuffDuration;
         var incomingTarget = polarity == StatModifierPolarity.Buff ? StatModifierTarget.IncomingBuffDuration : StatModifierTarget.IncomingDebuffDuration;

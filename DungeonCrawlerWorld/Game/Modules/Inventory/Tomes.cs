@@ -17,7 +17,7 @@ namespace Game.Modules.Inventory;
 /// effects -- and never registered in the ItemCatalog: its definition is the Override of the stack holding it, so it
 /// travels with the stack through every trade, loot and sale and is gone once the last unit is read. Its item Guid is
 /// derived from the spell's, so two tomes of one spell are one item and share a stack. Its text names the spell and
-/// carries the spell's description, and nothing else of it.
+/// carries the spell's description, on a line of its own, and nothing else of it.
 /// </remarks>
 public static class Tomes
 {
@@ -51,7 +51,7 @@ public static class Tomes
         GlyphColor,
         TomeTags,
         [new Effect([new SpellGrant(spell)])],
-        Description: $"A heavy tome that teaches its reader {spell.Name}, then crumbles to dust. {spell.Name}: {spell.Description}",
+        Description: $"A heavy tome that teaches its reader {spell.Name}, then crumbles to dust.\n{spell.Name}: {spell.Description}",
         Summary: $"Teaches {spell.Name}.",
         Activator: TomeActivator,
         GoldValue: GoldValue,

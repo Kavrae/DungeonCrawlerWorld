@@ -23,6 +23,15 @@ public sealed record StatusEffectImmunityGrant(StatusEffectType Type, ushort? Du
 
     public bool GrantsUntilRevoked => DurationFrames is null;
 
+    public void PreviewAmounts(in EffectContext context, EffectAmountPreview preview)
+    {
+        if (DurationFrames is { } durationFrames)
+        {
+            preview.Begin(EffectAmount.Duration, durationFrames);
+            preview.End(EffectDurations.Scale(in context, durationFrames, StatModifierPolarity.Buff) ?? 0);
+        }
+    }
+
     public EffectOutcome Apply(in EffectContext context)
     {
         var immunities = context.Services.StatusEffectImmunities;

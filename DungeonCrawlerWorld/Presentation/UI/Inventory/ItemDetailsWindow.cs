@@ -1,4 +1,3 @@
-using Engine.Tags;
 using Engine.Utilities;
 using Game.Modules.Actions;
 using Game.Modules.Inventory;
@@ -55,8 +54,9 @@ namespace Presentation.UI.Inventory;
 public sealed class ItemDetailsWindow(
     ElementServices services,
     ActionCatalog actionCatalog,
-    GameplayTagRegistry gameplayTags,
+    EffectTextNames names,
     ActionStateView actionStateView,
+    ActivationPreviews activationPreviews,
     IPlayerQuery playerQuery)
     : Window(services)
 {
@@ -65,25 +65,29 @@ public sealed class ItemDetailsWindow(
 
     private static readonly Color BodyTextColor = ActivatableDetailsSections.BodyTextColor;
 
-    /// <summary>Item Details Comparison's own per-line coloring -- Better doubles as the "this item has a stat at least one other compared item doesn't" exclusive marker too (see ResolveLineColor's own doc comment), so the same color means "advantage" either way.</summary>
-    private static readonly Color BetterColor = Color.LightGreen;
+    /// <summary>Item Details Comparison's own per-line coloring -- Better doubles as the "this item has a stat at least one other compared item doesn't" exclusive marker too (see ResolveLineStyle's own doc comment), so the same color means "advantage" either way.</summary>
+    private static readonly Color BetterColor = ActivatableDetailsSections.BuffColor;
 
-    /// <summary>LightCoral, not IndianRed -- confirmed live that IndianRed's (205,92,92) read too dark/muted against the near-black panel background, hard to distinguish from BodyTextColor at a glance. LightCoral pairs naturally with BetterColor's own "Light" prefix and is meaningfully brighter (perceived luminance ~162 vs. ~126).</summary>
-    private static readonly Color WorseColor = Color.LightCoral;
+    private static readonly Color WorseColor = ActivatableDetailsSections.DebuffColor;
 
-    private readonly ActivatableDetailsSections _sections = new(services.ElementPoolService, services.FontService, actionCatalog, gameplayTags);
+    private readonly ActivatableDetailsSections _sections = new(services.ElementPoolService, services.FontService, actionCatalog, names);
 
     private ItemDefinition? _definition;
     private float _contentWidth;
     private IReadOnlyList<ItemDefinition> _comparedAgainst = [];
     private readonly List<IReadOnlyList<ItemComparisonStat>> _otherItemsStats = [];
+
+    /// <summary>Each compared item's targeting as the player would use it, at the same index as _comparedAgainst; null for one with no activator.</summary>
+    private readonly List<TargetingSpec?> _otherItemsTargeting = [];
     private bool _childrenReady;
     private int _currentEntityId;
     private uint _currentStackInstanceId;
     private ActivationBlocker _displayedBlocker;
     private int _displayedCooldownSeconds;
+    private int? _displayedPreviewStamp;
     private IReadOnlyList<TooltipRow>? _displayedShopPricingRows;
     private bool _displayedComparing;
+    private DetailsMode _displayedMode;
 
     /// <summary>Height of the Compare and Stop Comparison buttons.</summary>
     private const float ButtonHeight = 20f;
@@ -100,6 +104,21 @@ public sealed class ItemDetailsWindow(
     /// <summary>Settable late-bound: whether a comparison is in progress -- the Stop Comparison button shows while it is.</summary>
     public Func<bool>? IsComparing { get; set; }
 
+    /// <summary>Settable late-bound: the mode the player chose (ItemDetailsWindowController's setting); unset, the window is advanced, as the Workshop's details are.</summary>
+    public Func<DetailsMode>? ChosenMode { get; set; }
+
+    /// <summary>Settable late-bound: the mode button's action -- no button when unset.</summary>
+    public Action? OnModeToggleRequested { get; set; }
+
+    /// <summary>True for a pane that is only ever shown while comparing (the comparison popup): always simple, as comparison is, and with no Compare or mode button.</summary>
+    public bool AlwaysSimple { get; set; }
+
+    /// <summary>The mode the window shows: simple while comparing, otherwise the chosen one.</summary>
+    public DetailsMode ShownMode => AlwaysSimple || IsComparingNow() ? DetailsMode.Simple : ChosenMode?.Invoke() ?? DetailsMode.Advanced;
+
+    /// <summary>The mode button's label: the mode it switches to.</summary>
+    public static string ModeButtonLabel(DetailsMode shownMode) => shownMode == DetailsMode.Simple ? "Advanced" : "Simple";
+
     /// <summary>Settable late-bound: called at the end of every Update -- ItemDetailsWindowController's placement and close-on-leave check.</summary>
     public Action? OnUpdated { get; set; }
 
@@ -113,7 +132,7 @@ public sealed class ItemDetailsWindow(
     /// row is built against -- see this class's own doc comment for why it can't just be read
     /// from this window's own ContentSize the way a Fixed-mode host safely could. comparedAgainst
     /// is empty for plain single-item viewing; Item Details Comparison passes every *other*
-    /// compared item's own definition here (see ResolveLineColor) so this item's own lines color
+    /// compared item's own definition here (see ResolveLineStyle) so this item's own lines color
     /// symmetrically against them. entityId/stackInstanceId are this exact stack's own identity --
     /// so the Compare button (if this instance has one) invokes OnCompareRequested with the
     /// item currently shown, and the blocker and shop pricing are read for it. shopPricing is the
@@ -134,7 +153,7 @@ public sealed class ItemDetailsWindow(
         }
     }
 
-    /// <summary>Rebuilds when the reason the player can't use the shown item appears, changes or clears -- arms destroyed, mana spent -- when its shop pricing changes, or when a comparison starts or stops, while the window stays open.</summary>
+    /// <summary>Rebuilds when the reason the player can't use the shown item appears, changes or clears -- arms destroyed, mana spent -- when its shop pricing changes, when a comparison starts or stops, or when the player's modifiers or ability scores change what its values are when used, while the window stays open.</summary>
     public override void Update(GameTime gameTime)
     {
         base.Update(gameTime);
@@ -143,7 +162,9 @@ public sealed class ItemDetailsWindow(
             (ComputeBlocker() != _displayedBlocker ||
              ComputeCooldownSeconds() != _displayedCooldownSeconds ||
              !ReferenceEquals(ComputeShopPricingRows(), _displayedShopPricingRows) ||
-             IsComparingNow() != _displayedComparing))
+             IsComparingNow() != _displayedComparing ||
+             ShownMode != _displayedMode ||
+             ComputePreviewStamp() != _displayedPreviewStamp))
         {
             Rebuild();
         }
@@ -152,6 +173,15 @@ public sealed class ItemDetailsWindow(
     }
 
     private bool IsComparingNow() => IsComparing?.Invoke() == true;
+
+    /// <summary>The player whose values the window shows, or null when there is none (the Workshop's details), which shows each item's own values.</summary>
+    private int? PreviewEntityId => playerQuery.PlayerEntityId >= 0 ? playerQuery.PlayerEntityId : null;
+
+    private int? ComputePreviewStamp() => PreviewEntityId is { } entityId ? activationPreviews.ChangeStampOf(entityId) : null;
+
+    /// <summary>definition as the player would use it now, or null with no player.</summary>
+    private ActivatablePreview? PreviewOf(ItemDefinition definition) =>
+        PreviewEntityId is { } entityId ? activationPreviews.Preview(entityId, definition) : null;
 
     private IReadOnlyList<TooltipRow>? ComputeShopPricingRows()
     {
@@ -194,10 +224,18 @@ public sealed class ItemDetailsWindow(
             return;
         }
 
+        _displayedPreviewStamp = ComputePreviewStamp();
+        _displayedMode = ShownMode;
+        var mode = _displayedMode;
+        var preview = PreviewOf(_definition);
+
         _otherItemsStats.Clear();
+        _otherItemsTargeting.Clear();
         foreach (var other in _comparedAgainst)
         {
-            _otherItemsStats.Add(ItemComparisonStatExtraction.Extract(other, actionCatalog, gameplayTags));
+            var otherPreview = PreviewOf(other);
+            _otherItemsStats.Add(ItemComparisonStatExtraction.Extract(other, actionCatalog, names, otherPreview));
+            _otherItemsTargeting.Add(otherPreview?.Targeting ?? other.Activator?.Targeting);
         }
 
         // _contentWidth is the target OUTER width this window should end up matching (see this
@@ -207,7 +245,7 @@ public sealed class ItemDetailsWindow(
         // the caller actually asked for.
         var width = _contentWidth - ContentPadding.X * 2;
 
-        _sections.BuildNameRow(this, _definition, width);
+        BuildNameRowWithButtons(width, ComputeButtons());
 
         if (ToggleText.IsLit(_definition))
         {
@@ -226,7 +264,7 @@ public sealed class ItemDetailsWindow(
             _sections.BuildFixedTextLine(this, width, $"Cooling down: {_displayedCooldownSeconds}s", ActivationBlockerText.ReasonColor);
         }
 
-        _sections.BuildEffectsSection(this, _definition, width, ResolveLineColor);
+        _sections.BuildEffectsSection(this, _definition, mode, width, ResolveLineStyle, preview, activationPreviews.PreviewAura);
 
         if (ToggleText.IsToggleItem(_definition))
         {
@@ -237,13 +275,23 @@ public sealed class ItemDetailsWindow(
 
         if (_definition.Activator is { } activator)
         {
-            _sections.BuildActivationSection(this, activator, width, ResolveLineColor, ComputeShapeHighlight);
+            _sections.BuildActivationSection(this, activator, mode, width, ResolveLineStyle, ComputeShapeHighlight, preview, isToggle: _definition.Toggle is not null);
+            _sections.BuildResourcesSection(this, activator, width, ResolveLineStyle);
+        }
+
+        if (_definition.Contents is { } contents)
+        {
+            _sections.BuildDivider(this, width, "Opens into", 0.125f);
+            foreach (var line in ItemFactsText.Contents(contents, names))
+            {
+                _sections.BuildFixedTextLine(this, width, line, BodyTextColor);
+            }
         }
 
         _sections.BuildDescriptionSection(this, _definition, width);
 
         _sections.BuildDivider(this, width);
-        _sections.BuildIconTextRow(this, "Currency-Gold", "G", Color.Gold, $"{_definition.GoldValue}G", width);
+        _sections.BuildIconTextRow(this, "Currency-Gold", "G", Color.Gold, CurrencyText(mode), width);
 
         _displayedShopPricingRows = ComputeShopPricingRows();
         if (_displayedShopPricingRows is { Count: > 0 } shopPricingRows)
@@ -251,15 +299,30 @@ public sealed class ItemDetailsWindow(
             BuildShopPricingSection(shopPricingRows, width);
         }
 
-        BuildTagsAndButtonsRow(width);
+        _sections.BuildDivider(this, width);
+        foreach (var restriction in ItemRestrictions.Of(_definition))
+        {
+            _sections.BuildFixedTextLine(this, width, ItemFactsText.NameOf(restriction), BodyTextColor).TooltipText = ItemFactsText.DescriptionOf(restriction);
+        }
+
+        _sections.BuildTagsSection(this, _definition.Tags, width, withDivider: false);
     }
 
-    /// <summary>A plain divider, then the tags on the left and, right-aligned, Stop Comparison while comparing, otherwise Compare (anchor pane, for a stack that can be compared).</summary>
-    /// <remarks>The row fits its children (WrapContent, no padding): the tags wrap within the width the buttons leave, and the last button ends at width, so the row is exactly as wide as every other.</remarks>
-    private void BuildTagsAndButtonsRow(float width)
+    /// <summary>
+    /// The value beside the gold icon: the sell price in simple mode, the buy and sell prices in advanced. With a shop
+    /// open they are its flat prices for this item (IItemShopPricingSource.ReferencePricesFor), otherwise the item's
+    /// GoldValue both ways.
+    /// </summary>
+    private string CurrencyText(DetailsMode mode)
     {
-        _sections.BuildDivider(this, width);
+        var stackInstanceId = _currentStackInstanceId == NoStackInstanceId ? (uint?)null : _currentStackInstanceId;
+        var (buy, sell) = ShopPricing?.ReferencePricesFor(new ItemHoverTarget(_currentEntityId, stackInstanceId, _definition!)) ?? (_definition!.GoldValue, _definition.GoldValue);
+        return mode == DetailsMode.Simple ? $"Sell price {sell}G" : $"Buy price {buy}G, sell price {sell}G";
+    }
 
+    /// <summary>The buttons the name row carries, left to right: Stop Comparison while comparing, otherwise Compare (anchor pane, for a stack that can be compared) and the mode button.</summary>
+    private List<(string Label, Action OnClicked)> ComputeButtons()
+    {
         _displayedComparing = IsComparingNow();
         var buttons = new List<(string Label, Action OnClicked)>(2);
         if (_displayedComparing && OnStopComparisonRequested is { } stopComparison)
@@ -267,23 +330,24 @@ public sealed class ItemDetailsWindow(
             buttons.Add(("Stop Comparison", stopComparison));
         }
 
-        if (!_displayedComparing && OnCompareRequested is { } compare && _currentStackInstanceId != NoStackInstanceId && _definition!.Activator is not null)
+        if (!_displayedComparing && !AlwaysSimple && OnCompareRequested is { } compare && _currentStackInstanceId != NoStackInstanceId && _definition!.Activator is not null)
         {
             var entityId = _currentEntityId;
             var stackInstanceId = _currentStackInstanceId;
             buttons.Add(("Compare", () => compare(entityId, stackInstanceId)));
         }
 
-        var row = ElementPoolService.CreateElement<Window>(this, new ElementOptions
+        if (!_displayedComparing && !AlwaysSimple && OnModeToggleRequested is { } toggleMode)
         {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { MaximumSize = new Vector2(width, ActivatableDetailsSections.MaximumTextRowHeight), DisplayMode = ElementDisplayMode.WrapContent },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-        });
-        row.ContentPadding = Vector2.Zero;
-        AddChild(row);
+            buttons.Add((ModeButtonLabel(_displayedMode), toggleMode));
+        }
 
+        return buttons;
+    }
+
+    /// <summary>The name row, with buttons right-aligned at its top, the name shortened to leave them room.</summary>
+    private void BuildNameRowWithButtons(float width, List<(string Label, Action OnClicked)> buttons)
+    {
         var buttonWidths = new float[buttons.Count];
         var buttonsWidth = 0f;
         for (var index = 0; index < buttons.Count; index++)
@@ -292,18 +356,9 @@ public sealed class ItemDetailsWindow(
             buttonsWidth += buttonWidths[index] + ButtonGap;
         }
 
-        var tags = ElementPoolService.CreateElement<TextWindow>(row, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = new Vector2(System.Math.Max(0f, width - buttonsWidth), ActivatableDetailsSections.MaximumTextRowHeight), DisplayMode = ElementDisplayMode.WrapContent },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-            Text = new TextOptions { Text = _sections.TagDisplayText(_definition!.Tags), TextColor = BodyTextColor },
-        });
-        tags.ContentFont = _sections.BodyFont;
-        row.AddChild(tags);
+        var row = _sections.BuildNameRow(this, _definition!, width, reservedRightWidth: buttonsWidth);
 
-        var buttonX = width;
+        var buttonX = width - ContentPadding.X * 2;
         for (var index = buttons.Count - 1; index >= 0; index--)
         {
             buttonX -= buttonWidths[index];
@@ -345,7 +400,7 @@ public sealed class ItemDetailsWindow(
     /// though eligibility only gates on matching Activator type, not Shape). When shapes do match,
     /// a tile highlights green if it's present in this item's own offsets but absent from at
     /// least one other compared item's own offsets -- the same "green if not every other compared
-    /// item has it" rule ResolveLineColor already applies per stat line, just at tile granularity
+    /// item has it" rule ResolveLineStyle already applies per stat line, just at tile granularity
     /// instead. No red case exists here -- a tile absent from this item's own grid was never drawn
     /// in the first place, so there is nothing to color.
     /// </summary>
@@ -356,15 +411,15 @@ public sealed class ItemDetailsWindow(
             return null;
         }
 
-        var otherOffsetSets = new List<HashSet<Point>>(_comparedAgainst.Count);
-        foreach (var other in _comparedAgainst)
+        var otherOffsetSets = new List<HashSet<Point>>(_otherItemsTargeting.Count);
+        foreach (var otherTargeting in _otherItemsTargeting)
         {
-            if (other.Activator is not { } otherActivator || otherActivator.Targeting.Shape != targeting.Shape)
+            if (otherTargeting is null || otherTargeting.Shape != targeting.Shape)
             {
                 return null;
             }
 
-            otherOffsetSets.Add(new HashSet<Point>(TargetShapePreviewGeometry.ComputeOffsets(otherActivator.Targeting)));
+            otherOffsetSets.Add(new HashSet<Point>(TargetShapePreviewGeometry.ComputeOffsets(otherTargeting)));
         }
 
         var highlighted = new HashSet<Point>();
@@ -392,13 +447,15 @@ public sealed class ItemDetailsWindow(
     /// every other compared item *does* have this Key and every one of them (plus this line
     /// itself) has a ComparableValue, magnitude-colored via ItemComparisonHighlighting -- ties
     /// (or a non-numeric Key shared by all, e.g. Shape, or two Scrolls casting different named
-    /// spells) stay Normal.
+    /// spells) stay Normal. A Better line by magnitude is followed by its difference from the best of the
+    /// others, in green (FF14's "156 (+53)"); nothing follows a worse, tied or exclusive line. With no
+    /// comparison, the line's own style (its advanced-mode change, if any).
     /// </summary>
-    private Color ResolveLineColor(ItemComparisonStat stat)
+    private LineStyle ResolveLineStyle(ItemComparisonStat stat)
     {
         if (_comparedAgainst.Count == 0)
         {
-            return BodyTextColor;
+            return LineStyle.Of(stat);
         }
 
         var otherValues = new List<double>();
@@ -423,22 +480,38 @@ public sealed class ItemDetailsWindow(
 
             if (!found)
             {
-                return BetterColor;
+                return new LineStyle(BetterColor);
             }
         }
 
         if (stat.ComparableValue is not { } ownValue)
         {
-            return BodyTextColor;
+            return new LineStyle(BodyTextColor);
         }
 
+        var bestOther = otherValues.Count == 0 ? (double?)null : stat.HigherIsBetter ? otherValues.Max() : otherValues.Min();
         otherValues.Add(ownValue);
         var highlight = ItemComparisonHighlighting.ComputeHighlight(ownValue, otherValues, stat.HigherIsBetter);
         return highlight switch
         {
-            ComparisonHighlight.Better => BetterColor,
-            ComparisonHighlight.Worse => WorseColor,
-            _ => BodyTextColor,
+            ComparisonHighlight.Better => new LineStyle(BetterColor, bestOther is { } best ? ComparisonDifferenceText(ownValue - best, stat.Unit) : null, BetterColor),
+            ComparisonHighlight.Worse => new LineStyle(WorseColor),
+            _ => new LineStyle(BodyTextColor),
         };
+    }
+
+    /// <summary>A difference between two compared values, in their unit, in parentheses: "(+53)", "(+25%)", "(-3s)".</summary>
+    public static string ComparisonDifferenceText(double difference, StatUnit unit)
+    {
+        var sign = difference >= 0 ? "+" : "-";
+        var magnitude = System.Math.Abs(difference);
+        var text = unit switch
+        {
+            StatUnit.Percent => $"{magnitude:0.#}%",
+            StatUnit.Frames => TimingText.Seconds((int)System.Math.Round(magnitude)),
+            _ => $"{magnitude:0.#}",
+        };
+
+        return $"({sign}{text})";
     }
 }

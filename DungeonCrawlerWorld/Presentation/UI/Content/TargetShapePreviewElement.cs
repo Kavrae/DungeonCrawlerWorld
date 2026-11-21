@@ -19,10 +19,9 @@ namespace Presentation.UI.Content;
 /// Fixed-vs-WrapContent sizing pitfall the details window itself hit earlier.
 ///
 /// Cells to the right of the caster on its own row (offset.Y == 0, offset.X > 0) also get a
-/// distance number -- offset.X, the same "area size 3 means 3 tiles out" reading
-/// RangeIndicatorElement's own ruler gives the Range stat -- so a Circle's AreaSize isn't just an
-/// abstract stat either. The caster's own cell and the mirrored left side are left blank -- the
-/// left side would just repeat the same distance values already visible on the right.
+/// number, counting the caster's own cell as 1 -- so the first numbered cell is 2. The caster's
+/// own cell and the mirrored left side are left blank
+/// -- the left side would just repeat the same numbers already visible on the right.
 /// </summary>
 public sealed class TargetShapePreviewElement(ElementServices services)
     : Element(services)
@@ -45,16 +44,19 @@ public sealed class TargetShapePreviewElement(ElementServices services)
     private int _minY;
     private float _cellSize;
     private IReadOnlySet<Point>? _highlightedOffsets;
+    private Func<Point, Color>? _cellFill;
     private FontStashTextMeasurer _numberFontMeasurer = null!;
 
     /// <summary>highlightedOffsets is null outside comparison (every cell plain) -- see ItemDetailsWindow's own shape-match-gated diff computation for when/how it's populated.</summary>
-    public void Configure(IReadOnlyList<Point> offsets, int minX, int minY, float cellSize, IReadOnlySet<Point>? highlightedOffsets = null)
+    /// <param name="cellFill">Each cell's own fill (an aura's reach, shaded by its strength there); null fills every cell alike. A highlight wins over it.</param>
+    public void Configure(IReadOnlyList<Point> offsets, int minX, int minY, float cellSize, IReadOnlySet<Point>? highlightedOffsets = null, Func<Point, Color>? cellFill = null)
     {
         _offsets = offsets;
         _minX = minX;
         _minY = minY;
         _cellSize = cellSize;
         _highlightedOffsets = highlightedOffsets;
+        _cellFill = cellFill;
         _numberFontMeasurer = FontService.GetTextMeasurer(FontService.GetFont(System.Math.Max(GameFontChrome.TargetShapePreviewMinNumberFontSize, (int)(cellSize * GameFontChrome.TargetShapePreviewNumberFontFraction))));
     }
 
@@ -75,13 +77,13 @@ public sealed class TargetShapePreviewElement(ElementServices services)
         var cellOrigin = new Vector2((offset.X - _minX) * _cellSize, (offset.Y - _minY) * _cellSize);
         var outerSize = _cellSize - CellGap;
 
-        var fillColor = _highlightedOffsets?.Contains(offset) == true ? HighlightedCellFillColor : CellFillColor;
+        var fillColor = _highlightedOffsets?.Contains(offset) == true ? HighlightedCellFillColor : _cellFill?.Invoke(offset) ?? CellFillColor;
         BorderedBoxRenderer.Draw(spriteBatch, cellOrigin, outerSize, CellBorderThickness, CellBorderColor, fillColor);
 
         DrawDistanceNumber(spriteBatch, offset, cellOrigin, outerSize);
     }
 
-    /// <summary>Only the caster's own row (offset.Y == 0) and only to the right of the caster (offset.X > 0) -- the left side would show the same distance values again, redundant once the right side already reads them.</summary>
+    /// <summary>Only the caster's own row (offset.Y == 0) and only to the right of the caster (offset.X > 0) -- the left side would show the same distance values again, redundant once the right side already reads them. Numbered from 2: the caster's own cell counts as the first, unnumbered.</summary>
     private void DrawDistanceNumber(SpriteEffectBatch spriteBatch, Point offset, Vector2 cellOrigin, float outerSize)
     {
         if (offset.Y != 0 || offset.X <= 0)
@@ -89,7 +91,7 @@ public sealed class TargetShapePreviewElement(ElementServices services)
             return;
         }
 
-        var text = offset.X.ToString();
+        var text = (offset.X + 1).ToString();
         LabelRenderer.DrawCentered(spriteBatch, _numberFontMeasurer, text, cellOrigin, new Vector2(outerSize, outerSize), DistanceNumberColor);
     }
 

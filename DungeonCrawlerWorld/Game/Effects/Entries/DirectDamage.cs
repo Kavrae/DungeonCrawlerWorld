@@ -47,6 +47,35 @@ public sealed record DirectDamage(
 
     public IReadOnlyList<(StatModifierTarget Outgoing, StatModifierTarget Incoming)> AmountModifiers => Modifiers;
 
+    /// <summary>The lowest and highest roll, and the percentage of the target's maximum health, as they would land before the target's own modifiers and a critical hit.</summary>
+    public void PreviewAmounts(in EffectContext context, EffectAmountPreview preview)
+    {
+        preview.Begin(EffectAmount.DamageMinimum, MinFlatDamage, context.Magnitude);
+        preview.End(ScaleBySource(in context, (ushort)MinFlatDamage * context.Magnitude));
+
+        preview.Begin(EffectAmount.DamageMaximum, MaxFlatDamage, context.Magnitude);
+        preview.End(ScaleBySource(in context, (ushort)MaxFlatDamage * context.Magnitude));
+
+        if (PercentageDamage > 0)
+        {
+            preview.Begin(EffectAmount.DamagePercentOfMaximumHealth, PercentageDamage);
+            var scaledPercentage = EffectModifiers.ScaleOutgoing(in context, PercentageDamage, StatModifierTarget.OutgoingDamage);
+            preview.EndFraction(scaledPercentage, EffectModifiers.ScaleOutgoing(context with { AmountPreview = null }, 0f, StatModifierTarget.OutgoingDamage));
+        }
+    }
+
+    /// <summary>baseDamage with the source's ability-score bonus added and its OutgoingDamage modifiers applied; unchanged with no source entity.</summary>
+    private static float ScaleBySource(in EffectContext context, float baseDamage)
+    {
+        if (context.SourceEntityId is not { } sourceEntityId)
+        {
+            return baseDamage;
+        }
+
+        var damageWithAbilityScoreScaling = baseDamage + AbilityScoreTagBonus.Compute(sourceEntityId, context.ActivatorTags, context.Services.AbilityScores, context.AmountPreview?.Contributions);
+        return EffectModifiers.ScaleOutgoing(in context, damageWithAbilityScoreScaling, StatModifierTarget.OutgoingDamage);
+    }
+
     public EffectOutcome Apply(in EffectContext context)
     {
         var flatRoll = MinFlatDamage == MaxFlatDamage ? MinFlatDamage : context.Services.MathUtility.Next(MinFlatDamage, MaxFlatDamage + 1);
@@ -70,8 +99,7 @@ public sealed record DirectDamage(
         if (context.SourceEntityId is { } sourceEntityId)
         {
             var statModifiers = context.Services.StatModifiers;
-            var damageWithAbilityScoreScaling = baseDamage + AbilityScoreTagBonus.Compute(sourceEntityId, context.ActivatorTags, context.Services.AbilityScores);
-            damageWithTagModifiers = EffectModifiers.ScaleOutgoing(in context, damageWithAbilityScoreScaling, StatModifierTarget.OutgoingDamage);
+            damageWithTagModifiers = ScaleBySource(in context, baseDamage);
 
             var critChance = StatModifierMath.GetEffectiveValue(statModifiers, sourceEntityId, StatModifierTarget.CritChance, CritMath.BaseCritChance);
             isCritical = context.Services.MathUtility.NextDouble() < critChance;

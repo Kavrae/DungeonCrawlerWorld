@@ -1,7 +1,10 @@
 using Engine.Tags;
 using Microsoft.Xna.Framework;
 using Game.Bootstrap;
+using Game.Modules;
 using Game.Modules.Actions;
+using Game.Modules.Inventory;
+using Game.Views;
 using Presentation.UI;
 using Presentation.UI.Content;
 using Presentation.UI.Details;
@@ -21,6 +24,8 @@ public sealed class DetailsWindowsTests
 
     private static readonly Lazy<GameBuildPassResult> Build = new(() => BuiltInTestModules.Build(GameBuildPass.CreatePlaceholderMap()));
 
+    private static EffectTextNames NamesOf(GameModuleContext context) => new(context.GameplayTags, context.Terrain, context.StatusEffectDisplays);
+
     private static ElementPoolService CreateElementPool()
     {
         var context = Build.Value.Context;
@@ -31,9 +36,9 @@ public sealed class DetailsWindowsTests
 
         elementPool.RegisterFactory(() => new TextDivider(TestElementServices.For(elementPool, fontService)));
         elementPool.RegisterFactory(() => new TargetShapePreviewElement(TestElementServices.For(elementPool, fontService)));
-        elementPool.RegisterFactory(() => new ItemDetailsWindow(TestElementServices.For(elementPool, fontService), context.Actions, context.GameplayTags, actionStateView, TestPlayerQuery.NoPlayer));
-        elementPool.RegisterFactory(() => new ActionDetailsWindow(TestElementServices.For(elementPool, fontService), context.Actions, context.GameplayTags));
-        elementPool.RegisterFactory(() => new AuraDetailsWindow(TestElementServices.For(elementPool, fontService), context.Actions, context.GameplayTags));
+        elementPool.RegisterFactory(() => new ItemDetailsWindow(TestElementServices.For(elementPool, fontService), context.Actions, NamesOf(context), actionStateView, new ActivationPreviews(context.EffectServices, context.SimulationClock), TestPlayerQuery.NoPlayer));
+        elementPool.RegisterFactory(() => new ActionDetailsWindow(TestElementServices.For(elementPool, fontService), context.Actions, NamesOf(context)));
+        elementPool.RegisterFactory(() => new AuraDetailsWindow(TestElementServices.For(elementPool, fontService), context.Actions, NamesOf(context)));
         return elementPool;
     }
 
@@ -73,17 +78,17 @@ public sealed class DetailsWindowsTests
     }
 
     /// <summary>Asserts the shared sections appear in texts in order -- name, effect lines, activation lines, description, tags -- and returns where the description (or, without one, the last activation line) sits.</summary>
-    private static int AssertSharedSectionsInOrder(List<string> texts, ActivatableDefinition definition, IActionActivator? activator)
+    private static int AssertSharedSectionsInOrder(List<string> texts, ActivatableDefinition definition, IActionActivator? activator, DetailsMode detailsMode)
     {
         var context = Build.Value.Context;
         var expected = new List<string> { definition.Name };
 
-        var effectLines = ItemComparisonStatExtraction.ExtractEffectStats(definition, context.GameplayTags).Select(stat => stat.DisplayText).ToList();
+        var effectLines = ItemComparisonStatExtraction.ExtractEffectStats(definition, NamesOf(context), detailsMode).Select(stat => stat.DisplayText).ToList();
         expected.AddRange(effectLines.Count > 0 ? effectLines : ["None"]);
 
         if (activator is not null)
         {
-            expected.AddRange(ItemComparisonStatExtraction.ExtractActivatorStats(activator, context.Actions).Select(stat => stat.DisplayText));
+            expected.AddRange(ItemComparisonStatExtraction.ExtractActivatorStats(activator, context.Actions, preview: null, detailsMode, showsTargeting: definition.Toggle is null).Select(stat => stat.DisplayText));
         }
 
         if (!string.IsNullOrWhiteSpace(definition.Description))
@@ -106,21 +111,76 @@ public sealed class DetailsWindowsTests
     }
 
     [TestMethod]
-    public void ItemDetails_ShowsEveryBuiltInItem_SharedSectionsInOrder_ThenGoldThenTags()
+    [DataRow(DetailsMode.Simple, "Sell price {0}G")]
+    [DataRow(DetailsMode.Advanced, "Buy price {0}G, sell price {0}G")]
+    public void ItemDetails_ShowsEveryBuiltInItem_SharedSectionsInOrder_ThenGoldThenTags(DetailsMode mode, string goldFormat)
     {
         var elementPool = CreateElementPool();
         foreach (var item in Build.Value.Context.Items.Definitions)
         {
             var window = elementPool.CreateElement<ItemDetailsWindow>(null, DetailsWindowOptions());
+            window.ChosenMode = () => mode;
             window.Configure(-1, ItemDetailsWindow.NoStackInstanceId, item, ContentWidth);
             window.Initialize();
 
             var texts = TextsInOrder(window);
-            var lastSharedLine = AssertSharedSectionsInOrder(texts, item, item.Activator);
-            var goldLine = texts.IndexOf($"{item.GoldValue}G", lastSharedLine + 1);
+            var lastSharedLine = AssertSharedSectionsInOrder(texts, item, item.Activator, mode);
+            var goldLine = texts.IndexOf(string.Format(goldFormat, item.GoldValue), lastSharedLine + 1);
             Assert.IsGreaterThan(lastSharedLine, goldLine, $"{item.Name}: the gold value is missing or comes before the shared sections.");
 
             window.Close();
+        }
+    }
+
+    [TestMethod]
+    public void ItemDetails_SimpleMode_LeavesOutShapeRangeAndAreaLines_AndShowsTimingAsOneWordUnlessImmediate()
+    {
+        var elementPool = CreateElementPool();
+        foreach (var item in Build.Value.Context.Items.Definitions.Where(static item => item.Activator is not null))
+        {
+            var window = elementPool.CreateElement<ItemDetailsWindow>(null, DetailsWindowOptions());
+            window.ChosenMode = () => DetailsMode.Simple;
+            window.Configure(-1, ItemDetailsWindow.NoStackInstanceId, item, ContentWidth);
+            window.Initialize();
+
+            var texts = TextsInOrder(window);
+            Assert.IsFalse(texts.Any(static text => text.StartsWith("Shape:") || text.StartsWith("Range:") || text.StartsWith("Area Size:") || text.StartsWith("Timing:")), $"{item.Name}: [{string.Join(" | ", texts)}]");
+            var timingWord = TimingText.Word(item.Activator!.Timing.Category);
+            Assert.AreEqual(item.Activator.Timing.Category != ActionTimingCategory.Immediate, texts.Contains(timingWord), $"{item.Name}: \"{timingWord}\".");
+
+            window.Close();
+        }
+    }
+
+    [TestMethod]
+    public void ItemDetails_AdvancedMode_HasTimingWithItsTooltip()
+    {
+        var elementPool = CreateElementPool();
+        var wand = Build.Value.Context.Items.Get(BuiltInItemIds.WandOfFireball);
+        var window = elementPool.CreateElement<ItemDetailsWindow>(null, DetailsWindowOptions());
+        window.ChosenMode = () => DetailsMode.Advanced;
+        window.Configure(-1, ItemDetailsWindow.NoStackInstanceId, wand, ContentWidth);
+        window.Initialize();
+
+        var timing = DescendantTextWindows(window).Single(static line => line.OriginalText.StartsWith("Timing:"));
+        Assert.AreEqual($"Timing: {TimingText.Word(wand.Activator!.Timing.Category)}", timing.OriginalText);
+        Assert.AreEqual(TimingText.Tooltip(wand.Activator.Timing.Category, wand.Activator.Timing.ActionLockFrames), timing.TooltipText);
+        Assert.IsTrue(TextsInOrder(window).Any(static text => text.StartsWith("Shape:")));
+    }
+
+    private static IEnumerable<TextWindow> DescendantTextWindows(Element element)
+    {
+        foreach (var child in element.ChildElements)
+        {
+            if (child is TextWindow textWindow)
+            {
+                yield return textWindow;
+            }
+
+            foreach (var descendant in DescendantTextWindows(child))
+            {
+                yield return descendant;
+            }
         }
     }
 
@@ -135,7 +195,7 @@ public sealed class DetailsWindowsTests
             window.Initialize();
 
             var texts = TextsInOrder(window);
-            AssertSharedSectionsInOrder(texts, action, action.Activator);
+            AssertSharedSectionsInOrder(texts, action, action.Activator, DetailsMode.Advanced);
             Assert.IsFalse(texts.Any(text => text.EndsWith('G') && int.TryParse(text[..^1], out _)), $"{action.Name}: an action shows a gold value.");
 
             window.Close();
@@ -157,8 +217,8 @@ public sealed class DetailsWindowsTests
             window.Initialize();
 
             var texts = TextsInOrder(window);
-            var effectLines = ItemComparisonStatExtraction.ExtractEffectStats(aura.Effects, context.GameplayTags).Select(stat => stat.DisplayText).ToList();
-            List<string> expected = [aura.Name, AuraDetailsWindow.MagnitudeText(aura.Magnitude), AuraDetailsWindow.FalloffText(aura.Falloff), .. effectLines.Count > 0 ? effectLines : ["None"]];
+            var effectLines = ItemComparisonStatExtraction.ExtractEffectStats(aura.Effects, NamesOf(context), DetailsMode.Advanced).Select(stat => stat.DisplayText).ToList();
+            List<string> expected = [aura.Name, .. AuraDetailsWindow.StrengthLines(aura), .. effectLines.Count > 0 ? effectLines : ["None"]];
 
             var searchFrom = 0;
             foreach (var line in expected)

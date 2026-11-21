@@ -44,6 +44,28 @@ public sealed record DirectHeal(
 
     public IReadOnlyList<(StatModifierTarget Outgoing, StatModifierTarget Incoming)> AmountModifiers => Modifiers;
 
+    /// <summary>The flat heal, with the source's ability-score bonus and healing modifiers, and the percentage of the target's maximum health, with those modifiers' multipliers.</summary>
+    public void PreviewAmounts(in EffectContext context, EffectAmountPreview preview)
+    {
+        var statModifiers = context.Services.StatModifiers;
+
+        preview.Begin(EffectAmount.HealFlat, FlatAmount, context.Magnitude);
+        var flat = FlatAmount * context.Magnitude;
+        if (context.SourceEntityId is { } sourceEntityId)
+        {
+            flat += AbilityScoreTagBonus.Compute(sourceEntityId, context.ActivatorTags, context.Services.AbilityScores, preview.Contributions);
+        }
+
+        preview.End(HealthHeal.ScaleByHealingModifiers(statModifiers, context.SourceEntityId, context.TargetEntityId, context.ActivatorTags, flat, preview.Contributions));
+
+        if (PercentOfMaxHealth > 0)
+        {
+            preview.Begin(EffectAmount.HealPercentOfMaximumHealth, PercentOfMaxHealth);
+            var scaledPercentage = HealthHeal.ScaleByHealingModifiers(statModifiers, context.SourceEntityId, context.TargetEntityId, context.ActivatorTags, PercentOfMaxHealth, preview.Contributions);
+            preview.EndFraction(scaledPercentage, HealthHeal.ScaleByHealingModifiers(statModifiers, context.SourceEntityId, context.TargetEntityId, context.ActivatorTags, 0f));
+        }
+    }
+
     public EffectOutcome Apply(in EffectContext context)
     {
         var percentageBaseHeal = 0f;

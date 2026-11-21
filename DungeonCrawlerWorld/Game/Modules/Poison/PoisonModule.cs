@@ -48,7 +48,8 @@ public sealed class PoisonModule : IGameModule
         context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<PoisonTimerComponent>(StatusEffectType.Poison, PoisonEffects.Glyph, PoisonEffects.MaxStacks,
             timers,
             static (poison, now) => TimedStatusEffectStacks.RemainingFrames(poison, now, PoisonEffects.TickIntervalFrames),
-            static poison => poison.Source));
+            static poison => poison.Source,
+            framesPerDurationTick: PoisonEffects.TickIntervalFrames));
     }
 
     public void RegisterComponents(ComponentRegistration registration)

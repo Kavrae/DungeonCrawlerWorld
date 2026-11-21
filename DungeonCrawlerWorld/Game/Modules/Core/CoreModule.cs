@@ -24,12 +24,12 @@ public sealed class CoreModule : IGameModule
     {
         foreach (var (root, description, extensible) in GameTags.Roots)
         {
-            tags.DeclareRoot(root, description, extensible);
+            tags.DeclareRoot(root, description, extensible, pluralDisplayName: GameTags.PluralDisplayNames.GetValueOrDefault(root));
         }
 
         foreach (var (tag, description) in GameTags.Tags)
         {
-            tags.Declare(tag, description);
+            tags.Declare(tag, description, pluralDisplayName: GameTags.PluralDisplayNames.GetValueOrDefault(tag));
         }
 
         tags.DeclareDomain(GameTagDomains.Activation, "What a use of something is, and what a condition on one names.", extensible: true, [.. GameTags.Roots.Select(root => root.Root)]);

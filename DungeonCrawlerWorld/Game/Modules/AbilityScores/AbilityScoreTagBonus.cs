@@ -1,6 +1,7 @@
 using Engine.ECS.Components.Stores;
 using Engine.Tags;
 using Game.Modules.AbilityScores.Components;
+using Game.Modules.StatModifiers;
 using Game.Tags;
 
 namespace Game.Modules.AbilityScores;
@@ -29,7 +30,8 @@ public static class AbilityScoreTagBonus
     /// <summary>The tags the bonus reads, one per ability score: each an Ability score tag (GameTagDomains.AbilityScore), which the build checks.</summary>
     public static IEnumerable<GameplayTag> Tags => AbilityScoreTagScores.Select(entry => entry.Tag);
 
-    public static ushort Compute(int sourceEntityId, GameplayTagSet tags, PackedComponentPool<AbilityScoresComponent> abilityScores)
+    /// <param name="contributions">Receives each score that counted, when given -- how a preview shows what changed a value.</param>
+    public static ushort Compute(int sourceEntityId, GameplayTagSet tags, PackedComponentPool<AbilityScoresComponent> abilityScores, List<ValueContribution>? contributions = null)
     {
         ushort bonus = 0;
         foreach (var tag in tags)
@@ -38,6 +40,7 @@ public static class AbilityScoreTagBonus
                 AbilityScoreQueries.TryGetComponent(abilityScores, sourceEntityId, scoreType, out var score))
             {
                 bonus += score.Total;
+                contributions?.Add(new ValueContribution(ValueContributionKind.AbilityScore, StatModifierOperation.Additive, score.Total, AbilityScore: scoreType));
             }
         }
 

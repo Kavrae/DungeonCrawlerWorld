@@ -37,6 +37,12 @@ public sealed record ManaDrain(ushort Amount) : IResourceDrain
         return EffectRefusal.None;
     }
 
+    public void PreviewAmounts(in EffectContext context, EffectAmountPreview preview)
+    {
+        preview.Begin(EffectAmount.ResourceDrained, Amount, context.Magnitude);
+        preview.End(AmountFor(in context));
+    }
+
     public EffectOutcome Apply(in EffectContext context)
     {
         var amount = AmountFor(in context);

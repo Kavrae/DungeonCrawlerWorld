@@ -27,6 +27,15 @@ public sealed record ActivationDisableGrant(GameplayTagQuery Query, ushort Durat
 
     public IEnumerable<GameplayTag> ReferencedTags => [.. Query.RequireAll, .. Query.RequireAny, .. Query.Exclude];
 
+    public void PreviewAmounts(in EffectContext context, EffectAmountPreview preview)
+    {
+        if (!FixedDuration)
+        {
+            preview.Begin(EffectAmount.Duration, DurationFrames);
+            preview.End(EffectDurations.Scale(in context, DurationFrames, StatModifierPolarity.Debuff) ?? 0);
+        }
+    }
+
     public EffectOutcome Apply(in EffectContext context)
     {
         var durationFrames = FixedDuration

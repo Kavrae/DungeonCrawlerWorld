@@ -7,6 +7,7 @@ using Builders.Items;
 using Builders.MapAreas;
 using Game.Bootstrap;
 using Game.World;
+using Presentation.UI;
 using Presentation.UI.Content;
 using Presentation.UI.Details;
 using Presentation.UI.Inventory;
@@ -61,9 +62,9 @@ public static class BuilderTabs
         var services = uiEngine.ElementServices;
         var catalogs = session.Catalogs;
 
-        Register(elementPool, replaces, () => new ItemDetailsWindow(services, catalogs.ActionCatalog, catalogs.GameplayTags, session.Views.ActionStateView, session.World));
-        Register(elementPool, replaces, () => new ActionDetailsWindow(services, catalogs.ActionCatalog, catalogs.GameplayTags));
-        Register(elementPool, replaces, () => new AuraDetailsWindow(services, catalogs.ActionCatalog, catalogs.GameplayTags));
+        Register(elementPool, replaces, () => new ItemDetailsWindow(services, catalogs.ActionCatalog, EffectTextNames.Of(catalogs), session.Views.ActionStateView, session.Views.ActivationPreviews, session.World));
+        Register(elementPool, replaces, () => new ActionDetailsWindow(services, catalogs.ActionCatalog, EffectTextNames.Of(catalogs, session.Views.ActionSourceNaming), session.Views.ActivationPreviews));
+        Register(elementPool, replaces, () => new AuraDetailsWindow(services, catalogs.ActionCatalog, EffectTextNames.Of(catalogs)));
         Register(elementPool, replaces, () => new MapPreviewWindow(services, previews, catalogs));
         Register(elementPool, replaces, () => new MapDetailsWindow(services, catalogs));
         if (replaces)

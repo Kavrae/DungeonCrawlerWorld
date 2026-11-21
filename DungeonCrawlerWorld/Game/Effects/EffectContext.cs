@@ -62,6 +62,9 @@ public readonly record struct EffectContext(
     /// <remarks>Set only by Toggles. Unique among one entity's active toggles, and never 0.</remarks>
     public uint? HeldGrantKey { get; init; }
 
+    /// <summary>Where the amounts being previewed record their steps (IEffectEntry.PreviewAmounts); null whenever effects are applied.</summary>
+    public EffectAmountPreview? AmountPreview { get; init; }
+
     /// <summary>A context for effects sourceEntityId causes by using definition, attributed to it as it is now and to the action or item it used.</summary>
     public static EffectContext FromEntity(EffectServices services, int sourceEntityId, int targetEntityId, ActivatableDefinition definition, long now, float durationScaleMultiplier = 1.0f) =>
         new(

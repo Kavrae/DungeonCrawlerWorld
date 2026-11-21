@@ -22,6 +22,8 @@ public sealed class BurningDisplay(
 
     public int MaxStacks => BurningEffects.MaxStacks;
 
+    public ushort? FramesPerDurationTick => null;
+
     public int? GetRemainingDurationFrames(int entityId, long now)
     {
         int? longestRemainingFrames = entityTimers.TryGetReadonly(entityId, out var entityTimer)

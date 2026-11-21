@@ -11,6 +11,14 @@ public sealed record DirectManaRestore(float Fraction) : IEffectEntry
 
     public IReadOnlyList<(StatModifierTarget Outgoing, StatModifierTarget Incoming)> AmountModifiers => Modifiers;
 
+    /// <summary>The fraction of the target's maximum mana restored, with the multipliers of the restore modifiers.</summary>
+    public void PreviewAmounts(in EffectContext context, EffectAmountPreview preview)
+    {
+        preview.Begin(EffectAmount.ManaRestoredFraction, Fraction, context.Magnitude);
+        var scaledFraction = EffectModifiers.Scale(in context, Fraction * context.Magnitude, StatModifierTarget.OutgoingManaRestore, StatModifierTarget.IncomingManaRestore);
+        preview.EndFraction(scaledFraction, EffectModifiers.Scale(context with { AmountPreview = null }, 0f, StatModifierTarget.OutgoingManaRestore, StatModifierTarget.IncomingManaRestore));
+    }
+
     public EffectOutcome Apply(in EffectContext context)
     {
         if (Fraction <= 0 || !ManaQueries.TryGetTotals(context.Services.Mana, context.Services.StatModifiers, context.TargetEntityId, out var currentMana, out var effectiveMaximumMana))

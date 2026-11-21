@@ -60,6 +60,21 @@ public sealed record AuraSourceGrant(
 
     public bool GrantsUntilRevoked => DurationFrames is null;
 
+    public void PreviewAmounts(in EffectContext context, EffectAmountPreview preview)
+    {
+        preview.Begin(EffectAmount.AuraPower, Power);
+        preview.End(EffectModifiers.ScaleToUShort(in context, Power, StatModifierTarget.OutgoingAuraPower, StatModifierTarget.IncomingAuraPower));
+
+        preview.Begin(EffectAmount.AuraSize, Size);
+        preview.End(EffectModifiers.ScaleToByte(in context, Size, StatModifierTarget.OutgoingAuraSize, StatModifierTarget.IncomingAuraSize));
+
+        if (DurationFrames is { } durationFrames)
+        {
+            preview.Begin(EffectAmount.Duration, durationFrames);
+            preview.End(EffectDurations.Scale(in context, durationFrames, StatModifierPolarity.Buff) ?? 0);
+        }
+    }
+
     public EffectOutcome Apply(in EffectContext context)
     {
         var power = EffectModifiers.ScaleToUShort(in context, Power, StatModifierTarget.OutgoingAuraPower, StatModifierTarget.IncomingAuraPower);

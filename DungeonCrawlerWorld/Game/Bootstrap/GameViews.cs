@@ -35,6 +35,7 @@ public sealed class GameViews
         NpcDecisions = new NpcDecisionView(componentManager, context.NpcDecisions, context.PlayerQuery, context.SimulationClock);
         ComponentInspection = new ComponentInspectionView(componentManager, context.Definitions, Game.ComponentProperties.GameComponentPropertyMeanings.For(context));
         ContentSpriteNames = new ContentSpriteNames(context.Definitions, context.Terrain, context.Actions, context.Items, context.Lootboxes);
+        ActivationPreviews = new ActivationPreviews(context.EffectServices, context.SimulationClock);
     }
 
     public IMapViewQuery MapView { get; }
@@ -65,6 +66,9 @@ public sealed class GameViews
     public AbilityScoreView AbilityScoreView { get; }
 
     public ActionStateView ActionStateView { get; }
+
+    /// <summary>What an action's, item's or aura's amounts would be when used, each with the steps from its base.</summary>
+    public ActivationPreviews ActivationPreviews { get; }
 
     /// <summary>Targeting selections, previews and windup landings, all through the resolution activations use.</summary>
     public TargetingView TargetingView { get; }

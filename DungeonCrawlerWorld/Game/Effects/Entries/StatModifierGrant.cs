@@ -57,6 +57,16 @@ public sealed record StatModifierGrant(
 
     public bool GrantsUntilRevoked => DurationFrames is null;
 
+    /// <summary>The duration, unless it is fixed: the modifier's own magnitude is never scaled.</summary>
+    public void PreviewAmounts(in EffectContext context, EffectAmountPreview preview)
+    {
+        if (DurationFrames is { } durationFrames && !FixedDuration)
+        {
+            preview.Begin(EffectAmount.Duration, durationFrames);
+            preview.End(EffectDurations.Scale(in context, durationFrames, Polarity) ?? 0);
+        }
+    }
+
     public EffectOutcome Apply(in EffectContext context)
     {
         var durationFrames = FixedDuration ? DurationFrames : EffectDurations.Scale(in context, DurationFrames, Polarity);

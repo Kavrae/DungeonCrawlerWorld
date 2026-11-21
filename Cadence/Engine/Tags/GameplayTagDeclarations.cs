@@ -24,8 +24,8 @@ public sealed class GameplayTagDeclarations
 
     /// <summary>Declares root as a top-level tag this module owns.</summary>
     /// <param name="extensible">Whether other modules may declare tags under it.</param>
-    /// <exception cref="InvalidOperationException">root isn't a single segment; this module has no Id; another module already owns root; or root's description or display name is refused (see Declare).</exception>
-    public void DeclareRoot(GameplayTag root, string description, bool extensible = false, string? displayName = null)
+    /// <exception cref="InvalidOperationException">root isn't a single segment; this module has no Id; another module already owns root; or root's description, display name or plural display name is refused (see Declare).</exception>
+    public void DeclareRoot(GameplayTag root, string description, bool extensible = false, string? displayName = null, string? pluralDisplayName = null)
     {
         var moduleName = _declaringModule.Name;
         if (root.IsNone || root.Depth != 1)
@@ -44,17 +44,19 @@ public sealed class GameplayTagDeclarations
         }
 
         _declarations.RootOwners[root] = _declaringModule;
-        DeclareTag(root, description, displayName, extensible);
+        DeclareTag(root, description, displayName, pluralDisplayName, extensible);
     }
 
     /// <summary>Declares tag, below a root, as usable in this build; a parent it implies that no module declares fails the build.</summary>
     /// <remarks>
     /// Several modules may declare the same tag, each where its root's owner allows. A null displayName leaves the display
-    /// name to whichever declaration gives one, or to the tag's last segment.
+    /// name to whichever declaration gives one, or to the tag's last segment; a null pluralDisplayName leaves it to
+    /// whichever declaration gives one, or to the display name.
     /// </remarks>
     /// <param name="extensible">Whether modules other than its root's owner may declare tags under it; only the owner may set it.</param>
-    /// <exception cref="InvalidOperationException">tag is None or a root; description is empty or differs from another declaration's; displayName is empty or differs from another declaration's; or a declared tag's name differs from another's only by case.</exception>
-    public void Declare(GameplayTag tag, string description, string? displayName = null, bool extensible = false)
+    /// <param name="pluralDisplayName">The name for several of what the tag names ("Spells"), where that isn't the display name.</param>
+    /// <exception cref="InvalidOperationException">tag is None or a root; description is empty or differs from another declaration's; displayName or pluralDisplayName is empty or differs from another declaration's; or a declared tag's name differs from another's only by case.</exception>
+    public void Declare(GameplayTag tag, string description, string? displayName = null, bool extensible = false, string? pluralDisplayName = null)
     {
         if (tag.IsNone)
         {
@@ -66,7 +68,7 @@ public sealed class GameplayTagDeclarations
             throw new InvalidOperationException($"{_declaringModule.Name} declares '{tag}' with Declare, but it is a root: a module declares its roots with DeclareRoot.");
         }
 
-        DeclareTag(tag, description, displayName, extensible);
+        DeclareTag(tag, description, displayName, pluralDisplayName, extensible);
     }
 
     /// <summary>Declares domain, which this module owns, accepting the tags under each of accepted.</summary>
@@ -97,7 +99,7 @@ public sealed class GameplayTagDeclarations
     public void AddToDomain(GameplayTagDomain domain, GameplayTag accepted) =>
         _declarations.DomainAdditions.Add((domain, accepted, _declaringModule));
 
-    private void DeclareTag(GameplayTag tag, string description, string? displayName, bool extensible)
+    private void DeclareTag(GameplayTag tag, string description, string? displayName, string? pluralDisplayName, bool extensible)
     {
         var moduleName = _declaringModule.Name;
         if (string.IsNullOrWhiteSpace(description))
@@ -108,6 +110,11 @@ public sealed class GameplayTagDeclarations
         if (displayName is not null && string.IsNullOrWhiteSpace(displayName))
         {
             throw new InvalidOperationException($"{moduleName} declares tag '{tag}' with an empty display name.");
+        }
+
+        if (pluralDisplayName is not null && string.IsNullOrWhiteSpace(pluralDisplayName))
+        {
+            throw new InvalidOperationException($"{moduleName} declares tag '{tag}' with an empty plural display name.");
         }
 
         for (var current = tag; !current.IsNone; current = current.Parent)
@@ -136,9 +143,15 @@ public sealed class GameplayTagDeclarations
             throw new InvalidOperationException($"{moduleName} declares tag '{tag}' with display name '{displayName}', but it was already declared as '{existingDisplayName}'.");
         }
 
+        if (pluralDisplayName is not null && entry.PluralDisplayName is { } existingPluralDisplayName && existingPluralDisplayName != pluralDisplayName)
+        {
+            throw new InvalidOperationException($"{moduleName} declares tag '{tag}' with plural display name '{pluralDisplayName}', but it was already declared as '{existingPluralDisplayName}'.");
+        }
+
         entry.Description = description;
         entry.DescribedBy ??= _declaringModule;
         entry.DisplayName ??= displayName;
+        entry.PluralDisplayName ??= pluralDisplayName;
         if (extensible)
         {
             entry.MadeExtensibleBy = _declaringModule;
@@ -162,6 +175,8 @@ internal sealed class GameplayTagDeclarationSet
         public IModule? DescribedBy { get; set; }
 
         public string? DisplayName { get; set; }
+
+        public string? PluralDisplayName { get; set; }
 
         public IModule? MadeExtensibleBy { get; set; }
     }

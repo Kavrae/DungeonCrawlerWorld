@@ -15,8 +15,9 @@ public static class StatModifierMath
     /// <param name="target">The target stat.</param>
     /// <param name="baseValue">The base value of the stat.</param>
     /// <param name="activeTags">The current activation's own Tags (e.g. EffectContext.ActivatorTags) -- a modifier with a ConditionTag only contributes when activeTags has it (parent-aware); empty (the default) means only unconditional modifiers apply.</param>
+    /// <param name="contributions">Receives each modifier that counted, in chain order, when given -- how a preview shows what changed a value (EffectAmountPreview).</param>
     /// <returns>The effective value of the stat.</returns>
-    public static float GetEffectiveValue(MultiComponentPool<StatModifierComponent> pool, int entityId, StatModifierTarget target, float baseValue, GameplayTagSet activeTags = default)
+    public static float GetEffectiveValue(MultiComponentPool<StatModifierComponent> pool, int entityId, StatModifierTarget target, float baseValue, GameplayTagSet activeTags = default, List<ValueContribution>? contributions = null)
     {
         var additiveSum = 0f;
         var multiplicativeSum = 0f;
@@ -42,6 +43,8 @@ public static class StatModifierMath
             {
                 multiplicativeSum += modifier.Magnitude;
             }
+
+            contributions?.Add(new ValueContribution(ValueContributionKind.Modifier, modifier.Operation, modifier.Magnitude, modifier.Source, ConditionTag: modifier.ConditionTag));
         }
 
         return CalculateTotal(baseValue, additiveSum, multiplicativeSum);

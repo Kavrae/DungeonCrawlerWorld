@@ -106,6 +106,22 @@ public static class GameTags
         (StatsAbilityScoreWisdom, "Scales with its user's Wisdom."),
     ];
 
+    /// <summary>The plural display name of each built-in tag a player may read as several of a kind ("Prevents spells"); every other tag's is its display name.</summary>
+    public static readonly IReadOnlyDictionary<GameplayTag, string> PluralDisplayNames = new Dictionary<GameplayTag, string>
+    {
+        [Action] = "Actions",
+        [Spell] = "Spells",
+        [Item] = "Items",
+        [ActionAttack] = "Attacks",
+        [ItemConsumable] = "Consumables",
+        [ItemConsumablePotion] = "Potions",
+        [ItemConsumableScroll] = "Scrolls",
+        [ItemConsumableTome] = "Tomes",
+        [ItemWand] = "Wands",
+        [ItemLootbox] = "Lootboxes",
+        [ItemToggle] = "Toggles",
+    };
+
     /// <summary>Every tag above, roots first.</summary>
     public static readonly IReadOnlyList<GameplayTag> All = [.. Roots.Select(root => root.Root), .. Tags.Select(entry => entry.Tag)];
 }

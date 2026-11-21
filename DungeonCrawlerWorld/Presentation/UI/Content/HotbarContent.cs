@@ -58,8 +58,10 @@ public sealed class HotbarContent(
     Vector2 screenSize,
     SimulationClock simulationClock,
     EntityActions? actions = null,
-    GameplayTagRegistry? gameplayTags = null) : IElementContent
+    EffectTextNames? effectTextNames = null) : IElementContent
 {
+    /// <summary>What a cost line names; raw names for a test that gives none.</summary>
+    private readonly EffectTextNames _effectTextNames = effectTextNames ?? EffectTextNames.None;
 
     /// <summary>Optional for the same reason as the clock: a test that never shows an action cooldown needs no action lookups at all.</summary>
     private readonly EntityActions? _actions = actions;
@@ -423,7 +425,7 @@ public sealed class HotbarContent(
         }
 
         lines.Add(summary);
-        lines.AddRange(CostText.Lines(definition, gameplayTags));
+        lines.AddRange(CostText.Lines(definition, _effectTextNames));
         return lines.Count == 1 ? summary : string.Join('\n', lines);
     }
 

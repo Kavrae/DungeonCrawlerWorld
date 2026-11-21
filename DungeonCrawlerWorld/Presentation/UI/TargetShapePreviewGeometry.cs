@@ -49,6 +49,21 @@ public static class TargetShapePreviewGeometry
         return offsets;
     }
 
+    /// <summary>The offsets an aura of size reaches around its source: every tile within that Manhattan distance, a diamond (AuraField.ReachOf's rule), the source's own tile included.</summary>
+    public static List<Point> ComputeDiamondOffsets(int size)
+    {
+        var collector = new DiamondCollector(new List<Point>());
+        ManhattanDiamond.ForEachCell(SentinelOrigin, size, SentinelBounds, ref collector);
+        return collector.Offsets;
+    }
+
+    private readonly struct DiamondCollector(List<Point> offsets) : ManhattanDiamond.ICellVisitor
+    {
+        public List<Point> Offsets => offsets;
+
+        public void Visit(Vector3Int cellPosition, int distance) => offsets.Add(new Point(cellPosition.X - SentinelOrigin.X, cellPosition.Y - SentinelOrigin.Y));
+    }
+
     /// <summary>
     /// Shrinks the per-cell pixel size so a shape's full bounding box (columns x rows) fits
     /// within maxWidth x maxHeightBudget -- clamped to [MinCellSize, MaxCellSize] so a huge AOE

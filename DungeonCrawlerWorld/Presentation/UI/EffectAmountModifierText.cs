@@ -27,6 +27,28 @@ internal static class EffectAmountModifierText
         _ => null,
     };
 
+    /// <summary>What a modifier on target changes, as a player reads it, for every target.</summary>
+    public static string NameOf(StatModifierTarget target) => SubjectOf(target) ?? target switch
+    {
+        StatModifierTarget.OutgoingDamage => "Damage Dealt",
+        StatModifierTarget.IncomingDamage => "Damage Taken",
+        StatModifierTarget.MaximumHealth => "Maximum Health",
+        StatModifierTarget.HealthRegen => "Health Regeneration",
+        StatModifierTarget.MaximumMana => "Maximum Mana",
+        StatModifierTarget.ManaRegen => "Mana Regeneration",
+        StatModifierTarget.CritChance => "Critical Hit Chance",
+        StatModifierTarget.CritMultiplier => "Critical Hit Damage",
+        StatModifierTarget.MovementLockFrames => "Movement Delay",
+        StatModifierTarget.ActionLockFrames => "Action Lock",
+        StatModifierTarget.OutgoingHealing => "Healing Given",
+        StatModifierTarget.IncomingHealing => "Healing Received",
+        StatModifierTarget.OutgoingBuffDuration => "Buff Duration Given",
+        StatModifierTarget.IncomingBuffDuration => "Buff Duration Received",
+        StatModifierTarget.OutgoingDebuffDuration => "Debuff Duration Given",
+        StatModifierTarget.IncomingDebuffDuration => "Debuff Duration Received",
+        _ => target.ToString(),
+    };
+
     /// <summary>The modifier's amount: a Multiplicative one that at least doubles as a multiplier ("x2"), any other Multiplicative one as a percentage ("-50%"), an Additive one as a signed amount ("+2").</summary>
     public static string FormatAmount(StatModifierOperation operation, float magnitude)
     {

@@ -99,6 +99,44 @@ public sealed class GameplayTagRegistryTests
     }
 
     [TestMethod]
+    public void GetPluralDisplayName_UsesTheDeclaredPlural_AndFallsBackToTheDisplayName()
+    {
+        var registry = GameplayTagRegistry.Declare([Alpha(tags =>
+        {
+            DeclareRootToLava(tags);
+            tags.Declare(Magic, Described, displayName: "Arcane");
+            tags.Declare(Poison, Described, pluralDisplayName: "Poisons");
+        })]);
+
+        Assert.AreEqual("Poisons", registry.GetPluralDisplayName(Poison));
+        Assert.AreEqual("Arcane", registry.GetPluralDisplayName(Magic));
+        Assert.AreEqual("Fire", registry.GetPluralDisplayName(Fire));
+    }
+
+    [TestMethod]
+    public void TwoDifferentPluralDisplayNames_ForOneTag_Throw()
+    {
+        Assert.ThrowsExactly<InvalidOperationException>(() => GameplayTagRegistry.Declare([Alpha(tags =>
+        {
+            DeclareRootToLava(tags);
+            tags.Declare(Fire, Described, pluralDisplayName: "Flames");
+            tags.Declare(Fire, Described, pluralDisplayName: "Blazes");
+        })]));
+    }
+
+    [TestMethod]
+    [DataRow("")]
+    [DataRow("   ")]
+    public void AnEmptyPluralDisplayName_Throws(string pluralDisplayName)
+    {
+        Assert.ThrowsExactly<InvalidOperationException>(() => GameplayTagRegistry.Declare([Alpha(tags =>
+        {
+            tags.DeclareRoot(Root, Described);
+            tags.Declare(Fire, Described, pluralDisplayName: pluralDisplayName);
+        })]));
+    }
+
+    [TestMethod]
     public void GetDisplayNameOrDescription_OfAnUndeclaredTag_Throws()
     {
         var registry = GameplayTagRegistry.Declare([Alpha(tags => tags.DeclareRoot(Root, Described))]);
