@@ -39,8 +39,6 @@ public sealed class ShopWindow(
 
     protected override int? StackCapacity => null;
 
-    protected override int SummaryLineCount => 2;
-
     protected override IReadOnlyList<string> BuildSummaryLines() => [entityNaming.NameOf(EntityId), entityNaming.DescriptionOf(EntityId)];
 
     protected override void OnConfigured() => _dropTarget = new InventoryDropTarget(EntityId);

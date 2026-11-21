@@ -75,6 +75,7 @@ public sealed class ItemWindowCoordinator
 
         mapWindow.OnOpenContainerRequested = OpenContainer;
         mapWindow.OnTakeAllRequested = entityId => lootCommands.TakeAll(entityId, world.PlayerEntityId);
+        mapWindow.CanTakeAllFrom = entityId => lootCommands.CanTakeAll(entityId, world.PlayerEntityId);
 
         // At most one of the two is ever open, so whichever isn't answers null.
         Inventory.GetSecondaryTargetEntityId = () => _secondaryInventory.OpenTargetEntityId ?? _shop.OpenTargetEntityId;

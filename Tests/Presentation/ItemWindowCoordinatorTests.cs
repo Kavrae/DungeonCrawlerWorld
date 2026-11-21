@@ -8,6 +8,7 @@ using Game.Effects.Entries;
 using Game.Floors;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
+using Game.Modules.Currency;
 using Game.Modules.Currency.Components;
 using Game.Modules.Death;
 using Game.Modules.Death.Components;
@@ -278,6 +279,113 @@ public sealed class ItemWindowCoordinatorTests
         var (window, _) = OpenCorpseLoot(harness);
 
         Assert.AreEqual("Slain by: Lava", SlainByLine(window));
+    }
+
+    private static Button TakeAllButton(SecondaryInventoryWindow window) =>
+        window.ChildElements.OfType<Window>().Single(child => child.Content is CurrencyRowContent).ChildElements.OfType<Button>().Single();
+
+    [TestMethod]
+    public void ACorpsesFooterButton_ReadsLootAll_AndMovesEveryItemAndAllCurrencyToThePlayer()
+    {
+        var harness = Build();
+        InventoryActions.AddItem(harness.ComponentManager, CorpseEntityId, PotionItemId, quantity: 2);
+        harness.ComponentManager.Merge(CorpseEntityId, new CurrencyComponent(gold: 7, credits: 3));
+        var (window, _) = OpenCorpseLoot(harness);
+        var button = TakeAllButton(window);
+        Assert.AreEqual("Loot All", button.Text);
+        Assert.IsTrue(button.Enabled);
+
+        button.Press();
+        window.Update(new GameTime());
+
+        Assert.AreEqual(0, harness.ComponentManager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(CorpseEntityId));
+        Assert.AreEqual(1, harness.ComponentManager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(PlayerEntityId));
+        Assert.IsTrue(harness.ComponentManager.GetPackedPool<CurrencyComponent>().TryGetReadonly(PlayerEntityId, out var playerCurrency));
+        Assert.AreEqual(7, playerCurrency.Gold);
+        Assert.AreEqual(3, playerCurrency.Credits);
+        Assert.IsFalse(button.Enabled, "Nothing is left to take.");
+    }
+
+    [TestMethod]
+    public void AnAmountPastFourDigits_PutsEachCurrencyOnItsOwnRow_WithTheButtonBesideTheTopOne()
+    {
+        var harness = Build();
+        harness.ComponentManager.Merge(CorpseEntityId, new CurrencyComponent(gold: 10000, credits: 3));
+        var (window, grid) = OpenCorpseLoot(harness);
+        var footer = window.ChildElements.OfType<Window>().Single(child => child.Content is CurrencyRowContent);
+        var gold = footer.ChildElements.OfType<CurrencyElement>().Single(element => element.Type == CurrencyType.Gold);
+        var credits = footer.ChildElements.OfType<CurrencyElement>().Single(element => element.Type == CurrencyType.Credits);
+        var button = TakeAllButton(window);
+
+        Assert.AreEqual(CurrencyRowContent.Height * 2, footer.CurrentSize.Y);
+        Assert.AreEqual(gold.Rectangle.Bottom, credits.Rectangle.Top);
+        Assert.AreEqual(gold.Rectangle.Top, button.Rectangle.Top);
+        Assert.IsLessThanOrEqualTo(button.Rectangle.Left, gold.Rectangle.Right);
+        Assert.IsLessThanOrEqualTo(footer.Rectangle.Top, grid.Rectangle.Bottom);
+        Assert.IsLessThanOrEqualTo(window.Rectangle.Bottom, footer.Rectangle.Bottom);
+    }
+
+    [TestMethod]
+    public void TakingALargeAmount_ReturnsTheAmountsToOneRow_AndShrinksTheWindow()
+    {
+        var harness = Build();
+        harness.ComponentManager.Merge(CorpseEntityId, new CurrencyComponent(gold: 123456, credits: 3));
+        var (window, grid) = OpenCorpseLoot(harness);
+        var footer = window.ChildElements.OfType<Window>().Single(child => child.Content is CurrencyRowContent);
+        var stackedHeight = window.CurrentSize.Y;
+        var gridBottom = grid.Rectangle.Bottom;
+
+        TakeAllButton(window).Press();
+        window.Update(new GameTime());
+
+        Assert.AreEqual(CurrencyRowContent.Height, footer.CurrentSize.Y);
+        Assert.AreEqual(stackedHeight - CurrencyRowContent.Height, window.CurrentSize.Y);
+        Assert.AreEqual(gridBottom, grid.Rectangle.Bottom);
+        var gold = footer.ChildElements.OfType<CurrencyElement>().Single(element => element.Type == CurrencyType.Gold);
+        var credits = footer.ChildElements.OfType<CurrencyElement>().Single(element => element.Type == CurrencyType.Credits);
+        Assert.AreEqual(gold.Rectangle.Top, credits.Rectangle.Top);
+    }
+
+    [TestMethod]
+    public void ALongSummaryLine_WrapsAndPushesTheLinesAndGridBelowItDown()
+    {
+        var harness = Build();
+        var longTerrainId = harness.Terrain.Register(new Game.Terrain.TerrainDefinition("test:long", "A very long terrain name that cannot fit on one summary line at all", "", "~", default));
+        harness.ComponentManager.Merge(CorpseEntityId, new DeadComponent(ActionSource.FromTerrain(longTerrainId), DiedAtFrame: 0));
+
+        var (window, grid) = OpenCorpseLoot(harness);
+
+        var slainBy = window.ChildElements.OfType<TextWindow>().Single(line => line.OriginalText.StartsWith("Slain by:"));
+        var diedAt = window.ChildElements.OfType<TextWindow>().Single(line => line.OriginalText.StartsWith("Died at tick:"));
+        var header = window.ChildElements.OfType<TextWindow>().Single(line => line.OriginalText.Contains('/') && !line.OriginalText.StartsWith("Slain by:"));
+        Assert.IsGreaterThan(1, slainBy.DisplayText.LineCount);
+        Assert.IsGreaterThanOrEqualTo(slainBy.Rectangle.Bottom, diedAt.Rectangle.Top);
+        Assert.IsGreaterThanOrEqualTo(diedAt.Rectangle.Bottom, header.Rectangle.Top);
+        Assert.IsGreaterThanOrEqualTo(header.Rectangle.Bottom, grid.Rectangle.Top);
+    }
+
+    [TestMethod]
+    public void AContainersFooterButton_ReadsTakeAll()
+    {
+        var harness = Build();
+        harness.ComponentManager.Merge(CorpseEntityId, new Game.Modules.Containers.Components.ContainerComponent());
+
+        var (window, _) = OpenCorpseLoot(harness);
+
+        Assert.AreEqual("Take All", TakeAllButton(window).Text);
+    }
+
+    [TestMethod]
+    public void ALootWindowHoldingOnlyAnUntradeableItem_DisablesItsFooterButton()
+    {
+        var harness = Build();
+        var untradeableItemId = Guid.NewGuid();
+        harness.ItemCatalog.Register(new ItemDefinition(untradeableItemId, "Bound", null, "b", Color.White, Tags: [], Effects: [], CanTrade: false));
+        InventoryActions.AddItem(harness.ComponentManager, CorpseEntityId, untradeableItemId, quantity: 1);
+
+        var (window, _) = OpenCorpseLoot(harness);
+
+        Assert.IsFalse(TakeAllButton(window).Enabled);
     }
 
     [TestMethod]

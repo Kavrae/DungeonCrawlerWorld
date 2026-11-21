@@ -280,6 +280,16 @@ public class Window : Element
         FooterHeight = height;
     }
 
+    /// <summary>Changes the footer band's height on a window already laid out, the window growing or shrinking by the difference so its content area keeps its size and place.</summary>
+    public void ResizeFooter(float height)
+    {
+        var heightChange = new Vector2(0, height - FooterHeight);
+        FooterHeight = height;
+        SetMinimumSize(Vector2.Max(MinimumSize + heightChange, Vector2.Zero));
+        SetSize(CurrentSize + heightChange);
+        PinFooterHostWindow(this);
+    }
+
     /// <summary>Attaches a chrome capability (see IChromeBehavior) to this window.</summary>
     public void AddChromeBehavior(IChromeBehavior behavior)
     {

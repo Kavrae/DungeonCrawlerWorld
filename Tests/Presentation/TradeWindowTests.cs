@@ -97,6 +97,27 @@ public sealed class TradeWindowTests
         return (window, componentManager, mapViewState);
     }
 
+    [TestMethod]
+    public void EachColumnsCurrencies_SitOnTheirOwnRows_AboveTheButtons()
+    {
+        var (window, _, _) = Build();
+
+        var footers = window.ChildElements.OfType<Window>().Where(child => child.Content is CurrencyRowContent).ToList();
+        Assert.HasCount(2, footers);
+        var balanceOffer = FindButton(window, "Balance Offer");
+        foreach (var footer in footers)
+        {
+            var amounts = footer.ChildElements.OfType<CurrencyElement>().OrderBy(element => element.Rectangle.Top).ToList();
+            Assert.AreEqual(CurrencyRowContent.StackedHeight, footer.CurrentSize.Y);
+            Assert.AreEqual(amounts[0].Rectangle.Bottom, amounts[1].Rectangle.Top);
+            Assert.AreEqual(footer.ContentSize.X, amounts[0].CurrentSize.X);
+            Assert.AreEqual(footer.ContentSize.X, amounts[1].CurrentSize.X);
+            Assert.IsLessThanOrEqualTo(balanceOffer.Rectangle.Top, footer.Rectangle.Bottom);
+        }
+
+        Assert.IsLessThanOrEqualTo(window.Rectangle.Bottom, FindButton(window, "Complete").Rectangle.Bottom);
+    }
+
     /// <summary>
     /// Regression coverage for wiring the trade window's two grids into the same comparison-aware
     /// click dispatch every other inventory grid already uses (see TradeWindowController.OnItemSelected/

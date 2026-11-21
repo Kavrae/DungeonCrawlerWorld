@@ -1,3 +1,4 @@
+using Game.Modules.Death;
 using Game.Modules.Inventory;
 using Game.Spawning;
 using Game.Views;
@@ -24,6 +25,11 @@ public sealed class SecondaryInventoryWindow(
     ActionSourceNaming actionSourceNaming)
     : ContainerInventoryWindow(services, inventoryServices, world, contextMenuController, mapViewState)
 {
+    private const float TakeAllButtonWidth = 64f;
+
+    private readonly LootCommands _lootCommands = inventoryServices.LootCommands;
+    private readonly World _world = world;
+
     /// <summary>Five plain cells, the "2x5" shape a ten-item corpse reads as.</summary>
     protected override int GridColumns => 5;
 
@@ -35,10 +41,14 @@ public sealed class SecondaryInventoryWindow(
 
     protected override int? StackCapacity => InventoryCapacity.MaxNonPlayerStackCount;
 
-    protected override int SummaryLineCount => 3;
-
     protected override IReadOnlyList<string> BuildSummaryLines() =>
         [entityNaming.NameOf(EntityId), $"Slain by: {ResolveKillerName()}", $"Died at tick: {ResolveDiedAtFrame()}"];
+
+    protected override CurrencyRowButton BuildFooterButton() => new(
+        TakeAllLabel.For(_lootCommands, EntityId),
+        TakeAllButtonWidth,
+        () => _lootCommands.CanTakeAll(EntityId, _world.PlayerEntityId),
+        () => _lootCommands.TakeAll(EntityId, _world.PlayerEntityId));
 
     private string ResolveKillerName() =>
         healthView.TryGetDeath(EntityId, out var death)

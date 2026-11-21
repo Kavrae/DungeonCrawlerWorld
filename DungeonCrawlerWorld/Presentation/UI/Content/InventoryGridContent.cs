@@ -855,8 +855,8 @@ public sealed class InventoryGridContent(
     /// actually open right now (see InventoryWindowController.GetSecondaryTargetEntityId), so "Give"
     /// only appears while a secondary window is open. Trade-grid cells never reach this method at all
     /// (see this grid's own OnRightClicked wiring in RebuildCells): their menu holds only "Remove from
-    /// trade". A loot window's cells (see IsLootCell) also end with "Take All", on
-    /// every cell, a Merged Stack or untradeable one included.
+    /// trade". A loot window's cells (see IsLootCell) also end with "Take All" ("Loot All" on a
+    /// corpse), on every cell, a Merged Stack or untradeable one included.
     /// </summary>
     private List<DropdownOption> BuildItemContextMenu(InventoryItemStackCell cell)
     {
@@ -864,7 +864,8 @@ public sealed class InventoryGridContent(
 
         if (IsLootCell(cell))
         {
-            options.Add(new DropdownOption("Take All", null, Enabled: true, () => TakeAll(cell.EntityId)));
+            var lootCommands = inventoryServices.LootCommands;
+            options.Add(new DropdownOption(Looting.TakeAllLabel.For(lootCommands, cell.EntityId), null, Enabled: lootCommands.CanTakeAll(cell.EntityId, world.PlayerEntityId), () => TakeAll(cell.EntityId)));
         }
 
         return options;

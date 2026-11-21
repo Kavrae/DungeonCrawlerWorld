@@ -75,6 +75,9 @@ public sealed class MapWindow : Window, IContentDropTarget
     /// <summary>Moves everything a chest or pile holds to the player once TryTakeAll has allowed it -- ItemWindowCoordinator's, over LootCommands.TakeAll. Null offers no "Take All".</summary>
     public Action<int>? OnTakeAllRequested { get; set; }
 
+    /// <summary>Whether Take All would move anything out of an entity -- ItemWindowCoordinator's, over LootCommands.CanTakeAll.</summary>
+    public Func<int, bool> CanTakeAllFrom { get; set; } = static _ => true;
+
     /// <summary>
     /// Invoked whenever a map-tile click sets Basic inspection (see SelectMapNodes) or the
     /// right-click "Inspect" option sets Detail inspection (see TryOpenEntityContextMenuAt) --
@@ -344,14 +347,14 @@ public sealed class MapWindow : Window, IContentDropTarget
         interaction.WindowKind == ContainerWindowKind.Loot && interaction.IsContainer;
 
     /// <summary>Whether Take All would take something now: it offers it, the player can reach it, and it holds anything -- the option's Enabled and TryTakeAll's check.</summary>
-    private static bool CanTakeAll(in EntityInteractionView interaction) =>
-        OffersTakeAll(in interaction) && AllowsAccess(interaction.AccessRefusal) && interaction.HoldsAnything;
+    private bool CanTakeAll(int entityId, in EntityInteractionView interaction) =>
+        OffersTakeAll(in interaction) && AllowsAccess(interaction.AccessRefusal) && interaction.HoldsAnything && CanTakeAllFrom(entityId);
 
     /// <summary>Takes everything entityId holds when it can (CanTakeAll) -- the map's "Take All", the same command as the loot window's (LootCommands.TakeAll).</summary>
     internal bool TryTakeAll(int entityId)
     {
         var interaction = _mapView.GetInteraction(entityId);
-        if (OnTakeAllRequested is not { } takeAll || !CanTakeAll(in interaction))
+        if (OnTakeAllRequested is not { } takeAll || !CanTakeAll(entityId, in interaction))
         {
             return false;
         }
@@ -522,7 +525,7 @@ public sealed class MapWindow : Window, IContentDropTarget
 
         if (OffersTakeAll(in interaction) && OnTakeAllRequested is not null)
         {
-            options.Add(new DropdownOption("Take All", null, CanTakeAll(in interaction), () => TryTakeAll(entityId)));
+            options.Add(new DropdownOption("Take All", null, CanTakeAll(entityId, in interaction), () => TryTakeAll(entityId)));
         }
 
         options.Add(new DropdownOption("Inspect", null, true, () => InspectEntity(entityId)));

@@ -42,6 +42,8 @@ public abstract class ContainerInventoryWindow(
     private TextWindow _gridHeader = null!;
     private int _gridRows;
     private bool _gridScrolls;
+    private float _summaryHeight;
+    private CurrencyRowContent _currencyRow = null!;
     private readonly KeyedCache<(int StackCount, int? Capacity), string> _stackCountText = new();
 
     /// <summary>One line of the summary or the grid header, at the default font size.</summary>
@@ -64,19 +66,14 @@ public abstract class ContainerInventoryWindow(
     /// <summary>The most stacks the inventory can hold, shown after its count in the header; null for no limit, shown as UnlimitedCapacityText.</summary>
     protected abstract int? StackCapacity { get; }
 
-    /// <summary>How many lines BuildSummaryLines returns.</summary>
-    protected abstract int SummaryLineCount { get; }
-
-    /// <summary>The summary's lines beside the icon, top to bottom -- built once, when the window opens.</summary>
+    /// <summary>The summary's lines beside the icon, top to bottom -- built once, when the window opens; each wraps and pushes what follows down.</summary>
     protected abstract IReadOnlyList<string> BuildSummaryLines();
 
     private float GridColumnsWidth => GridColumns * GridCellWidth + (GridColumns - 1) * InventoryGridContent.CellGap;
 
     private float GridWidth => GridColumnsWidth + (_gridScrolls ? WindowChrome.ScrollbarThickness : 0f);
 
-    private float SummaryHeight => System.Math.Max(TextLineHeight * SummaryLineCount, IconSize.Y);
-
-    private float GridTop => SummaryHeight + Padding + TextLineHeight;
+    private float GridTop => _summaryHeight + Padding + TextLineHeight;
 
     /// <summary>Must be called after CreateElement but before Initialize. Registers the currency row here, so FooterHeight is set before the first measure.</summary>
     public void Configure(int entityId, Action<int, uint> onItemSelected)
@@ -85,11 +82,17 @@ public abstract class ContainerInventoryWindow(
         _onItemSelected = onItemSelected;
         _gridRows = 0;
         _gridScrolls = false;
+        _summaryHeight = IconSize.Y;
         OnConfigured();
 
         // This window is the secondary target for as long as it exists, so its currency row only ever offers "Take".
-        SetFooterContent(new CurrencyRowContent(entityId, inventoryServices, world, contextMenuController, ElementPoolService, () => EntityId), CurrencyRowContent.Height);
+        var footerButton = BuildFooterButton();
+        _currencyRow = new CurrencyRowContent(entityId, inventoryServices, world, contextMenuController, ElementPoolService, () => EntityId, showLabels: footerButton is null, rowButton: footerButton);
+        SetFooterContent(_currencyRow, _currencyRow.RequiredHeight);
     }
+
+    /// <summary>The button beside the currency amounts, if this window has one; the amounts drop their labels to make room.</summary>
+    protected virtual CurrencyRowButton? BuildFooterButton() => null;
 
     /// <summary>Per-entity setup a subclass keeps, run by Configure.</summary>
     protected virtual void OnConfigured()
@@ -114,8 +117,18 @@ public abstract class ContainerInventoryWindow(
     public override void Update(GameTime gameTime)
     {
         base.Update(gameTime);
+        FitFooterToCurrency();
         FitGridToCells();
         UpdateGridHeader();
+    }
+
+    private void FitFooterToCurrency()
+    {
+        var requiredHeight = _currencyRow.RequiredHeight;
+        if (requiredHeight != FooterHeight)
+        {
+            ResizeFooter(requiredHeight);
+        }
     }
 
     private void UpdateGridHeader() =>
@@ -136,14 +149,13 @@ public abstract class ContainerInventoryWindow(
         _gridScrolls = scrolls;
         SetWindowSize();
         _gridWindow.SetBounds(new Vector2(0, GridTop), new Vector2(GridWidth, rows * RowHeight));
-        _gridHeader.SetBounds(new Vector2(0, SummaryHeight + Padding), new Vector2(GridWidth, TextLineHeight));
+        _gridHeader.SetBounds(new Vector2(0, _summaryHeight + Padding), new Vector2(GridWidth, TextLineHeight));
     }
 
-    /// <summary>The content area holds the summary, header and grid at their current size; FooterHeight is added on top, since ContentSize already excludes it.</summary>
+    /// <summary>The content area holds the summary, header and grid at their current size; ContentInset adds the chrome and the footer.</summary>
     private void SetWindowSize()
     {
-        var outerInsets = CurrentSize - ContentSize;
-        var size = new Vector2(GridWidth, GridTop + _gridRows * RowHeight) + outerInsets + new Vector2(0, FooterHeight);
+        var size = new Vector2(GridWidth, GridTop + _gridRows * RowHeight) + ContentInset;
         SetMinimumSize(size);
         SetSize(size);
     }
@@ -161,17 +173,33 @@ public abstract class ContainerInventoryWindow(
         AddChild(icon);
 
         var textX = IconSize.X + Padding;
-        var lines = BuildSummaryLines();
-        for (var lineIndex = 0; lineIndex < lines.Count; lineIndex++)
+        var textWidth = GridColumnsWidth - textX;
+        var textLines = new List<(TextWindow Line, float Height)>();
+        var textHeight = 0f;
+        foreach (var text in BuildSummaryLines())
         {
-            AddChild(CreateTextLine(new Vector2(textX, lineIndex * TextLineHeight), new Vector2(GridColumnsWidth - textX, TextLineHeight), lines[lineIndex]));
+            var line = CreateTextLine(new Vector2(textX, textHeight), new Vector2(textWidth, TextLineHeight), text);
+            AddChild(line);
+            var lineHeight = TextLineHeight + (line.DisplayText.LineCount - 1) * line.ContentFont.LineHeight;
+            textLines.Add((line, lineHeight));
+            textHeight += lineHeight;
+        }
+
+        _summaryHeight = System.Math.Max(textHeight, IconSize.Y);
+        SetWindowSize();
+
+        var lineTop = 0f;
+        foreach (var (line, lineHeight) in textLines)
+        {
+            line.SetBounds(new Vector2(textX, lineTop), new Vector2(textWidth, lineHeight));
+            lineTop += lineHeight;
         }
     }
 
     /// <summary>The line above the grid: the stack count on the left, room on the right for what an inventory will also show (weight).</summary>
     private void BuildGridHeader()
     {
-        _gridHeader = CreateTextLine(new Vector2(0, SummaryHeight + Padding), new Vector2(GridWidth, TextLineHeight), string.Empty);
+        _gridHeader = CreateTextLine(new Vector2(0, _summaryHeight + Padding),new Vector2(GridWidth, TextLineHeight), string.Empty);
         AddChild(_gridHeader);
     }
 

@@ -78,7 +78,7 @@ public sealed class TradeWindow(
     private static readonly float ContentWidth = ColumnSize.X * 2 + ColumnGap;
 
     /// <summary>Content height: header + grid + currency footer for a column, then the Balance Offer row, then the Cancel/Complete row.</summary>
-    private static readonly float ContentHeight = HeaderHeight + GridSize.Y + CurrencyRowContent.Height + SectionGap * 2 + ButtonHeight * 2;
+    private static readonly float ContentHeight = HeaderHeight + GridSize.Y + CurrencyRowContent.StackedHeight + SectionGap * 2 + ButtonHeight * 2;
 
     private int _playerSideEntityId;
     private int _shopSideEntityId;
@@ -379,21 +379,23 @@ public sealed class TradeWindow(
         var footerWindow = ElementPoolService.CreateElement<Window>(this, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, HeaderHeight + GridSize.Y), Size = new Vector2(ColumnSize.X, CurrencyRowContent.Height), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, HeaderHeight + GridSize.Y), Size = new Vector2(ColumnSize.X, CurrencyRowContent.StackedHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelContentColor },
         });
         footerWindow.ContentPadding = Vector2.Zero;
         // showLabels: false -- "10 [sprite]", not "Gold : 10 [sprite]"; this column is too narrow
         // to spare the label (per the ask). textColor: white -- confirmed live look, matching the
-        // trade grid's own transparent background just above.
-        footerWindow.SetContent(new CurrencyRowContent(entityId, inventoryServices, world, contextMenuController, ElementPoolService, static () => null, showLabels: false));
+        // trade grid's own transparent background just above. Always stacked: half this column
+        // can't hold a two-digit amount and its icon, and a fixed height keeps the buttons below
+        // from moving under the cursor as Balance Offer changes the amounts.
+        footerWindow.SetContent(new CurrencyRowContent(entityId, inventoryServices, world, contextMenuController, ElementPoolService, static () => null, showLabels: false, alwaysStacksAmounts: true));
         AddChild(footerWindow);
     }
 
     private void BuildFooterButtons()
     {
-        var buttonsTop = HeaderHeight + GridSize.Y + CurrencyRowContent.Height + SectionGap;
+        var buttonsTop = HeaderHeight + GridSize.Y + CurrencyRowContent.StackedHeight + SectionGap;
 
         _balanceOfferButton = CreateButton("Balance Offer", new Vector2(0, buttonsTop), new Vector2(ContentWidth, ButtonHeight));
 

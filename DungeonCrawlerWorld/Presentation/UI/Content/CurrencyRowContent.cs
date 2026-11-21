@@ -29,7 +29,9 @@ public sealed class CurrencyRowContent(
     Func<int?> getSecondaryTargetEntityId,
     // False for the trade window's own two currency footers -- "10 [sprite]"
     // instead of "Gold : 10 [sprite]", the column being too narrow to spare the label.
-    bool showLabels = true) : IElementContent, IContentDropTarget
+    bool showLabels = true,
+    CurrencyRowButton? rowButton = null,
+    bool alwaysStacksAmounts = false) : IElementContent, IContentDropTarget
 {
     private readonly CurrencyView _currencyView = inventoryServices.CurrencyView;
     private readonly ShopView _shopView = inventoryServices.ShopView;
@@ -38,11 +40,26 @@ public sealed class CurrencyRowContent(
 
     public const float Height = 24f;
 
+    /// <summary>The height with each currency on its own row.</summary>
+    public const float StackedHeight = Height * 2;
+
+    private const int LargestAmountSharingARow = 9999;
+
     private Window _hostWindow = null!;
     private CurrencyElement? _goldElement;
     private CurrencyElement? _creditsElement;
+    private Button? _rowButtonElement;
 
     public int EntityId => entityId;
+
+    /// <summary>The height the row needs for the amounts held now: one row, or one per currency when it always stacks or a row with a button holds an amount past four digits.</summary>
+    public float RequiredHeight => StacksAmounts ? StackedHeight : Height;
+
+    private bool StacksAmounts =>
+        alwaysStacksAmounts ||
+        (rowButton is not null &&
+         _currencyView.TryGetCurrency(EntityId, out var currency) &&
+         (currency.Gold > LargestAmountSharingARow || currency.Credits > LargestAmountSharingARow));
 
     private readonly InventoryDropTarget _dropTarget = new(entityId);
 
@@ -61,20 +78,44 @@ public sealed class CurrencyRowContent(
     /// <summary>Creates the two elements on first call (when _hostWindow's own ContentSize is already final -- see Window.OnChildrenInitialized), just repositions/resizes them on every later call (the host window's own Resized, e.g. the outer window being drag-resized).</summary>
     private void Reposition(float width)
     {
-        var halfWidth = width / 2f;
+        var amountsWidth = width - (rowButton?.Width ?? 0f);
+        var halfWidth = amountsWidth / 2f;
+        var stacksAmounts = StacksAmounts;
+        var goldSize = new Vector2(stacksAmounts ? amountsWidth : halfWidth, Height);
+        var creditsPosition = stacksAmounts ? new Vector2(0, Height) : new Vector2(halfWidth, 0);
+        var creditsSize = new Vector2(stacksAmounts ? amountsWidth : amountsWidth - halfWidth, Height);
 
         if (_goldElement is null || _creditsElement is null)
         {
-            _goldElement = CreateElement(CurrencyType.Gold, new Vector2(0, 0), new Vector2(halfWidth, Height));
-            _creditsElement = CreateElement(CurrencyType.Credits, new Vector2(halfWidth, 0), new Vector2(width - halfWidth, Height));
+            _goldElement = CreateElement(CurrencyType.Gold, new Vector2(0, 0), goldSize);
+            _creditsElement = CreateElement(CurrencyType.Credits, creditsPosition, creditsSize);
+            if (rowButton is not null)
+            {
+                _rowButtonElement = CreateRowButton(rowButton, new Vector2(amountsWidth, 0));
+            }
         }
         else
         {
             _goldElement.SetRelativePosition(new Vector2(0, 0));
-            _goldElement.SetSize(new Vector2(halfWidth, Height));
-            _creditsElement!.SetRelativePosition(new Vector2(halfWidth, 0));
-            _creditsElement.SetSize(new Vector2(width - halfWidth, Height));
+            _goldElement.SetSize(goldSize);
+            _creditsElement!.SetRelativePosition(creditsPosition);
+            _creditsElement.SetSize(creditsSize);
+            _rowButtonElement?.SetRelativePosition(new Vector2(amountsWidth, 0));
         }
+    }
+
+    private Button CreateRowButton(CurrencyRowButton definition, Vector2 relativePosition)
+    {
+        var button = elementPoolService.CreateElement<Button>(_hostWindow, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(definition.Width, Height), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
+        });
+        button.SetText(definition.Label);
+        button.Enabled = definition.CanPress();
+        button.Clicked += _ => definition.Pressed();
+        _hostWindow.AddChild(button);
+        return button;
     }
 
     private CurrencyElement CreateElement(CurrencyType type, Vector2 relativePosition, Vector2 size)
@@ -102,6 +143,10 @@ public sealed class CurrencyRowContent(
     public void Update(GameTime gameTime)
     {
         RefreshAmounts();
+        if (_rowButtonElement is not null)
+        {
+            _rowButtonElement.Enabled = rowButton!.CanPress();
+        }
     }
 
     public void DrawContent(GameTime gameTime) { }

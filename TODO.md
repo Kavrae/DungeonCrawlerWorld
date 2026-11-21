@@ -3006,20 +3006,6 @@ Fix:
 Check by eye: tab buttons, dropdown and context-menu rows, Item Details lines and the hotbar's key labels. The space
 above and below the letters should look even.
 
-#### TOP PRIORITY: "Loot All" / "Take All" button on loot windows
-
-A button on the loot window (`SecondaryInventoryWindow`) that moves everything it holds -- every item stack and all
-currency -- to the player: labelled **"Loot All"** on a corpse and **"Take All"** on a container (a chest, an item pile,
-a destroyed shop), with the same action behind both: `LootCommands.TakeAll` (every stack, then all currency, marking it
-looted), which the loot window's context-menu "Take All" and the map's "Take All" on a chest or pile already call -- the
-button calls that one path, never a copy (IMPLEMENTATION-NOTES "UI consistency: one path for every input"), and the menu option's label follows the same
-corpse/container split (`EntityInteractionView.IsContainer`).
-- Where it sits: the window's footer (`Element` footer content), beside the currency row.
-- Disabled, not hidden, when there is nothing left to take; what happens to items that don't fit (no room for a new
-  stack) is whatever `LootEveryStack` already does -- show what stayed behind rather than silently leaving it.
-- Which label: a corpse is a dead creature (`DeadComponent` without a `ContainerComponent` of its own); decide whether a
-  destroyed shop or chest reads as a container ("Take All") -- the window kind is `ContainerWindowKind.Loot` for all of them.
-
 #### Footprint borders for the selected target and the player
 
 Asked 2026-11-13. A large entity's bounds are hard to read: a 3x3 player's sprite doesn't show where its footprint ends,
