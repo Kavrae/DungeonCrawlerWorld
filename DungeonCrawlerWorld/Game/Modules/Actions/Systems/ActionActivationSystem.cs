@@ -131,7 +131,7 @@ public sealed class ActionActivationSystem : ISystem
 
         public void StartCooldown(long now)
         {
-            if (action.Activator.Timing.CooldownFrames is { } cooldownFrames)
+            if (action.Activator.Timing.ResolveCooldownFrames(system._effectServices.AbilityScores, system._effectServices.StatModifiers, entityId) is { } cooldownFrames)
             {
                 system._actions.SetCooldown(entityId, action.Id, cooldownFrames, now);
             }

@@ -97,6 +97,7 @@ internal static class ActionContentCodecs
             ContentField.OptionalInteger("lf", "Action lock in frames (none: the entity's own)", 0, ushort.MaxValue),
             ContentField.OptionalInteger("cd", "Cooldown in frames", 0, ushort.MaxValue),
             ContentField.Boolean("rl", "Releases the action lock"),
+            ContentField.Boolean("cl", "Cooldown as long as the action lock"),
         ]);
 
         public override void WriteProperties(ContentWriter writer, ActionTiming value)
@@ -105,13 +106,25 @@ internal static class ActionContentCodecs
             writer.OptionalInteger("lf", value.ActionLockFrames);
             writer.OptionalInteger("cd", value.CooldownFrames);
             writer.Boolean("rl", value.ReleasesActionLock);
+            writer.Boolean("cl", value.CooldownMatchesActionLock);
         }
 
-        public override ActionTiming Read(ContentObject element) => new(
-            element.Enum<ActionTimingCategory>("c"),
-            ContentNumbers.UInt16(element.OptionalInteger("lf"), "lf"),
-            ContentNumbers.UInt16(element.OptionalInteger("cd"), "cd"),
-            element.Boolean("rl"));
+        public override ActionTiming Read(ContentObject element)
+        {
+            var cooldownFrames = ContentNumbers.UInt16(element.OptionalInteger("cd"), "cd");
+            var cooldownMatchesActionLock = element.Boolean("cl");
+            if (cooldownMatchesActionLock && cooldownFrames is not null)
+            {
+                throw new ContentFormatException("A timing's cooldown is either a number of frames (\"cd\") or as long as its action lock (\"cl\"), not both.");
+            }
+
+            return new ActionTiming(
+                element.Enum<ActionTimingCategory>("c"),
+                ContentNumbers.UInt16(element.OptionalInteger("lf"), "lf"),
+                cooldownFrames,
+                element.Boolean("rl"),
+                cooldownMatchesActionLock);
+        }
     }
 
     /// <summary>A toggle; "{}" is one that only holds its effects (ToggleSpec.HoldsEffectsOnly).</summary>

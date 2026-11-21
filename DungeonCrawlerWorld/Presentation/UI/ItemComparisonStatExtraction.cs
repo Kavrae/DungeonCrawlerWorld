@@ -208,6 +208,10 @@ public static class ItemComparisonStatExtraction
         {
             stats.Add(new ItemComparisonStat("activator:cooldown", $"Cooldown: {FormatSeconds(cooldownFrames)}", cooldownFrames, HigherIsBetter: false, Unit: StatUnit.Frames));
         }
+        else if (activator.Timing.CooldownMatchesActionLock)
+        {
+            stats.Add(new ItemComparisonStat("activator:cooldown", "Cooldown: as long as the action lock", null, HigherIsBetter: false));
+        }
 
         switch (activator)
         {

@@ -787,9 +787,9 @@ public sealed class HotbarContent(
     private float ComputeActionFillPercentage(int playerEntityId, ActionDefinition action)
     {
         var cooldownFraction = 0f;
-        if (_actions is not null && action.Activator.Timing.CooldownFrames is { } cooldownFrames && cooldownFrames > 0)
+        if (_actions is not null && actionStateView.CooldownFramesFor(playerEntityId, action.Activator.Timing) is { } cooldownFrames && cooldownFrames > 0)
         {
-            cooldownFraction = (float)_actions.CooldownFramesRemaining(playerEntityId, action.Id, simulationClock.CurrentFrame) / cooldownFrames;
+            cooldownFraction = System.Math.Min(1f, (float)_actions.CooldownFramesRemaining(playerEntityId, action.Id, simulationClock.CurrentFrame) / cooldownFrames);
         }
 
         if (cooldownFraction > 0f)
@@ -816,7 +816,7 @@ public sealed class HotbarContent(
     private float ComputeItemFillPercentage(int playerEntityId, ItemDefinition item, in InventoryItemStackComponent stack)
     {
         var cooldownFramesRemaining = stack.CooldownFramesRemaining(simulationClock.CurrentFrame);
-        if (cooldownFramesRemaining > 0 && item.Activator?.Timing.CooldownFrames is { } cooldownFrames && cooldownFrames > 0)
+        if (cooldownFramesRemaining > 0 && item.Activator is { } activator && actionStateView.CooldownFramesFor(playerEntityId, activator.Timing) is { } cooldownFrames && cooldownFrames > 0)
         {
             return System.Math.Min(1f, (float)cooldownFramesRemaining / cooldownFrames);
         }

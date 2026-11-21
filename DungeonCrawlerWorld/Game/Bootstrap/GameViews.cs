@@ -1,6 +1,5 @@
 using Game.Modules;
 using Game.Modules.Actions;
-using Game.Modules.Core.Components;
 using Game.Modules.Health;
 using Game.Modules.ProcessingTier;
 using Game.Spawning;
@@ -19,7 +18,6 @@ public sealed class GameViews
         EntityBodyParts = EntityBodyParts.For(componentManager, context.Definitions);
         EntityActions = EntityActions.For(componentManager, context.Actions, context.Definitions);
         EntityNaming = EntityNaming.For(componentManager, context.Definitions);
-        PlayerActionGate = new PlayerActionGate(componentManager.GetPackedPool<ActionLockComponent>(), context.EffectServices.AbilityScores, context.EffectServices.StatModifiers, world, context.SimulationClock);
         InventoryView = new InventoryView(componentManager, context.Items);
         ShopView = new ShopView(componentManager);
         CurrencyView = new CurrencyView(componentManager);
@@ -48,8 +46,6 @@ public sealed class GameViews
     public EntityActions EntityActions { get; }
 
     public EntityNaming EntityNaming { get; }
-
-    public PlayerActionGate PlayerActionGate { get; }
 
     public InventoryView InventoryView { get; }
 

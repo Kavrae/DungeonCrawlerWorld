@@ -35,7 +35,7 @@ public sealed class TestMapBuilder
     // unplayable (5-10fps) for manual testing. Revert that half once the performance
     // investigation these values are standing in for (see TODO.md) lands a real fix. Halved
     // again on top of that for Combat Overhaul: Dodge (TODO.md) -- the new deliberate, telegraphed
-    // combat style (windups to react to, a Dodge with a real cooldown cost) wants noticeably fewer
+    // combat style (windups to react to and Dodge) wants noticeably fewer
     // simultaneous attackers than the old spam-actions style did; this second halving is a
     // playtesting-tunable starting point, not a measured target.
     private const int GroundPopulationPercent = 3;

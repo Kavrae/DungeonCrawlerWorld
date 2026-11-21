@@ -106,6 +106,10 @@ public sealed class ActionStateView(ComponentManager componentManager, EntityAct
             ? ActivationQueries.FramesUntilReady(entityId, action, entityActions, _actionLocks, now)
             : 0;
 
+    /// <summary>The cooldown a use of something timed by timing would start for entityId now; null when it has none.</summary>
+    public ushort? CooldownFramesFor(int entityId, ActionTiming timing) =>
+        timing.ResolveCooldownFrames(effectServices.AbilityScores, effectServices.StatModifiers, entityId);
+
     /// <summary>Frames until the unit in entityId's stack stackInstanceId ends its own cooldown; 0 when it isn't cooling down or the entity doesn't hold the stack.</summary>
     public int ItemCooldownFramesRemaining(int entityId, uint stackInstanceId) =>
         InventoryQueries.TryFindByStackInstanceId(_inventoryStacks, entityId, stackInstanceId, out var stack) ? stack.CooldownFramesRemaining(Now) : 0;

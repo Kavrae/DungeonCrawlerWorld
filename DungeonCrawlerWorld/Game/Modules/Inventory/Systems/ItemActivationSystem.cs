@@ -301,7 +301,7 @@ public sealed class ItemActivationSystem : ISystem, IItemWindupResolver
 
         public void StartCooldown(long now)
         {
-            if (activator.Timing.CooldownFrames is { } cooldownFrames && _unitStackInstanceId != 0)
+            if (_unitStackInstanceId != 0 && activator.Timing.ResolveCooldownFrames(system._effectServices.AbilityScores, system._effectServices.StatModifiers, entityId) is { } cooldownFrames)
             {
                 _unitStackInstanceId = system.StartUnitCooldown(entityId, _unitStackInstanceId, cooldownFrames, now);
             }

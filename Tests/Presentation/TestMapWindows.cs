@@ -96,7 +96,6 @@ internal static class TestMapWindows
 
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
 
-        var playerActionGate = new PlayerActionGate(componentManager.GetPackedPool<ActionLockComponent>(), componentManager.GetPackedPool<AbilityScoresComponent>(), componentManager.GetMultiPool<StatModifierComponent>(), world, new SimulationClock());
         var auras = TestAuras.GlowOnlyCatalog();
         var auraView = new AuraView(new AuraField(world, terrain, auras, eventBus), auras);
 
@@ -108,7 +107,7 @@ internal static class TestMapWindows
         var mapGameOverlay = new MapGameOverlay(mapView, mapViewState, camera, actionTargeting, fontService);
 
         windowService.RegisterFactory(() => new MapWindow(
-            services, mapView, playerActionGate, mapViewState, eventBus,
+            services, mapView, mapViewState, eventBus,
             camera, mapRenderer, mapGameOverlay, actionTargeting, playerMovement, contextMenuController, floatingTextController, floatingTextRenderer, new AdminContextMenuOptions(TestAdminTools.Create(), static _ => { }), new PointerState()));
 
         var mapWindow = windowService.CreateElement<MapWindow>(null, new ElementOptions

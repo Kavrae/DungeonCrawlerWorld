@@ -927,48 +927,6 @@ is the exploit.
 - **Item Details.** It shows no "Stackable" line, because nothing stacks with itself. If an exception is ever allowed,
   it gets a line then.
 
-#### TOP PRIORITY: Dodge targeting for a player larger than 1x1
-
-Reported 2026-11-13. Every other shape is laid out around the caster's whole footprint (a Huge 3x3 player's area is
-centred on the footprint's middle tile), but Dodge is laid out around the footprint's anchor tile
-(`TransformComponent.Position`) as if the player were 1x1: its targetable tiles, its WASD hints and what WASD aims at all
-sit around one corner of the player.
-- **What Dodge should target:** the caster's own footprint (dodge in place) and every tile touching it -- an Adjacent
-  shape at the `Caster` anchor plus Self -- the same layout every other caster-anchored shape already gets from
-  `TargetResolution`. Change Dodge's record in `Actions.jsonl` (its `TargetingSpec`) rather than special-casing it;
-  `TargetingContentValidation` keeps it `GroundOnly`.
-- **What an aimed tile means:** a step of the whole footprint one tile toward it: the offset of the aimed tile from the
-  footprint, each axis clamped to -1..1 (a tile beside a side is a cardinal step, a corner tile a diagonal one; a tile
-  inside the footprint is a dodge in place). Today `ActionTargetingController.DodgeStepDirection` and
-  `KeepDodgeStepTiles` both subtract the anchor tile, which is only right for 1x1. Both go through one footprint rule,
-  and `PlayerCommands.CanStepToward` still decides which steps are offered.
-- **WASD:** each key steps in its cardinal direction when that step is possible
-  (`ActionTargetingController.TryClaimDodgeDirectionalKey`), and its hint letter
-  (`MapGameOverlay.DrawDodgeDirectionalHints`) sits on a tile on that side of the footprint. For an odd size that is the
-  middle tile of the side. For an even size no tile is in the middle, so one of the two middle tiles is picked for the
-  hint and the aim; which one changes nothing about the step, since every tile on a side gives the same direction.
-  Decide the pick once (for example, the one nearer the cursor, or always the lower/left one) and use it for both the
-  hint and the key, so what is drawn is what the key does.
-- **NPCs:** check whether any NPC behavior aims Dodge from its anchor; if so it goes through the same rule.
-- Tests: a 1x1, 2x2 and 3x3 caster each offer exactly their footprint and its ring; an aimed side tile steps one
-  cardinal tile, a corner tile one diagonal, a footprint tile in place; each WASD key aims a tile on its side and steps in
-  its direction; a blocked side offers no tile and draws no hint.
-- In-game check: "Apply > Huge" (or whatever makes the player 3x3, then 2x2) and arm Dodge: expect the green area to ring
-  the whole player, W/A/S/D on the middle of each side (one of the two middles at 2x2), and each key to move the player
-  one tile that way; click a corner tile and expect a diagonal dodge.
-
-#### Remove gameplay limitations: Dodge cooldown, Inspect lock
-
-Restrictions whose only job is to stop the player doing something often cost them nothing but time they already
-pay. Take them out where the opportunity cost alone is enough.
-- **Dodge: no cooldown.** Drop its 4 s cooldown (`cd` in Dodge's record in `Actions.jsonl`) and the description
-  line saying it can't be used as safer movement. The player may spam it and dodge-move everywhere if they want:
-  the cost is that they can do nothing else while dodging.
-- **Inspect: no action lock or cooldown.** The map's "Inspect" option neither checks nor starts the action lock
-  (`MapWindow`'s `InspectEntity` and the option's Enabled, `IsInspectionFree`), so `PlayerActionGate` likely goes
-  with it. Simpler logic, and the player can check new targets as fast as they like: the cost is the time it takes
-  to read what it shows.
-
 #### Resolve highest performance costs
 
 Find and fix what costs the most per frame. Headless Release, seed 1, frames 600-3600, map 3072 (2026-10-29,
@@ -3431,7 +3389,8 @@ entry. Three parts:
   action lock; actions stop being gated by a step. Decided rules:
   - **Delayed windups**: a windup starts once the current step's walk animation has finished, and
     blocks walking until it completes or is cancelled.
-  - **Dodge**: sets its own cooldown and the movement cooldown, never the action lock (it is FreeCast).
+  - **Dodge**: sets its own cooldown (as long as the action lock today; decide whether it follows the
+    movement cooldown instead) and the movement cooldown, never the action lock (it is FreeCast).
   - **Stagger**: sets both the movement cooldown and the action lock, so the entity can neither move
     nor act.
   - **Movement speed**: one value sets both the walk animation's duration and the movement cooldown,

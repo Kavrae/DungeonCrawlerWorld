@@ -42,6 +42,7 @@ public sealed class ActionActivationSystemTests
     private static readonly Guid DelayedWithActivationEffectsActionId = new("8e1c5a93-4d27-4b6f-a0e8-3f9b7d2c6a15");
     private static readonly Guid FreeCastReleasingLockActionId = new("88888888-8888-8888-8888-888888888888");
     private static readonly Guid ImmediateStandardLockActionId = new("5f2a7c19-3e84-4d06-b1c9-8d4e6a20f7b3");
+    private static readonly Guid FreeCastLockLengthCooldownActionId = new("c3d81f4a-62b7-4e09-9a5d-17e4b8f2c360");
     private static readonly Vector3Int TargetTile = new(5, 5, 0);
 
     private sealed class FakeMapQuery : IMapQuery
@@ -112,6 +113,9 @@ public sealed class ActionActivationSystemTests
         actionCatalog.Register(new ActionDefinition(
             FreeCastReleasingLockActionId, "Test Lock-Releasing FreeCast", null, "#", default, [], [Effect.None],
             new SpellActivator(targeting, new ActionTiming(ActionTimingCategory.FreeCast, CooldownFrames: 40, ReleasesActionLock: true))));
+        actionCatalog.Register(new ActionDefinition(
+            FreeCastLockLengthCooldownActionId, "Test FreeCast Cooling For Its Lock", null, "#", default, [], [Effect.None],
+            new SpellActivator(targeting, new ActionTiming(ActionTimingCategory.FreeCast, CooldownMatchesActionLock: true))));
 
         actionCatalog.Register(new ActionDefinition(
             ImmediateWithActivationEffectsActionId, "Test Immediate Attack Draining Its User", null, "#", default, [], damageEffects,
@@ -224,6 +228,35 @@ public sealed class ActionActivationSystemTests
         system.Update(default, 0);
 
         Assert.AreEqual(30u, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).UnlockedAtFrame, "Dexterity 300 is 15 frames, doubled by the modifier.");
+    }
+
+    [TestMethod]
+    public void FreeCast_CooldownMatchingTheActionLock_LastsTheCastersStandardLock()
+    {
+        var (system, componentManager, actionCatalog, _) = Build();
+        GrantAction(componentManager, actionCatalog, CasterEntityId, FreeCastLockLengthCooldownActionId, 0);
+        AbilityScoreEffects.Grant(componentManager, CasterEntityId, AbilityScoreType.Dexterity, 300);
+        componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(FreeCastLockLengthCooldownActionId, TestSelections.At(TargetTile)));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual((ushort)15, CooldownOf(componentManager, actionCatalog, CasterEntityId, FreeCastLockLengthCooldownActionId), "Dexterity 300 is a 15-frame lock.");
+    }
+
+    [TestMethod]
+    public void FreeCast_CooldownMatchingTheActionLock_FollowsTheCastersActionLockModifiers()
+    {
+        var (system, componentManager, actionCatalog, _) = Build();
+        GrantAction(componentManager, actionCatalog, CasterEntityId, FreeCastLockLengthCooldownActionId, 0);
+        AbilityScoreEffects.Grant(componentManager, CasterEntityId, AbilityScoreType.Dexterity, 300);
+        StatModifierEffects.Apply(componentManager, CasterEntityId, StatModifierTarget.ActionLockFrames, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff,
+            canModify: false, magnitude: 1f, FrameDeadline.Never, ActionSource.Admin);
+        componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(FreeCastLockLengthCooldownActionId, TestSelections.At(TargetTile)));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual((ushort)30, CooldownOf(componentManager, actionCatalog, CasterEntityId, FreeCastLockLengthCooldownActionId), "15 frames doubled by the modifier.");
+        Assert.IsFalse(componentManager.GetPackedPool<ActionLockComponent>().Has(CasterEntityId), "FreeCast still sets no lock of its own.");
     }
 
     [TestMethod]

@@ -61,13 +61,27 @@ games' own dodge timings -- the numbers used are TODO.md's own, not independentl
 
 - Three default actions every race grants (`Game/Modules/Actions/Definitions/DirectActions/`):
   `QuickAttackAction` (Immediate, replaces `PunchAction` in place, same catalog `Id`, default R key),
-  `PowerAttackAction` (new, `Delayed`, 1s windup, default Q key), `DodgeAction` (new, `FreeCast`, own
-  flat 4s `CooldownFrames`, default F key). All three tagged `Dodgeable` except Magic Missile/AOE-style
+  `PowerAttackAction` (new, `Delayed`, 1s windup, default Q key), `DodgeAction` (new, `FreeCast`,
+  cooldown as long as the action lock, default F key). All three tagged `Dodgeable` except Magic Missile/AOE-style
   effects, which stay untagged (undodgeable) -- `Tag.Dodgeable` gates `ActivationEffectResolver.Apply`'s
-  per-occupant skip against a target holding `DodgingComponent`. Dodge is gated by its own cooldown, not
-  an increased shared-lock multiplier -- a `FreeCastLockMultiplier` seam on `ActionTiming` was tried and
-  removed; `ActionTiming.CooldownFrames` (already shared by every other `FreeCast` action) covers this
-  with no new mechanism needed.
+  per-occupant skip against a target holding `DodgingComponent`. Dodge's cooldown is as long as its user's
+  action lock (`ActionTiming.CooldownMatchesActionLock`, `"cl"`; a flat 4 s until 2026-11-20): Dodge
+  releases the lock, so with no cooldown repeated Dodges stepped faster than walking; with one as long as the
+  lock, dodge-moving is no faster than walking (a step's lock is the standard lock plus movement modifiers). The length is resolved when each use starts it
+  (`ActionTiming.ResolveCooldownFrames`, the lock's own rule: `ActionLockFrames`, else the standard lock from
+  Dexterity and `ActionLockFrames` modifiers), so it follows every change to the lock, for actions and items
+  alike; a running cooldown keeps the length it started with. A timing states `"cd"` or `"cl"`, never both
+  (the reader refuses the record). A `FreeCastLockMultiplier` seam on `ActionTiming` was tried and removed.
+- Dodge for a caster of any footprint (2026-11-20): an aimed tile means a step of the whole footprint one tile
+  toward it, each axis -1..1 by which side of the footprint it lies on, and a tile inside the footprint a dodge
+  in place -- one rule, `Presentation.UI.DodgeFootprint.StepDirection`, read by the offered tiles
+  (`ActionTargetingController.KeepDodgeStepTiles`, still filtered by `PlayerCommands.CanStepToward`) and the
+  queued step. Each WASD key aims at, and its hint letter is drawn on, `DodgeFootprint.SideTile`: the middle of
+  that side, the first of the two middles (left, or upper) for an even size. Dodge's record kept its
+  `TargetingSpec` (SingleTarget, range 1, at the path end): its range band is already measured from the whole
+  footprint, footprint included, so it resolves to the footprint and its ring; only the anchor-relative filter
+  and step were wrong (since 2026-11-12, when Dodge was restricted to the tiles movement could take). No NPC
+  aims Dodge.
 - `DodgingComponent`/`DodgeExpirySystem` (`Game/Modules/Actions/Components|Systems/`): a short,
   Dexterity-scaled immunity window (`DodgeEffects.ComputeWindowFrames`, 0.5s @ Dex 1 -> 1.0s @ Dex 300,
   `AbilityScoreMath.Lerp` low-to-high since more Dexterity is the benefit here) granted by
@@ -788,8 +802,8 @@ comes from Dexterity, replacing the per-race frame counts (Goblin 54, Fairy/Ghos
   order); a cached value would need a sync hook at each. The read happens only when an entity locks.
 - `ActionLockGate.Lock` takes a required frame count, so Core stays free of ability scores; callers
   pass `ActionTiming.ActionLockFrames ?? StandardActionLockFrames.ResolveForEntity(...)` (a
-  `LockFramesFor` helper in `ActionActivationSystem` and `ItemActivationSystem`). `Windups.Begin` and
-  `PlayerActionGate` the same.
+  `LockFramesFor` helper in `ActionActivationSystem` and `ItemActivationSystem`). `Windups.Begin` the
+  same.
 - Three kinds of lock length, kept apart: `ActionLockFrames` scales the standard lock (steps
   included); `MovementLockFrames` (leg damage) layers on top for steps only, then the diagonal
   multiplier; an explicit `ActionTiming.ActionLockFrames`, Paralysis and the spawn stagger ignore both.
@@ -941,14 +955,15 @@ buffer). Decisions, so they aren't re-asked:
   rest and has no activation request pending. Releasing keys cancels nothing. The old 0.25s repeat cooldown and
   the "only while at rest" queue gate in `PlayerMovementController` are gone; the action lock alone paces
   steps. Opposing keys still sum to neutral, and a fresh neutral press clears a buffered step.
-- FreeCast actions (only Dodge today) ignore the lock, so one that's off cooldown is written at once, still
+- FreeCast actions (only Dodge today) ignore the lock, so one that's ready is written at once, still
   emptying the slot.
   Escape/right-click cancel order: disarm -> clear the buffer -> cancel the windup; each reports "cancelled" so
   a no-op still falls through to the corpse context menu.
 - `ActionTiming.ReleasesActionLock` (Dodge only): a successful activation cancels the caster's windup and
-  releases its lock, whatever set it, for NPCs too. No penalty beyond Dodge's own cooldown. The Dodge's step is
-  written by the buffer only on the player's `ActivationUsedEvent` for that Dodge, so a failed Dodge (on
-  cooldown) no longer gives a free step.
+  releases its lock, whatever set it, for NPCs too. The Dodge's step is written by the buffer only on the player's
+  `ActivationUsedEvent` for that Dodge, so a refused Dodge gives no free step.
+- The map's "Inspect" option neither checks nor starts the action lock (2026-11-20; `PlayerActionGate`, which
+  only it used, is gone): checking new targets costs only the time it takes to read them.
 - `MovementSystem` moves the player every frame (`BeginFrame`) and skips them in its tiered buckets --
   otherwise the player was only visited every 15 frames and a step (Dodge's included) landed up to 0.25s late.
 - Stagger = cancelling a buffered action. `Tag.Staggering` (PowerAttack only; keep it rare) makes

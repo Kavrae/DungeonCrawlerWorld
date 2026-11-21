@@ -4,7 +4,7 @@ using Engine.ECS.Systems;
 
 namespace Game.Modules.Core.Components;
 
-/// <summary>The one place the shared action lock is read and written. Every gate (movement, Immediate/Delayed activation, consumables, inspection) goes through IsBlocked, and every lock through Lock.</summary>
+/// <summary>The one place the shared action lock is read and written. Every gate (movement, Immediate/Delayed activation, consumables) goes through IsBlocked, and every lock through Lock.</summary>
 /// <remarks>Deadline-based: locking writes the frame the entity is next free on, and nothing ticks it down (see ActionLockComponent). Both methods therefore need the current simulation frame -- a system passes EngineTime.FrameCount, anything else a SimulationClock.</remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public static class ActionLockGate

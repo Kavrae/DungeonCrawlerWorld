@@ -26,7 +26,7 @@ internal static class ItemCooldownContentValidation
 
     /// <summary>The cooldown rule item breaks, as a sentence naming it; none for an item with no activator.</summary>
     public static IReadOnlyList<string> ProblemsOf(ItemDefinition item) =>
-        item.Activator is PotionActivator or ScrollActivator or ConsumableActivator && item.Activator.Timing.CooldownFrames is { } cooldownFrames
-            ? [$"Item '{item.Name}' declares a cooldown ({cooldownFrames} frames) but is used up when it is used: its cooldown belongs to the used unit, which is gone. Leave the cooldown out."]
+        item.Activator is PotionActivator or ScrollActivator or ConsumableActivator && (item.Activator.Timing.CooldownFrames is not null || item.Activator.Timing.CooldownMatchesActionLock)
+            ? [$"Item '{item.Name}' declares a cooldown but is used up when it is used: its cooldown belongs to the used unit, which is gone. Leave the cooldown out."]
             : [];
 }

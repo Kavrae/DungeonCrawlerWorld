@@ -113,13 +113,6 @@ public sealed class MapGameOverlay : IDisposable
         }
     }
 
-    private bool TryGetPlayerPosition(out Vector3Int position)
-    {
-        var found = _mapView.TryGetOccupant(_mapView.PlayerEntityId, out var player);
-        position = player.Position;
-        return found;
-    }
-
     /// <summary>
     /// Every tile the currently-armed ability could be aimed at (see MapViewState.TargetableTiles,
     /// computed once at arm time) -- a 50% CombatTargetPalette.PlayerArmColor wash for "targetable, not
@@ -192,18 +185,9 @@ public sealed class MapGameOverlay : IDisposable
         }
     }
 
-    /// <summary>WASD's own screen-direction offsets from the player -- matches ActionTargetingController.TryClaimDodgeDirectionalKey's identical mapping.</summary>
-    private static readonly (Vector3Int Offset, string Label)[] DodgeDirectionalHints =
-    [
-        (new Vector3Int(0, -1, 0), "W"),
-        (new Vector3Int(0, 1, 0), "S"),
-        (new Vector3Int(-1, 0, 0), "A"),
-        (new Vector3Int(1, 0, 0), "D"),
-    ];
-
     /// <summary>
-    /// While Dodge is armed, labels each of its four cardinal reachable tiles with the WASD key
-    /// that confirms toward it -- the only action whose confirm can come from a movement key
+    /// While Dodge is armed, labels the tile each WASD key aims at on its side of the player's footprint
+    /// (DodgeFootprint.SideTile) with that key -- the only action whose confirm can come from a movement key
     /// instead of its own hotkey (ActionTargetingController.TryClaimDodgeDirectionalKey), so it
     /// needs its own affordance the player wouldn't otherwise expect. Diagonal neighbors are still
     /// reachable (click, or same-key-then-click), just not via a single key -- no hint drawn there.
@@ -211,14 +195,14 @@ public sealed class MapGameOverlay : IDisposable
     /// </summary>
     private void DrawDodgeDirectionalHints(SpriteEffectBatch spriteBatch)
     {
-        if (_mapViewState.ArmedActionId != BuiltInActionIds.Dodge || _mapViewState.TargetableTiles is not { } targetableTiles || !TryGetPlayerPosition(out var playerPosition))
+        if (_mapViewState.ArmedActionId != BuiltInActionIds.Dodge || _mapViewState.TargetableTiles is not { } targetableTiles || !_mapView.TryGetOccupant(_mapView.PlayerEntityId, out var player))
         {
             return;
         }
 
-        foreach (var (offset, label) in DodgeDirectionalHints)
+        foreach (var (_, label, direction) in DodgeFootprint.DirectionalKeys)
         {
-            var tile = playerPosition + offset;
+            var tile = DodgeFootprint.SideTile(direction, player.Position, player.Size);
             if (!targetableTiles.Contains(tile) || !_camera.TryGetTileRectangle(tile.X, tile.Y, out var tileRectangle))
             {
                 continue;

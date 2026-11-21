@@ -54,7 +54,6 @@ public static class ElementFactoryRegistry
         elementPool.RegisterFactory(() => new MapWindow(
             services,
             mapView,
-            views.PlayerActionGate,
             mapViewState,
             ecsContext.EventBus,
             camera,

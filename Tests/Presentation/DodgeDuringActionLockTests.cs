@@ -24,6 +24,7 @@ public sealed class DodgeDuringActionLockTests
     private static readonly Vector3Int Start = new(10, 10, (int)MapLayer.Ground);
     private static readonly Vector3Int North = new(10, 9, (int)MapLayer.Ground);
     private static readonly Vector3Int NorthEast = new(11, 9, (int)MapLayer.Ground);
+    private static readonly Vector3Int TwoEastOfNorth = new(12, 9, (int)MapLayer.Ground);
 
     private sealed class Harness
     {
@@ -134,7 +135,7 @@ public sealed class DodgeDuringActionLockTests
     }
 
     [TestMethod]
-    public void DirectionalDodge_StillOnCooldown_DoesNotStepDuringTheLock()
+    public void DirectionalDodge_AgainDuringTheFirstDodgesLock_DoesNotStep()
     {
         var harness = Build();
         harness.WaitUntilFree();
@@ -148,7 +149,25 @@ public sealed class DodgeDuringActionLockTests
         harness.Frame(() => harness.DirectionalDodge(Keys.D));
         harness.Frame();
 
-        Assert.AreEqual(NorthEast, harness.Position, "Dodge's own cooldown must still stop it being used as movement.");
+        Assert.AreEqual(NorthEast, harness.Position, "Dodge's cooldown, as long as the action lock, must stop it being used as faster movement.");
         Assert.IsTrue(harness.IsLocked);
+    }
+
+    [TestMethod]
+    public void DirectionalDodge_OnceTheFirstDodgesLockEnds_StepsAgain()
+    {
+        var harness = Build();
+        harness.WaitUntilFree();
+
+        harness.Frame(() => harness.Move(Keys.W));
+        harness.Frame(() => harness.DirectionalDodge(Keys.D));
+        harness.Frame();
+        Assert.AreEqual(NorthEast, harness.Position, "Precondition: the first Dodge stepped.");
+
+        harness.WaitUntilFree();
+        harness.Frame(() => harness.DirectionalDodge(Keys.D));
+        harness.Frame();
+
+        Assert.AreEqual(TwoEastOfNorth, harness.Position, "Dodge's cooldown is no longer than the action lock, so it is ready again once the lock ends.");
     }
 }

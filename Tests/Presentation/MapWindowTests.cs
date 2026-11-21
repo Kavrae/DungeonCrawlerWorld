@@ -1621,9 +1621,10 @@ public sealed class MapWindowTests
     }
 
     [TestMethod]
-    public void TryOpenEntityContextMenuAt_BlockingEntity_OpensMenuWithInspectDisabledWithoutActionLockComponent()
+    public void TryOpenEntityContextMenuAt_BlockingEntity_WhilePlayerIsLocked_OpensMenuWithInspectEnabled()
     {
         var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        componentManager.Merge(PlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 600, unlockedAtFrame: 600));
         var targetPosition = new Vector3Int(101, 100, 0);
         var transform = new TransformComponent(targetPosition, new Vector2Byte(1, 1));
         componentManager.Merge(CorpseEntityId, transform);
@@ -1636,14 +1637,11 @@ public sealed class MapWindowTests
         Assert.HasCount(2, rows); // [0] header, [1] Inspect.
         var inspectButton = (Button)rows[1];
         Assert.AreEqual("Inspect", MenuRows.LabelOf(inspectButton));
-        // Disabled -- ActionLockGate.IsBlocked treats "no ActionLockComponent at all" (this
-        // test never merges one for the player) the same as "locked," matching every other
-        // ActionLockGate consumer's own convention.
-        Assert.IsFalse(inspectButton.Enabled);
+        Assert.IsTrue(inspectButton.Enabled);
     }
 
     [TestMethod]
-    public void ContextMenuInspectOption_Selected_SetsDetailInspectionAndLocksPlayer()
+    public void ContextMenuInspectOption_Selected_SetsDetailInspectionWithoutLockingPlayer()
     {
         var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
         componentManager.Merge(PlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
@@ -1659,7 +1657,7 @@ public sealed class MapWindowTests
 
         Assert.AreEqual(InspectionMode.Detail, mapViewState.InspectionMode);
         Assert.AreEqual(CorpseEntityId, mapViewState.InspectedEntityId);
-        Assert.IsTrue(ActionLockGate.IsBlocked(componentManager.GetPackedPool<ActionLockComponent>(), PlayerEntityId, now: 0));
+        Assert.IsFalse(ActionLockGate.IsBlocked(componentManager.GetPackedPool<ActionLockComponent>(), PlayerEntityId, now: 0));
     }
 
     [TestMethod]

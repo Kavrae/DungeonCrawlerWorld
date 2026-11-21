@@ -358,18 +358,9 @@ public sealed class ActionTargetingController(
     /// directly (alongside, and after, PlayerMovementController.HandleInput -- see that class's
     /// own doc comment for the ordering).
     /// </summary>
-    /// <summary>WASD-to-direction offsets Dodge confirms toward -- diagonals aren't reachable by a single key today (see MapWindow's own WASD hint glyph, which only ever marks these four cardinal tiles), matching this same set.</summary>
-    private static readonly (Keys Key, Vector3Int Direction)[] DodgeDirectionalKeys =
-    [
-        (Keys.W, new Vector3Int(0, -1, 0)),
-        (Keys.S, new Vector3Int(0, 1, 0)),
-        (Keys.A, new Vector3Int(-1, 0, 0)),
-        (Keys.D, new Vector3Int(1, 0, 0)),
-    ];
-
     /// <summary>
-    /// While Dodge is armed, a freshly-pressed WASD key confirms Dodge toward that direction
-    /// instead of moving normally -- adds the key to claimedKeys so PlayerMovementController.
+    /// While Dodge is armed, a freshly-pressed WASD key confirms Dodge toward that direction, aimed at the tile on that
+    /// side of the player's footprint (DodgeFootprint.SideTile), instead of moving normally -- adds the key to claimedKeys so PlayerMovementController.
     /// HandleInput skips it this frame (see that class's own doc comment on the claimed-keys
     /// mechanism). Called by MapWindow.OnHotkeysAction before PlayerMovementController.HandleInput,
     /// every frame, whether or not Dodge is actually armed -- a no-op the rest of the time.
@@ -381,7 +372,7 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        foreach (var (key, direction) in DodgeDirectionalKeys)
+        foreach (var (key, _, direction) in DodgeFootprint.DirectionalKeys)
         {
             if (!Window.WasKeyPressed(keyboardState, previousKeyboardState, key))
             {
@@ -389,7 +380,7 @@ public sealed class ActionTargetingController(
             }
 
             claimedKeys.Add(key);
-            TryActivateArmed(transform.Position + direction, isMapClick: true, fallsBackFromUntargetableTile: false);
+            TryActivateArmed(DodgeFootprint.SideTile(direction, transform.Position, transform.Size), isMapClick: true, fallsBackFromUntargetableTile: false);
             return;
         }
     }
@@ -750,8 +741,9 @@ public sealed class ActionTargetingController(
     /// Called on arming and every UpdateHoveredTile after, so the area follows a caster that moves while armed. It resolves
     /// again only when something the tiles depend on changed (ReachableAreaKey): the caster's position or size, the
     /// effective targeting (a range modifier or scroll scaling that starts or ends mid-arm), or the walls and map edge.
-    /// An armed Dodge offers only its own tile and the tiles the player could step to (PlayerCommands.CanStepToward), and
-    /// resolves every call: who stands where isn't in the key, and its area is the 3x3 block.
+    /// An armed Dodge offers only the player's footprint and the tiles around it whose step the player could take
+    /// (DodgeFootprint.StepDirection, PlayerCommands.CanStepToward), and resolves every call: who stands where isn't in
+    /// the key, and its area is only the footprint's ring.
     /// </remarks>
     private void RefreshTargetableTiles(TargetingSpec targeting, Vector3Int currentPosition, Vector2Byte currentSize)
     {
@@ -766,8 +758,8 @@ public sealed class ActionTargetingController(
         targetingView.ResolveReachable(targeting, currentPosition, currentSize, _resolvedTilesBuffer, _reachedTilesBuffer);
         if (isDodgeArmed)
         {
-            KeepDodgeStepTiles(_resolvedTilesBuffer, currentPosition);
-            KeepDodgeStepTiles(_reachedTilesBuffer, currentPosition);
+            KeepDodgeStepTiles(_resolvedTilesBuffer, currentPosition, currentSize);
+            KeepDodgeStepTiles(_reachedTilesBuffer, currentPosition, currentSize);
         }
 
         _aimableTiles.SetTo(CollectionsMarshal.AsSpan(_resolvedTilesBuffer));
@@ -775,14 +767,14 @@ public sealed class ActionTargetingController(
         mapViewState.TargetableTiles = _targetableTiles;
     }
 
-    /// <summary>Removes from tiles, in place and in order, every tile but the caster's own that the player couldn't step to.</summary>
-    private void KeepDodgeStepTiles(List<Vector3Int> tiles, Vector3Int casterPosition)
+    /// <summary>Removes from tiles, in place and in order, every tile outside the caster's footprint whose step (DodgeFootprint.StepDirection) the player couldn't take.</summary>
+    private void KeepDodgeStepTiles(List<Vector3Int> tiles, Vector3Int casterPosition, Vector2Byte casterSize)
     {
         var keptCount = 0;
         for (var index = 0; index < tiles.Count; index++)
         {
             var tile = tiles[index];
-            if (tile == casterPosition || playerCommands.CanStepToward(tile - casterPosition))
+            if (DodgeFootprint.StepDirection(tile, casterPosition, casterSize) is not { } direction || playerCommands.CanStepToward(direction))
             {
                 tiles[keptCount++] = tile;
             }
@@ -996,24 +988,13 @@ public sealed class ActionTargetingController(
             // comment for why it also reads SourceEntityId rather than TargetEntityId, in case
             // something else shares that tile. Dodge is Ground only, so this is all its selection is.
             selection = TargetSelection.Ground(casterTransform.Position) with { MaximumRange = selection.MaximumRange };
-            stepDirectionOnActivation = DodgeStepDirection(aimedTile, casterTransform.Position);
+            stepDirectionOnActivation = DodgeFootprint.StepDirection(aimedTile, casterTransform.Position, casterTransform.Size);
         }
 
         uiLayers.CloseAllClosableWindows();
 
         playerCommands.QueueAction(actionId, selection, stepDirectionOnActivation);
     }
-
-    /// <summary>The one-tile direction a Dodge aimed at <paramref name="aimedTile"/> steps in, or null for a Dodge in place.</summary>
-    /// <remarks>
-    /// Dodge's own targeting (SingleTarget, Range 1, the 3x3 block) aims at exactly one tile -- self, or one
-    /// adjacent tile. It is kept as a direction because the Dodge may wait in the buffer while the player moves: the
-    /// step is resolved from wherever the player stands when it activates, and goes through PlayerCommands to
-    /// MovementComponent.NextMapPosition, the same path ordinary movement uses. MovementSystem's own
-    /// occupancy/wall/diagonal validation keeps the caster in place if the tile turns out occupied.
-    /// </remarks>
-    private static Vector3Int? DodgeStepDirection(Vector3Int aimedTile, Vector3Int casterPosition) =>
-        aimedTile != casterPosition ? aimedTile - casterPosition : null;
 
     /// <summary>Item counterpart to QueueActionActivation -- ItemActivationSystem is the only thing that applies its gameplay effects. See QueueActionActivation's own doc comment for why it also closes every closable window here.</summary>
     private void QueueItemActivation(uint stackInstanceId, TargetSelection selection, HotkeySlot? activatedFromSlot)

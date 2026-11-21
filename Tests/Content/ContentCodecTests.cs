@@ -181,6 +181,16 @@ public sealed class ContentCodecTests
     }
 
     [TestMethod]
+    public void ATimingWithBothACooldownAndALockLengthCooldown_FailsTheRecord()
+    {
+        var text = "{\"c\":\"FreeCast\",\"cd\":60,\"cl\":true}";
+        using var document = JsonDocument.Parse(text);
+
+        var failure = Assert.Throws<ContentFormatException>(() => ContentObject.Read<ActionTiming>(document.RootElement, Types, References));
+        StringAssert.Contains(failure.Message, "not both");
+    }
+
+    [TestMethod]
     public void AnOutOfRangeNumber_FailsTheRecord()
     {
         var text = "{\"e\":[{\"$\":\"DirectDamage\",\"mn\":3,\"mx\":40000}]}";

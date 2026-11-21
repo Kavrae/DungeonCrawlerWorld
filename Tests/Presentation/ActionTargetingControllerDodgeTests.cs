@@ -28,7 +28,10 @@ public sealed class ActionTargetingControllerDodgeTests
     private const int PlayerEntityId = 1;
     private static readonly Vector3Int PlayerPosition = new(5, 5, 0);
 
-    private static (ActionTargetingController ActionTargeting, MapViewState MapViewState, ComponentManager ComponentManager, PlayerMovementController PlayerMovement, SimulationClock Clock, EventBus EventBus) Build(params Vector3Int[] wallTiles)
+    private static (ActionTargetingController ActionTargeting, MapViewState MapViewState, ComponentManager ComponentManager, PlayerMovementController PlayerMovement, SimulationClock Clock, EventBus EventBus) Build(params Vector3Int[] wallTiles) =>
+        BuildWithFootprint(new Vector2Byte(1, 1), wallTiles);
+
+    private static (ActionTargetingController ActionTargeting, MapViewState MapViewState, ComponentManager ComponentManager, PlayerMovementController PlayerMovement, SimulationClock Clock, EventBus EventBus) BuildWithFootprint(Vector2Byte footprintSize, params Vector3Int[] wallTiles)
     {
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(20, 20, 1)), playerEntityId: PlayerEntityId);
         if (wallTiles.Length > 0)
@@ -44,7 +47,7 @@ public sealed class ActionTargetingControllerDodgeTests
 
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(20, 10));
 
-        TestTransforms.Set(componentManager, PlayerEntityId, new TransformComponent(PlayerPosition, new Vector2Byte(1, 1)));
+        TestTransforms.Set(componentManager, PlayerEntityId, new TransformComponent(PlayerPosition, footprintSize));
         componentManager.Merge(PlayerEntityId, new MovementComponent(null, null));
         componentManager.Merge(PlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(BuiltInActionIds.Dodge, overrideDefinition: null));
@@ -194,6 +197,62 @@ public sealed class ActionTargetingControllerDodgeTests
         Assert.IsFalse(componentManager.GetPackedPool<PendingActionActivationComponent>().Has(PlayerEntityId), "A step is a direction: into a wall it lands nowhere, never on a tile beside it.");
         Assert.AreEqual(BuiltInActionIds.Dodge, mapViewState.ArmedActionId);
         Assert.Contains(Keys.D, claimedKeys);
+    }
+
+    [TestMethod]
+    [DataRow(1)]
+    [DataRow(2)]
+    [DataRow(3)]
+    public void ArmingDodge_OffersExactlyTheFootprintAndTheRingAroundIt(int footprintLength)
+    {
+        var (actionTargeting, mapViewState, _, _, _, _) = BuildWithFootprint(new Vector2Byte((byte)footprintLength, (byte)footprintLength));
+
+        actionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
+
+        var expected = new HashSet<Vector3Int>();
+        for (var x = PlayerPosition.X - 1; x <= PlayerPosition.X + footprintLength; x++)
+        {
+            for (var y = PlayerPosition.Y - 1; y <= PlayerPosition.Y + footprintLength; y++)
+            {
+                expected.Add(new Vector3Int(x, y, PlayerPosition.Z));
+            }
+        }
+
+        Assert.IsNotNull(mapViewState.TargetableTiles);
+        Assert.IsTrue(expected.SetEquals(mapViewState.TargetableTiles), $"Offered: {string.Join(", ", mapViewState.TargetableTiles)}");
+    }
+
+    [TestMethod]
+    [DataRow(Keys.W, 0, -1)]
+    [DataRow(Keys.S, 0, 1)]
+    [DataRow(Keys.A, -1, 0)]
+    [DataRow(Keys.D, 1, 0)]
+    public void TryClaimDodgeDirectionalKey_HugePlayer_StepsTheWholeFootprintOneTileThatWay(Keys key, int stepX, int stepY)
+    {
+        var (actionTargeting, _, componentManager, _, _, eventBus) = BuildWithFootprint(new Vector2Byte(3, 3));
+        actionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
+
+        actionTargeting.TryClaimDodgeDirectionalKey(new KeyboardState(key), new KeyboardState(), []);
+        ActivateDodge(componentManager, eventBus);
+
+        Assert.AreEqual(PlayerPosition + new Vector3Int(stepX, stepY, 0), componentManager.GetPackedPool<MovementComponent>().GetReadonly(PlayerEntityId).NextMapPosition);
+    }
+
+    [TestMethod]
+    public void ArmingDodge_HugePlayerWithAWallOnOneSide_OffersNothingOnThatSide_AndItsKeyQueuesNothing()
+    {
+        var wallBesideTheEastSide = new Vector3Int(PlayerPosition.X + 3, PlayerPosition.Y + 1, PlayerPosition.Z);
+        var (actionTargeting, mapViewState, componentManager, _, _, _) = BuildWithFootprint(new Vector2Byte(3, 3), wallBesideTheEastSide);
+
+        actionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
+
+        Assert.IsNotNull(mapViewState.TargetableTiles);
+        Assert.IsFalse(mapViewState.TargetableTiles.Any(tile => tile.X == PlayerPosition.X + 3), "Every tile on the east side steps east, which the wall blocks.");
+        Assert.Contains(new Vector3Int(PlayerPosition.X - 1, PlayerPosition.Y + 1, PlayerPosition.Z), mapViewState.TargetableTiles);
+
+        actionTargeting.TryClaimDodgeDirectionalKey(new KeyboardState(Keys.D), new KeyboardState(), []);
+
+        Assert.IsFalse(componentManager.GetPackedPool<PendingActionActivationComponent>().Has(PlayerEntityId));
     }
 
     [TestMethod]

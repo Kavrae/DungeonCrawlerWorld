@@ -30,7 +30,6 @@ namespace Presentation.UI;
 public sealed class MapWindow : Window, IContentDropTarget
 {
     private readonly IMapViewQuery _mapView;
-    private readonly PlayerActionGate _playerActionGate;
     private readonly MapViewState _mapViewState;
     private readonly MapCamera _camera;
     private readonly ActionTargetingController _actionTargeting;
@@ -91,7 +90,6 @@ public sealed class MapWindow : Window, IContentDropTarget
     public MapWindow(
         ElementServices services,
         IMapViewQuery mapView,
-        PlayerActionGate playerActionGate,
         MapViewState mapViewState,
         EventBus eventBus,
         MapCamera camera,
@@ -106,7 +104,6 @@ public sealed class MapWindow : Window, IContentDropTarget
         PointerState pointerState) : base(services)
     {
         _mapView = mapView;
-        _playerActionGate = playerActionGate;
         _mapViewState = mapViewState;
 
         _camera = camera;
@@ -468,8 +465,7 @@ public sealed class MapWindow : Window, IContentDropTarget
     /// armed/pending action, already ran and found nothing to cancel either, so a right-click
     /// over empty space is correctly a total no-op, matching this codebase's "remove unexpected
     /// actions" principle. Each option is disabled rather than omitted when it can't currently be
-    /// taken ("Loot" when the player can't reach it, "Inspect" while the global cooldown is
-    /// active) so the player sees why, rather than the menu silently missing an option.
+    /// taken ("Loot" when the player can't reach it) so the player sees why, rather than the menu silently missing an option.
     /// </summary>
     internal void TryOpenEntityContextMenuAt(Point mousePosition)
     {
@@ -529,7 +525,7 @@ public sealed class MapWindow : Window, IContentDropTarget
             options.Add(new DropdownOption("Take All", null, CanTakeAll(in interaction), () => TryTakeAll(entityId)));
         }
 
-        options.Add(new DropdownOption("Inspect", null, IsInspectionFree || !_playerActionGate.IsLocked, () => InspectEntity(entityId)));
+        options.Add(new DropdownOption("Inspect", null, true, () => InspectEntity(entityId)));
 
         if (AdminMode.IsOn)
         {
@@ -548,21 +544,13 @@ public sealed class MapWindow : Window, IContentDropTarget
         return interaction.AccessRefusal == ContainerAccessRefusal.LootReserved && !AdminMode.IsOn ? "Loot (reserved)" : "Loot";
     }
 
-    /// <summary>Details/Admin inspection's actual activation -- sets Detail or Admin mode (AdminMode.IsOn) on the shared entityId (see MapViewState.InspectedEntityId), starts the global cooldown (the same shared ActionLockComponent lock movement/melee/consumables already use) unless inspection is free (IsInspectionFree), and un-minimizes InspectionWindow. Only ever reached via the "Inspect" DropdownOption above, which already gates on the cooldown being clear or inspection being free -- no redundant re-check here, matching how "Loot" above trusts its own Enabled gate instead of re-checking adjacency.</summary>
+    /// <summary>Sets Detail or Admin inspection (AdminMode.IsOn) on the entity and un-minimizes InspectionWindow; inspecting neither checks nor starts the action lock.</summary>
     private void InspectEntity(int entityId)
     {
         _mapViewState.InspectionMode = MapViewState.EntityInspectionMode;
         _mapViewState.InspectedEntityId = entityId;
-        if (!IsInspectionFree)
-        {
-            _playerActionGate.Lock();
-        }
-
         OnInspectionOpened?.Invoke();
     }
-
-    /// <summary>Whether inspecting costs the player nothing: in Admin Mode while paused, where the frozen clock would otherwise hold any lock forever.</summary>
-    private bool IsInspectionFree => AdminMode.IsOn && IsPaused;
 
     protected override void OnEscapeAction() => _actionTargeting.CancelArmedOrPendingAction();
 
