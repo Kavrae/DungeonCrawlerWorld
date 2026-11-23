@@ -4172,3 +4172,9 @@ diagnostics, generated at build time; nothing on the frame reads it.
 - **A test of concurrent access forces the overlap.** Dedicated threads released together from a `Barrier`, never
   `Parallel.For`, which may run the body one at a time and pass without the race ever happening
   (`ARecordDecodedFromManyThreadsAtOnce_IsOneInstance`).
+- **Determinism checks** (`Tests/Determinism`) run a mixed NPC scenario through the real system, with each behavior
+  wrapped by Guid to record it. `SimulationTrace` holds entity keys and definition Guids only, because ids, handles and
+  stack counters differ between sessions in one process. They hold that a seed decides the trace, that each creature
+  chooses the same in either order, and that choosing moves no component version or random stream. They run on one
+  thread, so they don't show that choosing is safe to run concurrently: `NpcDecisionServices.BlueprintActions` can still
+  write a cache and a derived action on first ask.

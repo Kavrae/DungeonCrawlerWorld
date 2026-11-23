@@ -7,7 +7,7 @@ redundant tests. It also finishes TODO.md's "TOP PRIORITY: Investigate the tests
 **Status:** written 2026-11-22 from a read of the code, a syntax-tree scan of every test and repeated runs. Decisions
 1-4 accepted the same day, as recommended. Phase 0 done 2026-11-22; it found three failing `Tests` methods (see its
 results). Phase 1 built and checked 2026-11-22, with one cause still open (its step 8). Phases 2 to 5 built and
-checked the same day. Phase 5 awaits review and its commit.
+checked the same day, Phase 6 on 2026-11-23. **Complete**, with that one cause open in TODO.md.
 
 ## What the review found
 
@@ -375,6 +375,34 @@ match at each. Tests stay at 0 workers unless they ask, as that plan's decision 
 - Making one behavior read another creature's just-written state fails the choice-independence test.
 - Making a behavior draw from a shared stream fails the trace test.
 - The whole folder passes 20 times idle and 5 times loaded.
+
+**Results, 2026-11-23** (`Tests/Determinism`, six tests, no production code changed). A test-only module wraps each
+built-in behavior by its Guid, as a mod can, so the trace records the real system. The scenario reaches all seven
+behaviors and a consideration.
+
+| Bug injected into production code, then removed | Caught by |
+|---|---|
+| A scratch buffer leaks from one creature's choice to the next | `EachCreaturesChoice_IsTheSameWhicheverOrderTheyChooseIn` |
+| `Evaluate` draws from the shared effects stream | `ChoosingAnExtraTime_ChangesNothingThatFollows` |
+| `Evaluate` uses an unseeded random | Those two and `TheSameSeed_GivesTheSameTraceAndWorld` |
+| `Evaluate` writes a component | `Choosing_WritesNoComponent` |
+
+| Suite | Idle runs failing | Loaded runs failing |
+|---|---|---|
+| `Tests/Determinism` (6 cases) | 0 of 20 | 0 of 5 |
+| `Tests` (4,717 cases) | 0 of 10 | 0 of 3 |
+| `Workshop.Tests` (394 cases) | 0 of 10 | 0 of 3 |
+
+- Choice independence compares both orders in one session at each sample, since choosing is shown to write nothing.
+  That needs no second session and compares every factor of each choice, not only the winner.
+- **These tests run on one thread.** They prove the choose pass is order-independent and writes no component or stream.
+  They don't prove it is safe to run concurrently.
+- **What a fork must still solve (found reading the choose path):**
+  - `RangedAttack.Evaluate` reaches `NpcDecisionServices.BlueprintActions`, which fills a cache on first ask and can call
+    `ActionCatalog.GetOrCreateDerived`, an unlocked dictionary write. This answers the first-ask question in
+    `PLAN-multithreading.md`'s table: it can happen while choosing.
+  - `NpcDecisionServices`' `Random`, `CandidateActions`, `ActionIds`, `AdjacentTiles` and `CountedEntityIds` are one
+    instance each and need one per worker, as that plan expects.
 
 ## Not doing
 
