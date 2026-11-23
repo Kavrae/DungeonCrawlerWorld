@@ -7,27 +7,14 @@ namespace Workshop.Tests;
 [TestClass]
 public sealed class DiagnosticsLinkListenerTests
 {
-    private static readonly TimeSpan WaitTimeout = TimeSpan.FromSeconds(10);
-
-    private static void UpdateUntil(DiagnosticsLinkListener listener, Func<LiveDiagnosticsSession, bool> condition, string description)
-    {
-        var deadline = DateTime.UtcNow + WaitTimeout;
-        while (true)
-        {
-            listener.Update();
-            if (listener.Session is { } session && condition(session))
+    private static Task UpdateUntilAsync(DiagnosticsLinkListener listener, Func<LiveDiagnosticsSession, bool> condition, string description) =>
+        TestWait.UntilAsync(
+            () =>
             {
-                return;
-            }
-
-            if (DateTime.UtcNow > deadline)
-            {
-                Assert.Fail($"Timed out waiting until {description}.");
-            }
-
-            Thread.Sleep(5);
-        }
-    }
+                listener.Update();
+                return listener.Session is { } session && condition(session);
+            },
+            description);
 
     private static DiagnosticsLink ConnectedLink(DiagnosticsLinkListener listener, TextWriter? errors = null)
     {
@@ -37,13 +24,13 @@ public sealed class DiagnosticsLinkListenerTests
     }
 
     [TestMethod]
-    public void AGameThatConnects_IsConnected_WithItsProcessId()
+    public async Task AGameThatConnects_IsConnected_WithItsProcessId()
     {
         using var listener = new DiagnosticsLinkListener();
         listener.Start();
         using var link = ConnectedLink(listener);
 
-        UpdateUntil(listener, session => session.Hello is not null, "the hello arrived");
+        await UpdateUntilAsync(listener, session => session.Hello is not null, "the hello arrived");
 
         var session = listener.Session!;
         Assert.AreEqual(DiagnosticsConnectionState.Connected, session.State);
@@ -52,7 +39,7 @@ public sealed class DiagnosticsLinkListenerTests
     }
 
     [TestMethod]
-    public void FramesAndReports_ReachTheSession()
+    public async Task FramesAndReports_ReachTheSession()
     {
         using var listener = new DiagnosticsLinkListener();
         listener.Start();
@@ -67,7 +54,7 @@ public sealed class DiagnosticsLinkListenerTests
         link.SendStartupReport(JsonSerializer.Serialize(new DiagnosticsStartupReport(DateTime.UtcNow, true, 1234, [new PhaseRecord("Build", 20, 0), new PhaseRecord("Configure", 5, 1)])));
         link.SendBenchmarkCompleted(new DiagnosticsLinkBenchmarkCompletion(1, 3, "benchmark.json", null, null));
 
-        UpdateUntil(listener, session => session.LatestBenchmarkCompletion is not null && session.IsPaused && session.StartupReport is not null && session.LatestPeriodicReport is not null, "everything arrived");
+        await UpdateUntilAsync(listener, session => session.LatestBenchmarkCompletion is not null && session.IsPaused && session.StartupReport is not null && session.LatestPeriodicReport is not null, "everything arrived");
 
         var session = listener.Session!;
         Assert.IsTrue(session.IsSimulating);
@@ -86,58 +73,53 @@ public sealed class DiagnosticsLinkListenerTests
     }
 
     [TestMethod]
-    public void AGameThatCloses_LeavesItsSessionEnded_WithWhatItSent()
+    public async Task AGameThatCloses_LeavesItsSessionEnded_WithWhatItSent()
     {
         using var listener = new DiagnosticsLinkListener();
         listener.Start();
         var link = ConnectedLink(listener);
         link.SessionStarted([]);
         link.RecordFrame(1, TimeSpan.FromMilliseconds(2), gauges: null);
-        UpdateUntil(listener, session => session.LatestFrame == 1, "the frame arrived");
+        await UpdateUntilAsync(listener, session => session.LatestFrame == 1, "the frame arrived");
 
         link.Dispose();
-        UpdateUntil(listener, session => session.State == DiagnosticsConnectionState.Ended, "the session ended");
+        await UpdateUntilAsync(listener, session => session.State == DiagnosticsConnectionState.Ended, "the session ended");
 
         Assert.AreEqual("Diagnostics: ended", listener.Session!.StatusText);
         Assert.AreEqual(1, listener.Session.History!.RecordedFrameCount);
     }
 
     [TestMethod]
-    public void ASecondGame_WhileTheFirstIsConnected_IsRefused()
+    public async Task ASecondGame_WhileTheFirstIsConnected_IsRefused()
     {
         using var listener = new DiagnosticsLinkListener();
         listener.Start();
         using var first = ConnectedLink(listener);
-        UpdateUntil(listener, session => session.Hello is not null, "the first hello arrived");
+        await UpdateUntilAsync(listener, session => session.Hello is not null, "the first hello arrived");
         var firstSession = listener.Session;
 
         var errors = new StringWriter();
         using var second = ConnectedLink(listener, errors);
-        var deadline = DateTime.UtcNow + WaitTimeout;
-        while (!second.IsClosed && DateTime.UtcNow < deadline)
-        {
-            Thread.Sleep(5);
-        }
+        await TestWait.UntilAsync(() => second.IsClosed, "the second game's link closed");
 
         listener.Update();
-        Assert.IsTrue(second.IsClosed);
         Assert.AreSame(firstSession, listener.Session);
         Assert.AreEqual(DiagnosticsConnectionState.Connected, firstSession!.State);
     }
 
     [TestMethod]
-    public void TheNextGame_AfterTheFirstEnded_GetsAFreshSession()
+    public async Task TheNextGame_AfterTheFirstEnded_GetsAFreshSession()
     {
         using var listener = new DiagnosticsLinkListener();
         listener.Start();
         var first = ConnectedLink(listener);
-        UpdateUntil(listener, session => session.Hello is not null, "the first hello arrived");
+        await UpdateUntilAsync(listener, session => session.Hello is not null, "the first hello arrived");
         var firstSession = listener.Session;
         first.Dispose();
-        UpdateUntil(listener, session => session.State == DiagnosticsConnectionState.Ended, "the first ended");
+        await UpdateUntilAsync(listener, session => session.State == DiagnosticsConnectionState.Ended, "the first ended");
 
         using var second = ConnectedLink(listener);
-        UpdateUntil(listener, session => !ReferenceEquals(session, firstSession) && session.Hello is not null, "the second hello arrived");
+        await UpdateUntilAsync(listener, session => !ReferenceEquals(session, firstSession) && session.Hello is not null, "the second hello arrived");
 
         Assert.AreEqual(DiagnosticsConnectionState.Connected, listener.Session!.State);
     }

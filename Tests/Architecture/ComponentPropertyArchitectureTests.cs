@@ -24,7 +24,7 @@ public sealed partial class ComponentPropertyArchitectureTests
     [TestMethod]
     public void GameplayCode_NeverUsesComponentPropertyAccess()
     {
-        var repositoryRoot = RepositoryProjects.FindRepositoryRoot();
+        var repositoryRoot = TestRepository.Root;
         var gameRoot = Path.Combine(repositoryRoot, "DungeonCrawlerWorld", "Game");
         var violations = new List<string>();
         foreach (var sourceFile in Directory.EnumerateFiles(gameRoot, "*.cs", SearchOption.AllDirectories))

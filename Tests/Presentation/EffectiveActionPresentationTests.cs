@@ -19,6 +19,7 @@ namespace Tests.Presentation;
 
 /// <summary>The hotbar and targeting read the action the player actually has -- its override -- not the catalog entry.</summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class EffectiveActionPresentationTests
 {
     private const int PlayerEntityId = TestMapWindows.PlayerEntityId;

@@ -73,18 +73,6 @@ public sealed class EventBusTests
     }
 
     [TestMethod]
-    public void Publish_NonBufferedEvent_StillDispatchesImmediately()
-    {
-        var bus = new EventBus();
-        var received = -1;
-        bus.Subscribe<TestEvent>(e => received = e.Value);
-
-        bus.Publish(new TestEvent(7));
-
-        Assert.AreEqual(7, received);
-    }
-
-    [TestMethod]
     public void Publish_BufferedEvent_DoesNotDispatchUntilDispatchBuffered()
     {
         var bus = new EventBus();

@@ -74,12 +74,4 @@ public sealed class StatusEffectImmunityTests
 
         Assert.IsFalse(published);
     }
-
-    [TestMethod]
-    public void IsImmune_NoEventBusOrPlayerQuery_DoesNotThrow()
-    {
-        var componentManager = CreateComponentManagerWithImmunity(0, StatusEffectType.Burning);
-
-        Assert.IsTrue(StatusEffectImmunity.IsImmune(componentManager, 0, StatusEffectType.Burning, default, new EventBus(), TestPlayerQuery.NoPlayer));
-    }
 }

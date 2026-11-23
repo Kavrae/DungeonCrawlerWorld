@@ -131,7 +131,7 @@ public sealed class DebugLaunchSettingsTests
     }
 
     [TestMethod]
-    public void UseLastSeed_IsEnabledOnceAGameReportsItsSeed_AndPassesThatSeed()
+    public async Task UseLastSeed_IsEnabledOnceAGameReportsItsSeed_AndPassesThatSeed()
     {
         using var harness = new DebugTabHarness(_optionsPath);
         var launch = harness.View.Launch;
@@ -139,13 +139,13 @@ public sealed class DebugLaunchSettingsTests
 
         using var link = new DiagnosticsLink(harness.Debugging.Link.EndPoint, DiagnosticsFeatures.Gauges, randomSeed: 424242, TextWriter.Null);
         link.Start();
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-        while (harness.Debugging.Link.Session?.Hello is null)
-        {
-            Assert.IsTrue(DateTime.UtcNow < deadline, "Timed out waiting for the hello.");
-            harness.Debugging.Link.Update();
-            Thread.Sleep(5);
-        }
+        await TestWait.UntilAsync(
+            () =>
+            {
+                harness.Debugging.Link.Update();
+                return harness.Debugging.Link.Session?.Hello is not null;
+            },
+            "the hello arrived");
 
         harness.Frame();
         Assert.IsTrue(launch.UseLastSeedButton.Enabled);

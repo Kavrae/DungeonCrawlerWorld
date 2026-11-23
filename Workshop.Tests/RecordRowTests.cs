@@ -18,7 +18,7 @@ public sealed class RecordRowTests
     private const float RowWidth = 330f;
 
     private static readonly Vector2 ScreenSize = new(1600, 900);
-    private static readonly FontService SharedFonts = new("Fonts");
+    private static readonly FontService SharedFonts = TestFonts.Shared;
 
     private ElementPoolService _pool = null!;
     private UiLayerStack _layers = null!;

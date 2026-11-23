@@ -3,31 +3,18 @@ using Workshop.Debug;
 
 namespace Workshop.Tests;
 
-/// <summary>The Reports browser against the reports actually on this machine: every file of every kind in the repository's report folders opens, and Compare's numbers agree with the phase-performance-testing skill's own.</summary>
+/// <summary>The Reports browser against real reports of every kind, checked in as fixtures: each opens, and Compare's numbers agree with the phase-performance-testing skill's own.</summary>
 [TestClass]
 public sealed class DiagnosticsReportFolderTests
 {
-    private const string SolutionFileName = "DungeonCrawlerWorld.sln";
+    private static IReadOnlyList<string> ReportDirectories() => [Path.Combine(AppContext.BaseDirectory, "Fixtures", "Reports")];
 
-    /// <summary>A gauge series holds every gauge for every frame of its range; the newest few are enough to cover the format.</summary>
-    private const int GaugeSeriesOpened = 5;
-
-    private static IReadOnlyList<string> ReportDirectories()
+    [TestMethod]
+    public void TheFixtures_HoldEveryKindOfReport()
     {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, SolutionFileName)))
-        {
-            directory = directory.Parent;
-        }
+        var kinds = DiagnosticsReportCatalog.Scan(ReportDirectories()).Select(static entry => entry.Kind).ToHashSet();
 
-        var log = Path.Combine(directory?.FullName ?? throw new InvalidOperationException("No repository root above the test assembly."), "Log");
-        IReadOnlyList<string> directories = [Path.Combine(log, "diagnostics"), Path.Combine(log, "phase-benchmarks")];
-        if (!directories.Any(Directory.Exists))
-        {
-            Assert.Inconclusive("This machine has no report folders.");
-        }
-
-        return directories;
+        CollectionAssert.AreEquivalent(Enum.GetValues<DiagnosticsReportKind>(), kinds.ToArray());
     }
 
     [TestMethod]
@@ -35,29 +22,26 @@ public sealed class DiagnosticsReportFolderTests
     {
         var entries = DiagnosticsReportCatalog.Scan(ReportDirectories());
         var failures = new List<string>();
-        foreach (var group in entries.GroupBy(static entry => entry.Kind))
+        foreach (var entry in entries)
         {
-            foreach (var entry in group.Key == DiagnosticsReportKind.Gauges ? group.Take(GaugeSeriesOpened) : group)
+            try
             {
-                try
+                if (entry.Detail.StartsWith("Unreadable", StringComparison.Ordinal))
                 {
-                    if (entry.Detail.StartsWith("Unreadable", StringComparison.Ordinal))
-                    {
-                        failures.Add($"{entry.FileName}: {entry.Detail}");
-                    }
-                    else if (entry.Kind == DiagnosticsReportKind.AbComparison)
-                    {
-                        DiagnosticsReportFiles.OpenAbComparison(entry);
-                    }
-                    else
-                    {
-                        Assert.IsNotNull(DiagnosticsReportFiles.OpenSession(entry));
-                    }
+                    failures.Add($"{entry.FileName}: {entry.Detail}");
                 }
-                catch (Exception exception) when (exception is InvalidDataException or IOException)
+                else if (entry.Kind == DiagnosticsReportKind.AbComparison)
                 {
-                    failures.Add($"{entry.FileName}: {exception.Message}");
+                    DiagnosticsReportFiles.OpenAbComparison(entry);
                 }
+                else
+                {
+                    Assert.IsNotNull(DiagnosticsReportFiles.OpenSession(entry));
+                }
+            }
+            catch (Exception exception) when (exception is InvalidDataException or IOException)
+            {
+                failures.Add($"{entry.FileName}: {exception.Message}");
             }
         }
 
@@ -70,10 +54,7 @@ public sealed class DiagnosticsReportFolderTests
     public void EveryABTheSkillSaved_ComparesToTheChangesItRecorded()
     {
         var abEntries = DiagnosticsReportCatalog.Scan(ReportDirectories()).Where(static entry => entry.Kind == DiagnosticsReportKind.AbComparison).ToList();
-        if (abEntries.Count == 0)
-        {
-            Assert.Inconclusive("No A/B on this machine.");
-        }
+        Assert.IsNotEmpty(abEntries);
 
         foreach (var entry in abEntries)
         {

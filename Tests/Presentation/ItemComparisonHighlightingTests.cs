@@ -6,50 +6,16 @@ namespace Tests.Presentation;
 public sealed class ItemComparisonHighlightingTests
 {
     [TestMethod]
-    public void ComputeHighlight_AllValuesEqual_ReturnsNormal()
+    [DataRow(5d, new[] { 5d, 5d, 5d }, true, ComparisonHighlight.Normal, DisplayName = "ComputeHighlight_AllValuesEqual_ReturnsNormal")]
+    [DataRow(10d, new[] { 3d, 10d }, true, ComparisonHighlight.Better, DisplayName = "ComputeHighlight_HigherIsBetter_MaxValueReturnsBetter")]
+    [DataRow(3d, new[] { 3d, 10d }, true, ComparisonHighlight.Worse, DisplayName = "ComputeHighlight_HigherIsBetter_MinValueReturnsWorse")]
+    [DataRow(3d, new[] { 3d, 10d }, false, ComparisonHighlight.Better, DisplayName = "ComputeHighlight_LowerIsBetter_MinValueReturnsBetter")]
+    [DataRow(10d, new[] { 3d, 10d }, false, ComparisonHighlight.Worse, DisplayName = "ComputeHighlight_LowerIsBetter_MaxValueReturnsWorse")]
+    [DataRow(2d, new[] { 1d, 2d, 3d }, true, ComparisonHighlight.Normal, DisplayName = "ComputeHighlight_ThreeValues_StrictlyMiddleValueReturnsNormal")]
+    public void ComputeHighlight_ReadsTheValueAgainstTheOthers(double value, double[] allValues, bool higherIsBetter, ComparisonHighlight expected)
     {
-        var result = ItemComparisonHighlighting.ComputeHighlight(5, [5, 5, 5], higherIsBetter: true);
+        var result = ItemComparisonHighlighting.ComputeHighlight(value, allValues, higherIsBetter);
 
-        Assert.AreEqual(ComparisonHighlight.Normal, result);
-    }
-
-    [TestMethod]
-    public void ComputeHighlight_HigherIsBetter_MaxValueReturnsBetter()
-    {
-        var result = ItemComparisonHighlighting.ComputeHighlight(10, [3, 10], higherIsBetter: true);
-
-        Assert.AreEqual(ComparisonHighlight.Better, result);
-    }
-
-    [TestMethod]
-    public void ComputeHighlight_HigherIsBetter_MinValueReturnsWorse()
-    {
-        var result = ItemComparisonHighlighting.ComputeHighlight(3, [3, 10], higherIsBetter: true);
-
-        Assert.AreEqual(ComparisonHighlight.Worse, result);
-    }
-
-    [TestMethod]
-    public void ComputeHighlight_LowerIsBetter_MinValueReturnsBetter()
-    {
-        var result = ItemComparisonHighlighting.ComputeHighlight(3, [3, 10], higherIsBetter: false);
-
-        Assert.AreEqual(ComparisonHighlight.Better, result);
-    }
-
-    [TestMethod]
-    public void ComputeHighlight_LowerIsBetter_MaxValueReturnsWorse()
-    {
-        var result = ItemComparisonHighlighting.ComputeHighlight(10, [3, 10], higherIsBetter: false);
-
-        Assert.AreEqual(ComparisonHighlight.Worse, result);
-    }
-
-    [TestMethod]
-    public void ComputeHighlight_ThreeValues_StrictlyMiddleValueReturnsNormal()
-    {
-        var result = ItemComparisonHighlighting.ComputeHighlight(2, [1, 2, 3], higherIsBetter: true);
-
-        Assert.AreEqual(ComparisonHighlight.Normal, result);
+        Assert.AreEqual(expected, result);
     }
 }

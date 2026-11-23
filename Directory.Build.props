@@ -10,7 +10,8 @@
 
   <!--
     The engine's analyzers (Cadence/Analyzers) run in every project but themselves and their tests, which load them as a
-    library instead. CAD0001: a component write scope must be held in a using.
+    library instead. CAD0001: a component write scope must be held in a using. CAD0004: a test reaching a serial test
+    resource must be [DoNotParallelize].
   -->
   <ItemGroup Condition="'$(MSBuildProjectName)' != 'Analyzers' and '$(MSBuildProjectName)' != 'Analyzers.Tests'">
     <ProjectReference Include="$(MSBuildThisFileDirectory)Cadence\Analyzers\Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />

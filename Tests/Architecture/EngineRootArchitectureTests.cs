@@ -10,7 +10,7 @@ public sealed class EngineRootArchitectureTests
     [TestMethod]
     public void EngineRootProjects_DoNotReferenceGameRootProjects()
     {
-        var repositoryRoot = RepositoryProjects.FindRepositoryRoot();
+        var repositoryRoot = TestRepository.Root;
         var engineRoot = Path.Combine(repositoryRoot, EngineRootFolderName);
         var gameRoot = Path.Combine(repositoryRoot, GameRootFolderName) + Path.DirectorySeparatorChar;
 

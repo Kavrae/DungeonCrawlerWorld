@@ -182,35 +182,23 @@ public sealed class HealthWindowTests
     }
 
     [TestMethod]
-    public void FormatStatusEffectRow_BurningWithMultipleStacks_ShowsStackCountNoDuration()
+    [DataRow(5, " Burning x5", DisplayName = "FormatStatusEffectRow_BurningWithMultipleStacks_ShowsStackCountNoDuration")]
+    [DataRow(1, " Burning", DisplayName = "FormatStatusEffectRow_BurningWithOneStack_OmitsStackCountAndDuration")]
+    public void FormatStatusEffectRow_Burning_ShowsMoreThanOneStackAndNoDuration(int stackCount, string expectedAfterGlyph)
     {
-        var row = new HealthWindow.StatusEffectRow(StatusEffectType.Burning, RemainingSeconds: 5, StackCount: 5);
+        var row = new HealthWindow.StatusEffectRow(StatusEffectType.Burning, RemainingSeconds: 5, StackCount: stackCount);
 
-        Assert.AreEqual($"{BurningEffects.Glyph} Burning x5", HealthWindow.FormatStatusEffectRow(row, CreateStatusEffectDisplayRegistry(CreateComponentManagerWithStatusEffectPools())));
+        Assert.AreEqual($"{BurningEffects.Glyph}{expectedAfterGlyph}", HealthWindow.FormatStatusEffectRow(row, CreateStatusEffectDisplayRegistry(CreateComponentManagerWithStatusEffectPools())));
     }
 
     [TestMethod]
-    public void FormatStatusEffectRow_BurningWithOneStack_OmitsStackCountAndDuration()
+    [DataRow(21, " Poison (x21): 18s", DisplayName = "FormatStatusEffectRow_PoisonWithMultipleStacksAndDuration_ShowsParenthesizedStackCountThenDuration")]
+    [DataRow(1, " Poison: 18s", DisplayName = "FormatStatusEffectRow_PoisonWithOneStack_OmitsStackCount")]
+    public void FormatStatusEffectRow_Poison_ShowsMoreThanOneStackThenTheDuration(int stackCount, string expectedAfterGlyph)
     {
-        var row = new HealthWindow.StatusEffectRow(StatusEffectType.Burning, RemainingSeconds: 5, StackCount: 1);
+        var row = new HealthWindow.StatusEffectRow(StatusEffectType.Poison, RemainingSeconds: 18, StackCount: stackCount);
 
-        Assert.AreEqual($"{BurningEffects.Glyph} Burning", HealthWindow.FormatStatusEffectRow(row, CreateStatusEffectDisplayRegistry(CreateComponentManagerWithStatusEffectPools())));
-    }
-
-    [TestMethod]
-    public void FormatStatusEffectRow_PoisonWithMultipleStacksAndDuration_ShowsParenthesizedStackCountThenDuration()
-    {
-        var row = new HealthWindow.StatusEffectRow(StatusEffectType.Poison, RemainingSeconds: 18, StackCount: 21);
-
-        Assert.AreEqual($"{PoisonEffects.Glyph} Poison (x21): 18s", HealthWindow.FormatStatusEffectRow(row, CreateStatusEffectDisplayRegistry(CreateComponentManagerWithStatusEffectPools())));
-    }
-
-    [TestMethod]
-    public void FormatStatusEffectRow_PoisonWithOneStack_OmitsStackCount()
-    {
-        var row = new HealthWindow.StatusEffectRow(StatusEffectType.Poison, RemainingSeconds: 18, StackCount: 1);
-
-        Assert.AreEqual($"{PoisonEffects.Glyph} Poison: 18s", HealthWindow.FormatStatusEffectRow(row, CreateStatusEffectDisplayRegistry(CreateComponentManagerWithStatusEffectPools())));
+        Assert.AreEqual($"{PoisonEffects.Glyph}{expectedAfterGlyph}", HealthWindow.FormatStatusEffectRow(row, CreateStatusEffectDisplayRegistry(CreateComponentManagerWithStatusEffectPools())));
     }
 
     /// <summary>Paralysis's own StackCount is always exactly 1 (never a stacking effect -- see ParalysisTimerComponent), so it never enters the stack-count-shown branch at all.</summary>
@@ -409,11 +397,14 @@ public sealed class HealthWindowTests
 
     /// <summary>Matches ResistanceTestPotion's own real grant (Game/Modules/Inventory/Definitions/ResistanceTestPotion.cs) -- Multiplicative IncomingDamage, ConditionTag: GameTags.DamagePoison, Magnitude -0.5, 10-minute duration.</summary>
     [TestMethod]
-    public void FormatModifierRow_TaggedIncomingDamageReduction_ReadsAsNamedResistance()
+    [DataRow(600, "50% Poison Resistance: 10min", DisplayName = "FormatModifierRow_TaggedIncomingDamageReduction_ReadsAsNamedResistance")]
+    [DataRow(45, "50% Poison Resistance: 45s", DisplayName = "FormatModifierRow_DurationUnderSixtySeconds_StaysInSeconds")]
+    [DataRow(60, "50% Poison Resistance: 1min", DisplayName = "FormatModifierRow_DurationExactlySixtySeconds_SwitchesToMinutes")]
+    public void FormatModifierRow_TaggedIncomingDamageReduction_ReadsAsNamedResistanceWithItsDuration(int remainingSeconds, string expected)
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: -0.5f, ConditionTag: GameTags.DamagePoison, RemainingSeconds: 600);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: -0.5f, ConditionTag: GameTags.DamagePoison, RemainingSeconds: remainingSeconds);
 
-        Assert.AreEqual("50% Poison Resistance: 10min", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
+        Assert.AreEqual(expected, HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
@@ -458,22 +449,6 @@ public sealed class HealthWindowTests
         var row = new HealthWindow.ModifierRow(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, Magnitude: 0.25f, ConditionTag: GameTags.DamageFire, RemainingSeconds: null);
 
         Assert.AreEqual("25% Fire Vulnerability", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
-    }
-
-    [TestMethod]
-    public void FormatModifierRow_DurationUnderSixtySeconds_StaysInSeconds()
-    {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: -0.5f, ConditionTag: GameTags.DamagePoison, RemainingSeconds: 45);
-
-        Assert.AreEqual("50% Poison Resistance: 45s", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
-    }
-
-    [TestMethod]
-    public void FormatModifierRow_DurationExactlySixtySeconds_SwitchesToMinutes()
-    {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: -0.5f, ConditionTag: GameTags.DamagePoison, RemainingSeconds: 60);
-
-        Assert.AreEqual("50% Poison Resistance: 1min", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
@@ -600,35 +575,14 @@ public sealed class HealthWindowTests
     }
 
     [TestMethod]
-    public void FormatModifierRow_FlatMagnitudeWithManyDecimals_RoundsToOneDecimalPlace()
+    [DataRow(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, 2.3333333f, "+2.3 Damage", DisplayName = "FormatModifierRow_FlatMagnitudeWithManyDecimals_RoundsToOneDecimalPlace")]
+    [DataRow(StatModifierTarget.CritChance, StatModifierOperation.Additive, StatModifierPolarity.Buff, 0.16666667f, "+0.2 CritChance", DisplayName = "FormatModifierRow_GenericFallbackMagnitudeWithDecimals_RoundsToOneDecimalPlace")]
+    [DataRow(StatModifierTarget.MovementLockFrames, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, 2.449f, "x2.4 Movement Penalty", DisplayName = "FormatModifierRow_MovementPenaltyMagnitudeWithDecimals_RoundsToOneDecimalPlace")]
+    public void FormatModifierRow_MagnitudeWithDecimals_RoundsToOneDecimalPlace(StatModifierTarget target, StatModifierOperation operation, StatModifierPolarity polarity, float magnitude, string expected)
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, Magnitude: 2.3333333f, ConditionTag: Engine.Tags.GameplayTag.None, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(target, operation, polarity, magnitude, ConditionTag: Engine.Tags.GameplayTag.None, RemainingSeconds: null);
 
-        Assert.AreEqual("+2.3 Damage", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
-    }
-
-    [TestMethod]
-    public void FormatModifierRow_FlatMagnitudeIsWholeNumber_NoTrailingDecimal()
-    {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, Magnitude: 2f, ConditionTag: Engine.Tags.GameplayTag.None, RemainingSeconds: null);
-
-        Assert.AreEqual("+2 Damage", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
-    }
-
-    [TestMethod]
-    public void FormatModifierRow_GenericFallbackMagnitudeWithDecimals_RoundsToOneDecimalPlace()
-    {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.CritChance, StatModifierOperation.Additive, StatModifierPolarity.Buff, Magnitude: 0.16666667f, ConditionTag: Engine.Tags.GameplayTag.None, RemainingSeconds: null);
-
-        Assert.AreEqual("+0.2 CritChance", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
-    }
-
-    [TestMethod]
-    public void FormatModifierRow_MovementPenaltyMagnitudeWithDecimals_RoundsToOneDecimalPlace()
-    {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.MovementLockFrames, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, Magnitude: 2.449f, ConditionTag: Engine.Tags.GameplayTag.None, RemainingSeconds: null);
-
-        Assert.AreEqual("x2.4 Movement Penalty", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
+        Assert.AreEqual(expected, HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     private static List<StatusEffectImmunityComponent> CreateImmunities() => [];

@@ -52,43 +52,17 @@ public sealed class StringUtilityTests
     }
 
     [TestMethod]
-    public void BuildPercentageBar_HalfFilled_FillsHalfTheBar()
+    [DataRow("HP", 50, "HP : [=====_____]", DisplayName = "BuildPercentageBar_HalfFilled_FillsHalfTheBar")]
+    [DataRow("HP", 0, "HP : [__________]", DisplayName = "BuildPercentageBar_ZeroCurrentValue_FillsNothing")]
+    [DataRow("HP", 100, "HP : [==========]", DisplayName = "BuildPercentageBar_FullValue_FillsEverything")]
+    [DataRow("E", 50, "E : [=====_____]", DisplayName = "BuildPercentageBar_ShorterPrefix_UsesItInPlaceOfHP")]
+    [DataRow("Stamina", 50, "Stamina : [=====_____]", DisplayName = "BuildPercentageBar_LongerPrefix_UsesItInPlaceOfHP")]
+    [DataRow("HP", 500, "HP : [==========]", DisplayName = "BuildPercentageBar_CurrentValueExceedsMaximum_ClampsToFullBar")]
+    public void BuildPercentageBar_ShowsThePrefixAndTheFilledShare(string prefix, int currentValue, string expected)
     {
-        var bar = StringUtility.BuildPercentageBar(prefix: "HP", currentValue: 50, maximumValue: 100, barSize: 10);
+        var bar = StringUtility.BuildPercentageBar(prefix, currentValue, maximumValue: 100, barSize: 10);
 
-        Assert.AreEqual("HP : [=====_____]", bar);
-    }
-
-    [TestMethod]
-    public void BuildPercentageBar_ZeroCurrentValue_FillsNothing()
-    {
-        var bar = StringUtility.BuildPercentageBar(prefix: "HP", currentValue: 0, maximumValue: 100, barSize: 10);
-
-        Assert.AreEqual("HP : [__________]", bar);
-    }
-
-    [TestMethod]
-    public void BuildPercentageBar_FullValue_FillsEverything()
-    {
-        var bar = StringUtility.BuildPercentageBar(prefix: "HP", currentValue: 100, maximumValue: 100, barSize: 10);
-
-        Assert.AreEqual("HP : [==========]", bar);
-    }
-
-    [TestMethod]
-    public void BuildPercentageBar_ShorterPrefix_UsesItInPlaceOfHP()
-    {
-        var bar = StringUtility.BuildPercentageBar(prefix: "E", currentValue: 50, maximumValue: 100, barSize: 10);
-
-        Assert.AreEqual("E : [=====_____]", bar);
-    }
-
-    [TestMethod]
-    public void BuildPercentageBar_LongerPrefix_UsesItInPlaceOfHP()
-    {
-        var bar = StringUtility.BuildPercentageBar(prefix: "Stamina", currentValue: 50, maximumValue: 100, barSize: 10);
-
-        Assert.AreEqual("Stamina : [=====_____]", bar);
+        Assert.AreEqual(expected, bar);
     }
 
     [TestMethod]
@@ -299,14 +273,6 @@ public sealed class StringUtilityTests
     public void BuildPercentageBar_NegativeBarSize_Throws()
     {
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => StringUtility.BuildPercentageBar("HP", 5, 10, -1));
-    }
-
-    [TestMethod]
-    public void BuildPercentageBar_CurrentValueExceedsMaximum_ClampsToFullBar()
-    {
-        var bar = StringUtility.BuildPercentageBar(prefix: "HP", currentValue: 500, maximumValue: 100, barSize: 10);
-
-        Assert.AreEqual("HP : [==========]", bar);
     }
 
     [TestMethod]

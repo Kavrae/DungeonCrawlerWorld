@@ -31,7 +31,7 @@ public sealed partial class WholeCatalogReadsArchitectureTests
     [TestMethod]
     public void GameCode_NeverEnumeratesAnActionOrItemCatalog()
     {
-        var repositoryRoot = RepositoryProjects.FindRepositoryRoot();
+        var repositoryRoot = TestRepository.Root;
         var violations = new List<string>();
         foreach (var folder in GameSourceFolders)
         {

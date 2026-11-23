@@ -67,7 +67,7 @@ public sealed class ModuleLoaderTests
         }
         finally
         {
-            Tests.Bootstrap.GameBootstrapperTests.TryDeleteDirectory(directory.FullName);
+            TestDirectory.TryDelete(directory.FullName);
         }
     }
 }

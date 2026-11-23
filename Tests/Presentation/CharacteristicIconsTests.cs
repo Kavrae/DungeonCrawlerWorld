@@ -12,21 +12,16 @@ public sealed class CharacteristicIconsTests
     private static readonly Vector2 IconSize = new(30, 30);
 
     [TestMethod]
-    public void Size_Normal_IsTheFootprint_WithSizeAndFootprintLines()
+    [DataRow((byte)1, (byte)1, "Size : Normal\nFootprint : 1x1", DisplayName = "Size_Normal_IsTheFootprint_WithSizeAndFootprintLines")]
+    [DataRow((byte)1, (byte)2, "Size : Large\nFootprint : 1x2", DisplayName = "Size_OneByTwo_IsLarge_AndDrawsItsOwnFootprint")]
+    public void Size_IsTheFootprint_WithSizeAndFootprintLines(byte width, byte height, string expectedTooltip)
     {
-        var icon = CharacteristicIcons.Size(new Vector2Byte(1, 1), NonBlockingKind.None);
+        var footprint = new Vector2Byte(width, height);
 
-        Assert.AreEqual(new Vector2Byte(1, 1), icon.Footprint);
-        Assert.AreEqual("Size : Normal\nFootprint : 1x1", icon.TooltipText);
-    }
+        var icon = CharacteristicIcons.Size(footprint, NonBlockingKind.None);
 
-    [TestMethod]
-    public void Size_OneByTwo_IsLarge_AndDrawsItsOwnFootprint()
-    {
-        var icon = CharacteristicIcons.Size(new Vector2Byte(1, 2), NonBlockingKind.None);
-
-        Assert.AreEqual(new Vector2Byte(1, 2), icon.Footprint);
-        Assert.AreEqual("Size : Large\nFootprint : 1x2", icon.TooltipText);
+        Assert.AreEqual(footprint, icon.Footprint);
+        Assert.AreEqual(expectedTooltip, icon.TooltipText);
     }
 
     [TestMethod]

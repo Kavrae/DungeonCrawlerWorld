@@ -98,13 +98,13 @@ public sealed class ContentByIdLoadingTests
     }
 
     [TestMethod]
-    public void ANeighborhoodPlan_NamesWhatItsSpawnsRead_DecodedOnTheWorker_AndRegisteredWhenItSpawns()
+    public async Task ANeighborhoodPlan_NamesWhatItsSpawnsRead_DecodedOnTheWorker_AndRegisteredWhenItSpawns()
     {
         var pass = BuildById(new MapBounds(0, 0, 200, 200, 3));
         var builder = BuilderFor(pass);
         var content = pass.Context.Content;
 
-        var plan = Task.Run(() => builder.Plan(pass.World.Map, new NeighborhoodRecord(0, 0, seed: 42), populationSeed: 7)).GetAwaiter().GetResult();
+        var plan = await Task.Run(() => builder.Plan(pass.World.Map, new NeighborhoodRecord(0, 0, seed: 42), populationSeed: 7));
 
         Assert.IsNotEmpty(plan.Content.ActionIds);
         Assert.IsNotEmpty(plan.Content.ItemIds);

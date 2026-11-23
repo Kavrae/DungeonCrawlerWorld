@@ -23,7 +23,6 @@ public sealed class DiagnosticsLink : IDisposable
 
     private const int FixedValueCount = 3;
     private const int SendIntervalMilliseconds = 8;
-    private const int ConnectTimeoutMilliseconds = 5_000;
     private const int StopTimeoutMilliseconds = 2_000;
     private static readonly long PausedRecordIntervalTimestampTicks = Stopwatch.Frequency;
 
@@ -197,12 +196,7 @@ public sealed class DiagnosticsLink : IDisposable
                 _client = client;
             }
 
-            if (!client.ConnectAsync(_endPoint).Wait(ConnectTimeoutMilliseconds))
-            {
-                Close($"no answer from {_endPoint} within {ConnectTimeoutMilliseconds / 1000} s");
-                return;
-            }
-
+            client.Connect(_endPoint);
             stream = client.GetStream();
         }
         catch (Exception exception)

@@ -20,8 +20,6 @@ namespace Tests.Diagnostics;
 [TestClass]
 public sealed class DiagnosticsLinkTests
 {
-    private static readonly TimeSpan WaitTimeout = TimeSpan.FromSeconds(10);
-
     private static EcsContext CreateContext()
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
@@ -35,20 +33,6 @@ public sealed class DiagnosticsLinkTests
             context.Update(new EngineTime(TimeSpan.Zero, TimeSpan.Zero, IsRunningSlowly: false, FrameCount: frame));
             EngineHooks.HostFrames.Listener?.HostUpdated(simulated: true);
             EngineHooks.HostFrames.Listener?.HostDrew();
-        }
-    }
-
-    private static void WaitUntil(Func<bool> condition, string description)
-    {
-        var deadline = DateTime.UtcNow + WaitTimeout;
-        while (!condition())
-        {
-            if (DateTime.UtcNow > deadline)
-            {
-                Assert.Fail($"Timed out waiting until {description}.");
-            }
-
-            Thread.Sleep(5);
         }
     }
 
@@ -80,14 +64,14 @@ public sealed class DiagnosticsLinkTests
     }
 
     [TestMethod]
-    public void EveryMessageType_ArrivesAsSent()
+    public async Task EveryMessageType_ArrivesAsSent()
     {
         using var receiver = new LoopbackDiagnosticsReceiver();
         var errors = new StringWriter();
         using var link = new DiagnosticsLink(receiver.EndPoint, DiagnosticsFeatures.FrameBudget | DiagnosticsFeatures.Gauges, randomSeed: 42, errors);
         link.Start();
 
-        var hello = DiagnosticsLinkProtocol.ReadJson<DiagnosticsLinkHello>(receiver.WaitFor(DiagnosticsLinkMessageType.Hello));
+        var hello = DiagnosticsLinkProtocol.ReadJson<DiagnosticsLinkHello>(await receiver.WaitForAsync(DiagnosticsLinkMessageType.Hello));
         Assert.AreEqual(DiagnosticsLinkProtocol.Version, hello.ProtocolVersion);
         Assert.AreEqual(Environment.ProcessId, hello.ProcessId);
         Assert.AreEqual(42, hello.RandomSeed);
@@ -105,8 +89,8 @@ public sealed class DiagnosticsLinkTests
         link.SendBenchmarkCompleted(new DiagnosticsLinkBenchmarkCompletion(10, 20, "benchmark.json", null, "gauges.json"));
         link.SessionEnded();
 
-        receiver.WaitFor(DiagnosticsLinkMessageType.SessionEnded);
-        var sessionStart = DiagnosticsLinkProtocol.ReadJson<DiagnosticsLinkSessionStart>(receiver.WaitFor(DiagnosticsLinkMessageType.SessionStarted));
+        await receiver.WaitForAsync(DiagnosticsLinkMessageType.SessionEnded);
+        var sessionStart = DiagnosticsLinkProtocol.ReadJson<DiagnosticsLinkSessionStart>(await receiver.WaitForAsync(DiagnosticsLinkMessageType.SessionStarted));
         Assert.AreEqual(new DiagnosticsLinkGaugeDescriptor("Streamer", "QueuedBytes", GaugeKind.Level, GaugeUnit.Bytes), sessionStart.Gauges[0]);
         Assert.AreEqual(new DiagnosticsLinkGaugeDescriptor("Streamer", "Loads", GaugeKind.Cumulative, GaugeUnit.Count), sessionStart.Gauges[1]);
 
@@ -119,22 +103,22 @@ public sealed class DiagnosticsLinkTests
         Assert.AreEqual(7, frames[1].Record.Frame);
         Assert.IsTrue(frames[1].Record.IsPaused);
 
-        Assert.AreEqual("{\"Features\":\"Gauges\"}", DiagnosticsLinkProtocol.ReadText(receiver.WaitFor(DiagnosticsLinkMessageType.PeriodicReport)));
-        Assert.AreEqual("{\"IsStable\":true}", DiagnosticsLinkProtocol.ReadText(receiver.WaitFor(DiagnosticsLinkMessageType.StartupReport)));
+        Assert.AreEqual("{\"Features\":\"Gauges\"}", DiagnosticsLinkProtocol.ReadText(await receiver.WaitForAsync(DiagnosticsLinkMessageType.PeriodicReport)));
+        Assert.AreEqual("{\"IsStable\":true}", DiagnosticsLinkProtocol.ReadText(await receiver.WaitForAsync(DiagnosticsLinkMessageType.StartupReport)));
         Assert.AreEqual(
             new DiagnosticsLinkBenchmarkCompletion(10, 20, "benchmark.json", null, "gauges.json"),
-            DiagnosticsLinkProtocol.ReadJson<DiagnosticsLinkBenchmarkCompletion>(receiver.WaitFor(DiagnosticsLinkMessageType.BenchmarkCompleted)));
+            DiagnosticsLinkProtocol.ReadJson<DiagnosticsLinkBenchmarkCompletion>(await receiver.WaitForAsync(DiagnosticsLinkMessageType.BenchmarkCompleted)));
         Assert.AreEqual(string.Empty, errors.ToString());
     }
 
     [TestMethod]
-    public void AListenerThatIsGone_ClosesTheLinkWithOneErrorLine_AndRecordingCarriesOn()
+    public async Task AListenerThatIsGone_ClosesTheLinkWithOneErrorLine_AndRecordingCarriesOn()
     {
         var errors = new StringWriter();
         using var link = new DiagnosticsLink(UnusedLoopbackEndPoint(), DiagnosticsFeatures.Gauges, randomSeed: 1, errors);
         link.Start();
 
-        WaitUntil(() => link.IsClosed, "the link closed");
+        await TestWait.UntilAsync(() => link.IsClosed, "the link closed");
         link.SessionStarted([]);
         for (var frame = 1; frame <= 1_000; frame++)
         {
@@ -148,18 +132,18 @@ public sealed class DiagnosticsLinkTests
     }
 
     [TestMethod]
-    public void TheIdeClosingMidRun_ClosesTheLinkWithOneErrorLine()
+    public async Task TheIdeClosingMidRun_ClosesTheLinkWithOneErrorLine()
     {
         var receiver = new LoopbackDiagnosticsReceiver();
         var errors = new StringWriter();
         using var link = new DiagnosticsLink(receiver.EndPoint, DiagnosticsFeatures.Gauges, randomSeed: 1, errors);
         link.Start();
-        receiver.WaitFor(DiagnosticsLinkMessageType.Hello);
+        await receiver.WaitForAsync(DiagnosticsLinkMessageType.Hello);
         link.SessionStarted([]);
 
         receiver.Dispose();
         var frame = 0;
-        WaitUntil(() =>
+        await TestWait.UntilAsync(() =>
         {
             link.RecordFrame(++frame, TimeSpan.FromMilliseconds(1), gauges: null);
             return link.IsClosed;
@@ -170,7 +154,7 @@ public sealed class DiagnosticsLinkTests
 
     [TestMethod]
     [DoNotParallelize]
-    public void WithTheLinkOn_ASimulationFrameAllocatesNothing()
+    public async Task WithTheLinkOn_ASimulationFrameAllocatesNothing()
     {
         using var receiver = new LoopbackDiagnosticsReceiver();
         using var engine = new DiagnosticsEngine(DiagnosticsFeatures.Gauges, randomSeed: 1, writesPeriodicReports: false, linkEndPoint: receiver.EndPoint);
@@ -179,15 +163,41 @@ public sealed class DiagnosticsLinkTests
         var reading = 0.0;
         session.Gauges.Register("Test", "Value", GaugeKind.Level, () => reading++);
         session.BeginSession();
-        receiver.WaitFor(DiagnosticsLinkMessageType.SessionStarted);
+        await receiver.WaitForAsync(DiagnosticsLinkMessageType.SessionStarted);
         RunFrames(session, 1, 200);
 
+        var allocatingFrames = new int[16];
+        var allocatedBytes = new long[16];
+        var allocatingFrameCount = 0;
+        var compiledMethodsBefore = System.Runtime.JitInfo.GetCompiledMethodCount(currentThread: true);
+        var collectionsBefore = GC.CollectionCount(0);
         var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
-        RunFrames(session, 201, 5_200);
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+        var allocatedSoFar = allocatedBefore;
+        for (var frame = 201; frame <= 5_200; frame++)
+        {
+            RunFrames(session, frame, frame);
+            var allocatedNow = GC.GetAllocatedBytesForCurrentThread();
+            if (allocatedNow != allocatedSoFar)
+            {
+                if (allocatingFrameCount < allocatingFrames.Length)
+                {
+                    allocatingFrames[allocatingFrameCount] = frame;
+                    allocatedBytes[allocatingFrameCount] = allocatedNow - allocatedSoFar;
+                    allocatingFrameCount++;
+                }
 
-        Assert.AreEqual(0, allocated);
-        receiver.WaitFor(DiagnosticsLinkMessageType.Frame);
+                allocatedSoFar = allocatedNow;
+            }
+        }
+
+        var allocated = allocatedSoFar - allocatedBefore;
+        if (allocated != 0)
+        {
+            var frames = string.Join(", ", Enumerable.Range(0, allocatingFrameCount).Select(index => $"frame {allocatingFrames[index]}: {allocatedBytes[index]} B"));
+            Assert.Fail($"Allocated {allocated} B ({frames}); methods compiled on this thread: {System.Runtime.JitInfo.GetCompiledMethodCount(currentThread: true) - compiledMethodsBefore}, gen 0 collections: {GC.CollectionCount(0) - collectionsBefore}.");
+        }
+
+        await receiver.WaitForAsync(DiagnosticsLinkMessageType.Frame);
         Assert.IsFalse(engine.IsLinkClosed);
     }
 

@@ -1,0 +1,323 @@
+﻿{
+    "timestampUtc":  "2026-11-18T14:00:00.9496808Z",
+    "sampling":  "ab-headless",
+    "configuration":  "Release",
+    "unit":  "ms/frame",
+    "randomSeed":  1,
+    "mapSize":  3072,
+    "startFrame":  600,
+    "endFrame":  3600,
+    "runsPerSide":  3,
+    "baseline":  {
+                     "savedUtc":  "2026-11-18T13:58:42.0000000Z",
+                     "configuration":  "Release",
+                     "gitCommit":  "7afde954",
+                     "hasUncommittedChanges":  false,
+                     "source":  "git archive HEAD, built in the scratchpad"
+                 },
+    "currentCommit":  "7afde954",
+    "currentDirty":  true,
+    "fingerprintA":  [
+                         "02DB3F846CDF145B",
+                         "02DB3F846CDF145B",
+                         "02DB3F846CDF145B"
+                     ],
+    "fingerprintB":  [
+                         "02DB3F846CDF145B",
+                         "02DB3F846CDF145B",
+                         "02DB3F846CDF145B"
+                     ],
+    "sameWorld":  true,
+    "worstFrameMsA":  [
+                          14.1573,
+                          19.1542,
+                          14.4658
+                      ],
+    "worstFrameMsB":  [
+                          19.2148,
+                          13.3348,
+                          14.7447
+                      ],
+    "systems":  {
+                    "Update.GameLoop.EcsContext.Update (all systems)":  {
+                                                                            "a":  1.5086,
+                                                                            "b":  1.502,
+                                                                            "deltaPercent":  -0.4,
+                                                                            "aSpreadPercent":  1.7,
+                                                                            "flag":  ""
+                                                                        },
+                    "Update.SystemManager.NpcDecisionSystem":  {
+                                                                   "a":  0.6873,
+                                                                   "b":  0.6778,
+                                                                   "deltaPercent":  -1.4,
+                                                                   "aSpreadPercent":  1.8,
+                                                                   "flag":  ""
+                                                               },
+                    "Update.SystemManager.AuraSystem":  {
+                                                            "a":  0.3643,
+                                                            "b":  0.3697,
+                                                            "deltaPercent":  1.5,
+                                                            "aSpreadPercent":  3.3,
+                                                            "flag":  ""
+                                                        },
+                    "Update.SystemManager.MovementSystem":  {
+                                                                "a":  0.0992,
+                                                                "b":  0.0984,
+                                                                "deltaPercent":  -0.7,
+                                                                "aSpreadPercent":  1.6,
+                                                                "flag":  ""
+                                                            },
+                    "Update.SystemManager.BodyPartBurningSystem":  {
+                                                                       "a":  0.0925,
+                                                                       "b":  0.0921,
+                                                                       "deltaPercent":  -0.5,
+                                                                       "aSpreadPercent":  4.1,
+                                                                       "flag":  ""
+                                                                   },
+                    "Update.SystemManager.ActionActivationSystem":  {
+                                                                        "a":  0.0565,
+                                                                        "b":  0.0554,
+                                                                        "deltaPercent":  -2,
+                                                                        "aSpreadPercent":  3.4,
+                                                                        "flag":  ""
+                                                                    },
+                    "Update.SystemManager.TerrainContactSystem":  {
+                                                                      "a":  0.0416,
+                                                                      "b":  0.0417,
+                                                                      "deltaPercent":  0.3,
+                                                                      "aSpreadPercent":  1.2,
+                                                                      "flag":  ""
+                                                                  },
+                    "Update.SystemManager.DelayedActionSystem":  {
+                                                                     "a":  0.0381,
+                                                                     "b":  0.0378,
+                                                                     "deltaPercent":  -1,
+                                                                     "aSpreadPercent":  1.9,
+                                                                     "flag":  ""
+                                                                 },
+                    "Update.SystemManager.ComplexHealthRegenSystem":  {
+                                                                          "a":  0.0245,
+                                                                          "b":  0.0241,
+                                                                          "deltaPercent":  -1.9,
+                                                                          "aSpreadPercent":  2.7,
+                                                                          "flag":  ""
+                                                                      },
+                    "Update.SystemManager.BurningSystem":  {
+                                                               "a":  0.0196,
+                                                               "b":  0.0197,
+                                                               "deltaPercent":  0.2,
+                                                               "aSpreadPercent":  5.9,
+                                                               "flag":  ""
+                                                           },
+                    "Update.SystemManager.BodyPartEffectsSystem":  {
+                                                                       "a":  0.0172,
+                                                                       "b":  0.017,
+                                                                       "deltaPercent":  -1.5,
+                                                                       "aSpreadPercent":  6.9,
+                                                                       "flag":  ""
+                                                                   },
+                    "Update.SystemManager.ItemActivationSystem":  {
+                                                                      "a":  0.0159,
+                                                                      "b":  0.0164,
+                                                                      "deltaPercent":  3.1,
+                                                                      "aSpreadPercent":  10,
+                                                                      "flag":  ""
+                                                                  },
+                    "Update.SystemManager.ProcessingTierSystem":  {
+                                                                      "a":  0.0104,
+                                                                      "b":  0.0099,
+                                                                      "deltaPercent":  -4.5,
+                                                                      "aSpreadPercent":  4.4,
+                                                                      "flag":  ""
+                                                                  },
+                    "Update.SystemManager.SimpleHealthRegenSystem":  {
+                                                                         "a":  0.0079,
+                                                                         "b":  0.0079,
+                                                                         "deltaPercent":  -0.6,
+                                                                         "aSpreadPercent":  1.2,
+                                                                         "flag":  ""
+                                                                     },
+                    "Update.SystemManager.ManaRegenSystem":  {
+                                                                 "a":  0.0055,
+                                                                 "b":  0.0054,
+                                                                 "deltaPercent":  -2.7,
+                                                                 "aSpreadPercent":  0.3,
+                                                                 "flag":  ""
+                                                             },
+                    "Update.SystemManager.DeathSystem":  {
+                                                             "a":  0.0039,
+                                                             "b":  0.004,
+                                                             "deltaPercent":  1,
+                                                             "aSpreadPercent":  16.8,
+                                                             "flag":  ""
+                                                         },
+                    "Update.SystemManager.DamageLedgerExpirySystem":  {
+                                                                          "a":  0.0035,
+                                                                          "b":  0.0033,
+                                                                          "deltaPercent":  -3.5,
+                                                                          "aSpreadPercent":  23.3,
+                                                                          "flag":  ""
+                                                                      },
+                    "Update.EventBus.StatusEffectAppliedEvent":  {
+                                                                     "a":  0.0031,
+                                                                     "b":  0.0031,
+                                                                     "deltaPercent":  -0.5,
+                                                                     "aSpreadPercent":  5.4,
+                                                                     "flag":  ""
+                                                                 },
+                    "Update.SystemManager.PoisonSystem":  {
+                                                              "a":  0.0028,
+                                                              "b":  0.0027,
+                                                              "deltaPercent":  -0.8,
+                                                              "aSpreadPercent":  7.8,
+                                                              "flag":  ""
+                                                          },
+                    "Update.EventBus.EntityHealedEvent":  {
+                                                              "a":  0.0025,
+                                                              "b":  0.0026,
+                                                              "deltaPercent":  3.7,
+                                                              "aSpreadPercent":  2.8,
+                                                              "flag":  ""
+                                                          },
+                    "Update.EventBus.EntityStaggeredEvent":  {
+                                                                 "a":  0.0022,
+                                                                 "b":  0.0022,
+                                                                 "deltaPercent":  -2.2,
+                                                                 "aSpreadPercent":  1.7,
+                                                                 "flag":  ""
+                                                             },
+                    "Update.EventBus.ActivationUsedEvent":  {
+                                                                "a":  0.0016,
+                                                                "b":  0.0017,
+                                                                "deltaPercent":  3.1,
+                                                                "aSpreadPercent":  17.3,
+                                                                "flag":  ""
+                                                            },
+                    "Update.EventBus.AuraSourceRemovedEvent":  {
+                                                                   "a":  0.0017,
+                                                                   "b":  0.0016,
+                                                                   "deltaPercent":  -5.5,
+                                                                   "aSpreadPercent":  35.7,
+                                                                   "flag":  ""
+                                                               },
+                    "Update.SystemManager.AchievementPollingSystem":  {
+                                                                          "a":  0.0011,
+                                                                          "b":  0.0011,
+                                                                          "deltaPercent":  2.4,
+                                                                          "aSpreadPercent":  10.5,
+                                                                          "flag":  ""
+                                                                      },
+                    "Update.SystemManager.PotionCooldownSystem":  {
+                                                                      "a":  0.0008,
+                                                                      "b":  0.0008,
+                                                                      "deltaPercent":  3.9,
+                                                                      "aSpreadPercent":  26.2,
+                                                                      "flag":  ""
+                                                                  },
+                    "Update.SystemManager.DisabledActivationSystem":  {
+                                                                          "a":  0.0006,
+                                                                          "b":  0.0006,
+                                                                          "deltaPercent":  8.1,
+                                                                          "aSpreadPercent":  30.3,
+                                                                          "flag":  ""
+                                                                      },
+                    "Update.EventBus.EntityDamagedEvent":  {
+                                                               "a":  0.0003,
+                                                               "b":  0.0003,
+                                                               "deltaPercent":  -2.1,
+                                                               "aSpreadPercent":  16.6,
+                                                               "flag":  ""
+                                                           },
+                    "Update.SystemManager.AuraSourceExpirySystem":  {
+                                                                        "a":  0.0002,
+                                                                        "b":  0.0003,
+                                                                        "deltaPercent":  6.9,
+                                                                        "aSpreadPercent":  23.6,
+                                                                        "flag":  ""
+                                                                    },
+                    "Update.SystemManager.ParalysisSystem":  {
+                                                                 "a":  0.0002,
+                                                                 "b":  0.0002,
+                                                                 "deltaPercent":  14,
+                                                                 "aSpreadPercent":  4.3,
+                                                                 "flag":  ""
+                                                             },
+                    "Update.SystemManager.ToggleUpkeepSystem":  {
+                                                                    "a":  0.0002,
+                                                                    "b":  0.0002,
+                                                                    "deltaPercent":  2.6,
+                                                                    "aSpreadPercent":  7.5,
+                                                                    "flag":  ""
+                                                                },
+                    "Update.SystemManager.ItemCooldownSystem":  {
+                                                                    "a":  0.0002,
+                                                                    "b":  0.0002,
+                                                                    "deltaPercent":  -0.6,
+                                                                    "aSpreadPercent":  14,
+                                                                    "flag":  ""
+                                                                },
+                    "Update.SystemManager.NeighborhoodStreamer":  {
+                                                                      "a":  0.0002,
+                                                                      "b":  0.0002,
+                                                                      "deltaPercent":  5.3,
+                                                                      "aSpreadPercent":  7,
+                                                                      "flag":  ""
+                                                                  },
+                    "Update.SystemManager.DodgeExpirySystem":  {
+                                                                   "a":  0.0002,
+                                                                   "b":  0.0002,
+                                                                   "deltaPercent":  -2.6,
+                                                                   "aSpreadPercent":  13.7,
+                                                                   "flag":  ""
+                                                               },
+                    "Update.SystemManager.StatusEffectImmunityExpirySystem":  {
+                                                                                  "a":  0.0002,
+                                                                                  "b":  0.0002,
+                                                                                  "deltaPercent":  0.1,
+                                                                                  "aSpreadPercent":  246.2,
+                                                                                  "flag":  ""
+                                                                              },
+                    "Update.SystemManager.StatModifierExpirySystem":  {
+                                                                          "a":  0.0002,
+                                                                          "b":  0.0002,
+                                                                          "deltaPercent":  2.6,
+                                                                          "aSpreadPercent":  10.2,
+                                                                          "flag":  ""
+                                                                      },
+                    "Update.EventBus.PotionCooldownAbusedEvent":  {
+                                                                      "a":  0.0002,
+                                                                      "b":  0.0002,
+                                                                      "deltaPercent":  -3.2,
+                                                                      "aSpreadPercent":  12.2,
+                                                                      "flag":  ""
+                                                                  },
+                    "Update.SystemManager.SpawnMoves":  {
+                                                            "a":  0.0001,
+                                                            "b":  0.0001,
+                                                            "deltaPercent":  -4.7,
+                                                            "aSpreadPercent":  3.7,
+                                                            "flag":  ""
+                                                        },
+                    "Update.SystemManager.ItemPileEndingSystem":  {
+                                                                      "a":  0.0001,
+                                                                      "b":  0.0001,
+                                                                      "deltaPercent":  17.6,
+                                                                      "aSpreadPercent":  32.1,
+                                                                      "flag":  ""
+                                                                  },
+                    "Update.SystemManager.AuraAnchorEndingSystem":  {
+                                                                        "a":  0.0001,
+                                                                        "b":  0.0001,
+                                                                        "deltaPercent":  -8,
+                                                                        "aSpreadPercent":  27.8,
+                                                                        "flag":  ""
+                                                                    },
+                    "Update.SystemManager.ContainerDestructionSystem":  {
+                                                                            "a":  0.0001,
+                                                                            "b":  0.0001,
+                                                                            "deltaPercent":  -6.6,
+                                                                            "aSpreadPercent":  14.3,
+                                                                            "flag":  ""
+                                                                        }
+                }
+}

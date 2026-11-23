@@ -1,0 +1,1443 @@
+{
+  "TimestampUtc": "2026-11-12T01:11:41.5665079Z",
+  "Features": "All",
+  "RandomSeed": 1397820794,
+  "FrameBudget": {
+    "Update": {
+      "GameLoop": [
+        {
+          "Name": "EcsContext.Update (all systems)",
+          "MillisecondsPerSecond": 197.4707585124697
+        },
+        {
+          "Name": "Shell.Update",
+          "MillisecondsPerSecond": 32.59843553889862
+        }
+      ],
+      "SystemManager": [
+        {
+          "Name": "TestCombatBehaviorSystem",
+          "MillisecondsPerSecond": 84.31667559771394,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "AuraSystem",
+          "MillisecondsPerSecond": 43.846192094246774,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "MovementSystem",
+          "MillisecondsPerSecond": 29.720929062311008,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "TerrainContactSystem",
+          "MillisecondsPerSecond": 8.045897355730823,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "BodyPartEffectsSystem",
+          "MillisecondsPerSecond": 7.636075327665232,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "SimpleHealthRegenSystem",
+          "MillisecondsPerSecond": 3.546308274286013,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "ItemActivationSystem",
+          "MillisecondsPerSecond": 3.536778456742942,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "ActionActivationSystem",
+          "MillisecondsPerSecond": 2.759260978997758,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "DelayedActionSystem",
+          "MillisecondsPerSecond": 2.204298633539798,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "BurningSystem",
+          "MillisecondsPerSecond": 2.1603378643296103,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "ProcessingTierSystem",
+          "MillisecondsPerSecond": 2.1064485404406583,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "ManaRegenSystem",
+          "MillisecondsPerSecond": 1.6626341715572108,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "PoisonSystem",
+          "MillisecondsPerSecond": 1.171071030674489,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "ComplexHealthRegenSystem",
+          "MillisecondsPerSecond": 0.625518881618892,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "AchievementPollingSystem",
+          "MillisecondsPerSecond": 0.4420399886296118,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "BodyPartBurningSystem",
+          "MillisecondsPerSecond": 0.4284231154456851,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "PotionCooldownSystem",
+          "MillisecondsPerSecond": 0.3291575055148337,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "TestDummyAttackSystem",
+          "MillisecondsPerSecond": 0.25449397685625996,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "DamageLedgerExpirySystem",
+          "MillisecondsPerSecond": 0.19613879704754292,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "DeathSystem",
+          "MillisecondsPerSecond": 0.17879373164488366,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "NeighborhoodStreamer",
+          "MillisecondsPerSecond": 0.14406372712599566,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "AuraSourceExpirySystem",
+          "MillisecondsPerSecond": 0.09755104024737014,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "ToggleUpkeepSystem",
+          "MillisecondsPerSecond": 0.08843989669677783,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "ParalysisSystem",
+          "MillisecondsPerSecond": 0.05943177007508898,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "DisabledActivationSystem",
+          "MillisecondsPerSecond": 0.05664061012523577,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "StatModifierExpirySystem",
+          "MillisecondsPerSecond": 0.0563814309870351,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "DodgeExpirySystem",
+          "MillisecondsPerSecond": 0.05554408300207914,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "SpawnMoves",
+          "MillisecondsPerSecond": 0.0548662298714005,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "ItemCooldownSystem",
+          "MillisecondsPerSecond": 0.05458711387641518,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "StatusEffectImmunityExpirySystem",
+          "MillisecondsPerSecond": 0.04938359425561739,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "ItemPileEndingSystem",
+          "MillisecondsPerSecond": 0.030961938586586125,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "AuraAnchorEndingSystem",
+          "MillisecondsPerSecond": 0.030483454023754138,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        },
+        {
+          "Name": "ContainerDestructionSystem",
+          "MillisecondsPerSecond": 0.01618872770914869,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "EcsContext.Update (all systems)"
+            }
+          ]
+        }
+      ],
+      "Base": [
+        {
+          "Name": "MapWindow",
+          "MillisecondsPerSecond": 23.79898480727778,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "Shell.Update"
+            }
+          ]
+        }
+      ],
+      "Map": [
+        {
+          "Name": "Terrain cache rebuild",
+          "MillisecondsPerSecond": 16.851149712676005,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "Base",
+              "Item": "MapWindow"
+            }
+          ]
+        }
+      ],
+      "StaticHud": [
+        {
+          "Name": "Window",
+          "MillisecondsPerSecond": 5.834700569743533,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "Shell.Update"
+            }
+          ]
+        },
+        {
+          "Name": "InspectionWindow",
+          "MillisecondsPerSecond": 1.3117255552903069,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "Shell.Update"
+            }
+          ]
+        },
+        {
+          "Name": "TextWindow",
+          "MillisecondsPerSecond": 0.017863423679060627,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "Shell.Update"
+            }
+          ]
+        }
+      ],
+      "EventBus": [
+        {
+          "Name": "FloatingTextEvent",
+          "MillisecondsPerSecond": 0.1887820968940012,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "SystemManager",
+              "Item": "TerrainContactSystem"
+            },
+            {
+              "Category": "Update",
+              "Group": "SystemManager",
+              "Item": "SimpleHealthRegenSystem"
+            },
+            {
+              "Category": "Update",
+              "Group": "SystemManager",
+              "Item": "ActionActivationSystem"
+            },
+            {
+              "Category": "Update",
+              "Group": "SystemManager",
+              "Item": "ComplexHealthRegenSystem"
+            },
+            {
+              "Category": "Update",
+              "Group": "SystemManager",
+              "Item": "PoisonSystem"
+            },
+            {
+              "Category": "Update",
+              "Group": "SystemManager",
+              "Item": "AuraSystem"
+            },
+            {
+              "Category": "Update",
+              "Group": "SystemManager",
+              "Item": "BodyPartBurningSystem"
+            },
+            {
+              "Category": "Update",
+              "Group": "SystemManager",
+              "Item": "BurningSystem"
+            },
+            {
+              "Category": "Update",
+              "Group": "SystemManager",
+              "Item": "DelayedActionSystem"
+            },
+            {
+              "Category": "Update",
+              "Group": "SystemManager",
+              "Item": "ItemActivationSystem"
+            }
+          ]
+        },
+        {
+          "Name": "EntityHealedEvent",
+          "MillisecondsPerSecond": 0.17311172746125383,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "SystemManager",
+              "Item": "AuraSystem"
+            },
+            {
+              "Category": "Update",
+              "Group": "SystemManager",
+              "Item": "ComplexHealthRegenSystem"
+            }
+          ]
+        },
+        {
+          "Name": "ActivationUsedEvent",
+          "MillisecondsPerSecond": 0.1452798753898603,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "SystemManager",
+              "Item": "ActionActivationSystem"
+            },
+            {
+              "Category": "Update",
+              "Group": "SystemManager",
+              "Item": "DelayedActionSystem"
+            },
+            {
+              "Category": "Update",
+              "Group": "SystemManager",
+              "Item": "ItemActivationSystem"
+            }
+          ]
+        },
+        {
+          "Name": "StatusEffectAppliedEvent",
+          "MillisecondsPerSecond": 0.09689312397347659,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "SystemManager",
+              "Item": "TerrainContactSystem"
+            },
+            {
+              "Category": "Update",
+              "Group": "SystemManager",
+              "Item": "AuraSystem"
+            },
+            {
+              "Category": "Update",
+              "Group": "SystemManager",
+              "Item": "ItemActivationSystem"
+            }
+          ]
+        },
+        {
+          "Name": "EntityStaggeredEvent",
+          "MillisecondsPerSecond": 0.0823990290910241,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "SystemManager",
+              "Item": "DelayedActionSystem"
+            }
+          ]
+        },
+        {
+          "Name": "PotionCooldownAbusedEvent",
+          "MillisecondsPerSecond": 0.03905630244116046,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "SystemManager",
+              "Item": "ItemActivationSystem"
+            }
+          ]
+        },
+        {
+          "Name": "EntityMovedEvent",
+          "MillisecondsPerSecond": 0.015590622005608719,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "SystemManager",
+              "Item": "MovementSystem"
+            }
+          ]
+        }
+      ],
+      "User": [
+        {
+          "Name": "Window",
+          "MillisecondsPerSecond": 0.05703934726092906,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "Shell.Update"
+            }
+          ]
+        }
+      ],
+      "DynamicHud": [
+        {
+          "Name": "Button",
+          "MillisecondsPerSecond": 0.04314335808201694,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "Shell.Update"
+            }
+          ]
+        },
+        {
+          "Name": "Folder",
+          "MillisecondsPerSecond": 0.016108980282010032,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "Shell.Update"
+            }
+          ]
+        }
+      ],
+      "Tooltip": [
+        {
+          "Name": "Window",
+          "MillisecondsPerSecond": 0.03861769159189782,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "Shell.Update"
+            }
+          ]
+        },
+        {
+          "Name": "Tooltip",
+          "MillisecondsPerSecond": 0.014334600028174767,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "Shell.Update"
+            }
+          ]
+        }
+      ],
+      "ContextMenu": [
+        {
+          "Name": "Dropdown",
+          "MillisecondsPerSecond": 0.020873889053545185,
+          "Parents": [
+            {
+              "Category": "Update",
+              "Group": "GameLoop",
+              "Item": "Shell.Update"
+            }
+          ]
+        }
+      ]
+    },
+    "Draw": {
+      "GameLoop": [
+        {
+          "Name": "Shell.Draw",
+          "MillisecondsPerSecond": 138.14078602812316
+        },
+        {
+          "Name": "SpriteBatch.End",
+          "MillisecondsPerSecond": 6.306087611560171
+        }
+      ],
+      "StaticHud": [
+        {
+          "Name": "Window",
+          "MillisecondsPerSecond": 67.47545443971673,
+          "Parents": [
+            {
+              "Category": "Draw",
+              "Group": "GameLoop",
+              "Item": "Shell.Draw"
+            }
+          ]
+        },
+        {
+          "Name": "InspectionWindow",
+          "MillisecondsPerSecond": 6.4232166451700845,
+          "Parents": [
+            {
+              "Category": "Draw",
+              "Group": "GameLoop",
+              "Item": "Shell.Draw"
+            }
+          ]
+        },
+        {
+          "Name": "TextWindow",
+          "MillisecondsPerSecond": 0.4398668712400832,
+          "Parents": [
+            {
+              "Category": "Draw",
+              "Group": "GameLoop",
+              "Item": "Shell.Draw"
+            }
+          ]
+        }
+      ],
+      "Base": [
+        {
+          "Name": "MapWindow",
+          "MillisecondsPerSecond": 61.24592435820967,
+          "Parents": [
+            {
+              "Category": "Draw",
+              "Group": "GameLoop",
+              "Item": "Shell.Draw"
+            }
+          ]
+        }
+      ],
+      "DynamicHud": [
+        {
+          "Name": "Button",
+          "MillisecondsPerSecond": 0.6701973776733281,
+          "Parents": [
+            {
+              "Category": "Draw",
+              "Group": "GameLoop",
+              "Item": "Shell.Draw"
+            }
+          ]
+        },
+        {
+          "Name": "Folder",
+          "MillisecondsPerSecond": 0.32070427823813535,
+          "Parents": [
+            {
+              "Category": "Draw",
+              "Group": "GameLoop",
+              "Item": "Shell.Draw"
+            }
+          ]
+        }
+      ],
+      "User": [
+        {
+          "Name": "Window",
+          "MillisecondsPerSecond": 0.22317317484754992,
+          "Parents": [
+            {
+              "Category": "Draw",
+              "Group": "GameLoop",
+              "Item": "Shell.Draw"
+            }
+          ]
+        }
+      ],
+      "Tooltip": [
+        {
+          "Name": "Window",
+          "MillisecondsPerSecond": 0.012061798354722849,
+          "Parents": [
+            {
+              "Category": "Draw",
+              "Group": "GameLoop",
+              "Item": "Shell.Draw"
+            }
+          ]
+        },
+        {
+          "Name": "Tooltip",
+          "MillisecondsPerSecond": 0.007974742713866351,
+          "Parents": [
+            {
+              "Category": "Draw",
+              "Group": "GameLoop",
+              "Item": "Shell.Draw"
+            }
+          ]
+        }
+      ],
+      "ContextMenu": [
+        {
+          "Name": "Dropdown",
+          "MillisecondsPerSecond": 0.009509880686285622,
+          "Parents": [
+            {
+              "Category": "Draw",
+              "Group": "GameLoop",
+              "Item": "Shell.Draw"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "Memory": [
+    {
+      "ComponentType": "InventoryItemStackComponent",
+      "Count": 547254,
+      "EstimatedBytes": 93466296,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "TransformComponent",
+      "Count": 663140,
+      "EstimatedBytes": 20424768,
+      "Population": "Every entity"
+    },
+    {
+      "ComponentType": "NonBlockingComponent",
+      "Count": 220529,
+      "EstimatedBytes": 12806294,
+      "Population": "Every entity"
+    },
+    {
+      "ComponentType": "SpawnRecordComponent",
+      "Count": 663140,
+      "EstimatedBytes": 12643904,
+      "Population": "Every entity"
+    },
+    {
+      "ComponentType": "MovementComponent",
+      "Count": 73236,
+      "EstimatedBytes": 10053032,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "AbilityScoresComponent",
+      "Count": 73239,
+      "EstimatedBytes": 9574268,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "StatusEffectImmunityComponent",
+      "Count": 71923,
+      "EstimatedBytes": 8798408,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "StatModifierComponent",
+      "Count": 59038,
+      "EstimatedBytes": 6749256,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "ProcessingTierComponent",
+      "Count": 663140,
+      "EstimatedBytes": 5835648,
+      "Population": "Every entity"
+    },
+    {
+      "ComponentType": "ActionLockComponent",
+      "Count": 73239,
+      "EstimatedBytes": 4258408,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "RaceSlotsComponent",
+      "Count": 73238,
+      "EstimatedBytes": 3287756,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "BodyPartStateComponent",
+      "Count": 15203,
+      "EstimatedBytes": 3188232,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "CurrencyComponent",
+      "Count": 52228,
+      "EstimatedBytes": 3113096,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "SimpleHealthComponent",
+      "Count": 45877,
+      "EstimatedBytes": 2863320,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "InventoryComponent",
+      "Count": 70260,
+      "EstimatedBytes": 2460077,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "ManaComponent",
+      "Count": 36312,
+      "EstimatedBytes": 2305032,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "AuraExposureComponent",
+      "Count": 16790,
+      "EstimatedBytes": 1938168,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "BodyPartBurningTimerComponent",
+      "Count": 64,
+      "EstimatedBytes": 1547016,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "DamageContributionComponent",
+      "Count": 135,
+      "EstimatedBytes": 1469096,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "DeadComponent",
+      "Count": 26244,
+      "EstimatedBytes": 1236232,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "AuraSourceComponent",
+      "Count": 9500,
+      "EstimatedBytes": 989976,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "LootedComponent",
+      "Count": 21779,
+      "EstimatedBytes": 620332,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "DamageLedgerExpiryComponent",
+      "Count": 134,
+      "EstimatedBytes": 589148,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "PendingWindupComponent",
+      "Count": 51,
+      "EstimatedBytes": 578696,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "BurningTimerComponent",
+      "Count": 620,
+      "EstimatedBytes": 498824,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "PoisonTimerComponent",
+      "Count": 335,
+      "EstimatedBytes": 453768,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "PotionCooldownComponent",
+      "Count": 443,
+      "EstimatedBytes": 449160,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "TerrainContactExposureComponent",
+      "Count": 1268,
+      "EstimatedBytes": 438408,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "CrawlerComponent",
+      "Count": 1507,
+      "EstimatedBytes": 398768,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "MeleeDisabledComponent",
+      "Count": 1503,
+      "EstimatedBytes": 373384,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "MovementDisabledComponent",
+      "Count": 1246,
+      "EstimatedBytes": 373384,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "CorpseLootRetryComponent",
+      "Count": 914,
+      "EstimatedBytes": 360388,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "PendingActionActivationComponent",
+      "Count": 0,
+      "EstimatedBytes": 176520,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "PendingItemActivationComponent",
+      "Count": 0,
+      "EstimatedBytes": 80520,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "ActionInstanceComponent",
+      "Count": 12,
+      "EstimatedBytes": 38536,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "ExpiringStatModifierComponent",
+      "Count": 1,
+      "EstimatedBytes": 31880,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "ClassSlotsComponent",
+      "Count": 5,
+      "EstimatedBytes": 31880,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "AuraSourceExpiryComponent",
+      "Count": 0,
+      "EstimatedBytes": 31880,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "DodgingComponent",
+      "Count": 0,
+      "EstimatedBytes": 27784,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "ParalysisTimerComponent",
+      "Count": 0,
+      "EstimatedBytes": 27784,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "ActionCooldownComponent",
+      "Count": 1,
+      "EstimatedBytes": 25992,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "ActionHotkeyBindingComponent",
+      "Count": 12,
+      "EstimatedBytes": 25128,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "ShopStockPreferenceComponent",
+      "Count": 10,
+      "EstimatedBytes": 24876,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "AchievementUnlockedComponent",
+      "Count": 3,
+      "EstimatedBytes": 24488,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "UnclaimedAchievementLootboxComponent",
+      "Count": 2,
+      "EstimatedBytes": 24488,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "DisabledActivationComponent",
+      "Count": 0,
+      "EstimatedBytes": 24328,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "ItemHotkeyBindingComponent",
+      "Count": 6,
+      "EstimatedBytes": 24264,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "DisplayTextComponent",
+      "Count": 1,
+      "EstimatedBytes": 17032,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "ShopComponent",
+      "Count": 2,
+      "EstimatedBytes": 15688,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "ContainerComponent",
+      "Count": 2,
+      "EstimatedBytes": 15640,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "UnlimitedStackCountComponent",
+      "Count": 2,
+      "EstimatedBytes": 15568,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "TestDummyComponent",
+      "Count": 1,
+      "EstimatedBytes": 15532,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "HotkeyExpansionUnlockComponent",
+      "Count": 1,
+      "EstimatedBytes": 15532,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "GlyphComponent",
+      "Count": 0,
+      "EstimatedBytes": 12936,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "SpriteComponent",
+      "Count": 0,
+      "EstimatedBytes": 12936,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "ActiveToggleComponent",
+      "Count": 0,
+      "EstimatedBytes": 12232,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "AuraAnchorOwnerLink",
+      "Count": 0,
+      "EstimatedBytes": 11784,
+      "Population": "Every entity"
+    },
+    {
+      "ComponentType": "RelatedSourceComponent\u00601",
+      "Count": 0,
+      "EstimatedBytes": 11720,
+      "Population": "Every entity"
+    },
+    {
+      "ComponentType": "AppliedBlueprintComponent",
+      "Count": 0,
+      "EstimatedBytes": 11720,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "ScrollMasteryComponent",
+      "Count": 0,
+      "EstimatedBytes": 11688,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "ForceBlockingComponent",
+      "Count": 0,
+      "EstimatedBytes": 11672,
+      "Population": "Every entity"
+    },
+    {
+      "ComponentType": "AuraAnchorComponent",
+      "Count": 0,
+      "EstimatedBytes": 11656,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "ClassMembershipComponent",
+      "Count": 0,
+      "EstimatedBytes": 11576,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "InventoryDisabledComponent",
+      "Count": 0,
+      "EstimatedBytes": 11544,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "ItemPileComponent",
+      "Count": 0,
+      "EstimatedBytes": 11544,
+      "Population": "Built"
+    },
+    {
+      "ComponentType": "MaxStackSizeComponent",
+      "Count": 0,
+      "EstimatedBytes": 11420,
+      "Population": "Built"
+    }
+  ],
+  "Leaks": [],
+  "Gauges": [
+    {
+      "Group": "Process",
+      "Name": "HeapBytes",
+      "Kind": "Level",
+      "Last": 862804648,
+      "Minimum": 855863440,
+      "Maximum": 865261360
+    },
+    {
+      "Group": "Process",
+      "Name": "AllocatedBytes",
+      "Kind": "Cumulative",
+      "Total": 82700912,
+      "MaximumPerFrame": 1300784,
+      "FramesNonzero": 300
+    },
+    {
+      "Group": "Process",
+      "Name": "Gen0Collections",
+      "Kind": "Cumulative",
+      "Total": 9,
+      "MaximumPerFrame": 1,
+      "FramesNonzero": 9
+    },
+    {
+      "Group": "Process",
+      "Name": "Gen1Collections",
+      "Kind": "Cumulative",
+      "Total": 0,
+      "MaximumPerFrame": 0,
+      "FramesNonzero": 0
+    },
+    {
+      "Group": "Process",
+      "Name": "Gen2Collections",
+      "Kind": "Cumulative",
+      "Total": 0,
+      "MaximumPerFrame": 0,
+      "FramesNonzero": 0
+    },
+    {
+      "Group": "Process",
+      "Name": "GcPauseMilliseconds",
+      "Kind": "Cumulative",
+      "Total": 2.414,
+      "MaximumPerFrame": 0.412,
+      "FramesNonzero": 9
+    },
+    {
+      "Group": "Frame",
+      "Name": "AllocatedBytes",
+      "Kind": "Level",
+      "Last": 1360,
+      "Minimum": 768,
+      "Maximum": 1261176
+    },
+    {
+      "Group": "Entities",
+      "Name": "Living",
+      "Kind": "Level",
+      "Last": 663142,
+      "Minimum": 663142,
+      "Maximum": 663142
+    },
+    {
+      "Group": "Entities",
+      "Name": "Capacity",
+      "Kind": "Level",
+      "Last": 972608,
+      "Minimum": 972608,
+      "Maximum": 972608
+    },
+    {
+      "Group": "Pools",
+      "Name": "Components",
+      "Kind": "Level",
+      "Last": 3483530,
+      "Minimum": 3483474,
+      "Maximum": 3483599
+    },
+    {
+      "Group": "Pools",
+      "Name": "EstimatedBytes",
+      "Kind": "Level",
+      "Last": 215432215,
+      "Minimum": 215008215,
+      "Maximum": 215432215
+    },
+    {
+      "Group": "Entities",
+      "Name": "Built",
+      "Kind": "Level",
+      "Last": 82806,
+      "Minimum": 82806,
+      "Maximum": 82806
+    },
+    {
+      "Group": "Creatures",
+      "Name": "Skeletons",
+      "Kind": "Level",
+      "Last": 580336,
+      "Minimum": 580336,
+      "Maximum": 580336
+    },
+    {
+      "Group": "ProcessingTier",
+      "Name": "Local",
+      "Kind": "Level",
+      "Last": 783,
+      "Minimum": 783,
+      "Maximum": 783
+    },
+    {
+      "Group": "ProcessingTier",
+      "Name": "PendingTransitionNeighborhoods",
+      "Kind": "Level",
+      "Last": 0,
+      "Minimum": 0,
+      "Maximum": 0
+    },
+    {
+      "Group": "Auras",
+      "Name": "TotalsChunks",
+      "Kind": "Level",
+      "Last": 26430,
+      "Minimum": 26430,
+      "Maximum": 26430
+    },
+    {
+      "Group": "Auras",
+      "Name": "TotalsBytes",
+      "Kind": "Level",
+      "Last": 110006272,
+      "Minimum": 110006272,
+      "Maximum": 110006272
+    },
+    {
+      "Group": "Content",
+      "Name": "ActionsLoaded",
+      "Kind": "Level",
+      "Last": 15,
+      "Minimum": 15,
+      "Maximum": 15
+    },
+    {
+      "Group": "Content",
+      "Name": "ItemsLoaded",
+      "Kind": "Level",
+      "Last": 15,
+      "Minimum": 15,
+      "Maximum": 15
+    },
+    {
+      "Group": "Content",
+      "Name": "AurasLoaded",
+      "Kind": "Level",
+      "Last": 11,
+      "Minimum": 11,
+      "Maximum": 11
+    },
+    {
+      "Group": "Content",
+      "Name": "MissedPlanLoads",
+      "Kind": "Cumulative",
+      "Total": 0,
+      "MaximumPerFrame": 0,
+      "FramesNonzero": 0
+    },
+    {
+      "Group": "NeighborhoodStreamer",
+      "Name": "LoadJobs",
+      "Kind": "Level",
+      "Last": 0,
+      "Minimum": 0,
+      "Maximum": 0
+    },
+    {
+      "Group": "NeighborhoodStreamer",
+      "Name": "UnloadJobs",
+      "Kind": "Level",
+      "Last": 0,
+      "Minimum": 0,
+      "Maximum": 0
+    },
+    {
+      "Group": "NeighborhoodStreamer",
+      "Name": "RegenerateJobs",
+      "Kind": "Level",
+      "Last": 0,
+      "Minimum": 0,
+      "Maximum": 0
+    },
+    {
+      "Group": "NeighborhoodStreamer",
+      "Name": "PlansAwaitingStart",
+      "Kind": "Level",
+      "Last": 0,
+      "Minimum": 0,
+      "Maximum": 0
+    },
+    {
+      "Group": "NeighborhoodStreamer",
+      "Name": "PlansRunning",
+      "Kind": "Level",
+      "Last": 0,
+      "Minimum": 0,
+      "Maximum": 0
+    },
+    {
+      "Group": "NeighborhoodStreamer",
+      "Name": "PlansReady",
+      "Kind": "Level",
+      "Last": 0,
+      "Minimum": 0,
+      "Maximum": 0
+    },
+    {
+      "Group": "NeighborhoodStreamer",
+      "Name": "BudgetUnitsSpent",
+      "Kind": "Cumulative",
+      "Total": 0,
+      "MaximumPerFrame": 0,
+      "FramesNonzero": 0
+    },
+    {
+      "Group": "NeighborhoodStreamer",
+      "Name": "EntitiesSpawned",
+      "Kind": "Cumulative",
+      "Total": 0,
+      "MaximumPerFrame": 0,
+      "FramesNonzero": 0
+    },
+    {
+      "Group": "NeighborhoodStreamer",
+      "Name": "EntitiesDestroyed",
+      "Kind": "Cumulative",
+      "Total": 0,
+      "MaximumPerFrame": 0,
+      "FramesNonzero": 0
+    }
+  ]
+}

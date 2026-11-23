@@ -1,0 +1,1602 @@
+{
+  "TimestampUtc": "2026-11-12T00:55:40.482843Z",
+  "IsStable": true,
+  "TimeToStableMilliseconds": 7692.1297,
+  "Phases": [
+    {
+      "Name": "World Session Setup",
+      "Milliseconds": 5878.8011,
+      "Depth": 0
+    },
+    {
+      "Name": "Startup Cleanup",
+      "Milliseconds": 21.7766,
+      "Depth": 1
+    },
+    {
+      "Name": "Mod Validation",
+      "Milliseconds": 292.6199,
+      "Depth": 1
+    },
+    {
+      "Name": "ModuleLoader.LoadMods",
+      "Milliseconds": 2.3689,
+      "Depth": 2
+    },
+    {
+      "Name": "DryRunValidateMods",
+      "Milliseconds": 288.1172,
+      "Depth": 2
+    },
+    {
+      "Name": "Trial:Built-in content",
+      "Milliseconds": 288.0749,
+      "Depth": 3
+    },
+    {
+      "Name": "DeclareModules",
+      "Milliseconds": 26.1857,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents",
+      "Milliseconds": 55.5596,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:TerrainModule",
+      "Milliseconds": 0.0345,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:CoreModule",
+      "Milliseconds": 6.332,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:HealthModule",
+      "Milliseconds": 3.2021,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:ManaModule",
+      "Milliseconds": 0.7876,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:NpcBehaviorModule",
+      "Milliseconds": 1.4176,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:MovementModule",
+      "Milliseconds": 0.8138,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:DeathModule",
+      "Milliseconds": 1.4479,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:ProcessingTierModule",
+      "Milliseconds": 0.6326,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:RaceModule",
+      "Milliseconds": 1.824,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:ClassModule",
+      "Milliseconds": 1.7654,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:BlueprintsModule",
+      "Milliseconds": 1.5687,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:ActionsModule",
+      "Milliseconds": 8.8271,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:CoreActionsModule",
+      "Milliseconds": 0.0232,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:StatusEffectsModule",
+      "Milliseconds": 0.9597,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:StatModifiersModule",
+      "Milliseconds": 1.685,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:AbilityScoresModule",
+      "Milliseconds": 0.8164,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:BodyPartEffectsModule",
+      "Milliseconds": 1.4234,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:BurningModule",
+      "Milliseconds": 1.7082,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:PoisonModule",
+      "Milliseconds": 0.8287,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:ParalysisModule",
+      "Milliseconds": 1.0217,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:TerrainContactsModule",
+      "Milliseconds": 0.7961,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:AurasModule",
+      "Milliseconds": 5.5026,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:AchievementModule",
+      "Milliseconds": 1.807,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:CrawlerModule",
+      "Milliseconds": 0.7435,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:InventoryModule",
+      "Milliseconds": 4.9704,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:CoreItemsModule",
+      "Milliseconds": 0.0216,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:LootboxModule",
+      "Milliseconds": 0.0175,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:CurrencyModule",
+      "Milliseconds": 0.7461,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:ContainersModule",
+      "Milliseconds": 0.7466,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:ItemPilesModule",
+      "Milliseconds": 1.2432,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:ShopModule",
+      "Milliseconds": 1.6375,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterComponents:AreasModule",
+      "Milliseconds": 0.0221,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure",
+      "Milliseconds": 75.7503,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:TerrainModule",
+      "Milliseconds": 1.3682,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:CoreModule",
+      "Milliseconds": 0.022,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:HealthModule",
+      "Milliseconds": 0.0313,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:ManaModule",
+      "Milliseconds": 0.005,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:NpcBehaviorModule",
+      "Milliseconds": 0.0035,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:MovementModule",
+      "Milliseconds": 0.0014,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:DeathModule",
+      "Milliseconds": 0.0011,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:ProcessingTierModule",
+      "Milliseconds": 0.0011,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:RaceModule",
+      "Milliseconds": 0.0016,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:ClassModule",
+      "Milliseconds": 0.0013,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:BlueprintsModule",
+      "Milliseconds": 2.5982,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:ActionsModule",
+      "Milliseconds": 0.0073,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:CoreActionsModule",
+      "Milliseconds": 45.8001,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:StatusEffectsModule",
+      "Milliseconds": 0.0063,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:StatModifiersModule",
+      "Milliseconds": 0.0016,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:AbilityScoresModule",
+      "Milliseconds": 0.0019,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:BodyPartEffectsModule",
+      "Milliseconds": 0.0012,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:BurningModule",
+      "Milliseconds": 3.4216,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:PoisonModule",
+      "Milliseconds": 0.8437,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:ParalysisModule",
+      "Milliseconds": 0.5418,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:TerrainContactsModule",
+      "Milliseconds": 0.0059,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:AurasModule",
+      "Milliseconds": 0.0011,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:AchievementModule",
+      "Milliseconds": 0.6006,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:CrawlerModule",
+      "Milliseconds": 0.0029,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:InventoryModule",
+      "Milliseconds": 0.0012,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:CoreItemsModule",
+      "Milliseconds": 5.4171,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:LootboxModule",
+      "Milliseconds": 0.2116,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:CurrencyModule",
+      "Milliseconds": 0.0243,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:ContainersModule",
+      "Milliseconds": 0.0041,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:ItemPilesModule",
+      "Milliseconds": 0.0015,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:ShopModule",
+      "Milliseconds": 0.0186,
+      "Depth": 5
+    },
+    {
+      "Name": "Configure:AreasModule",
+      "Milliseconds": 14.7252,
+      "Depth": 5
+    },
+    {
+      "Name": "ResolveBlueprints",
+      "Milliseconds": 7.5517,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior",
+      "Milliseconds": 44.6401,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:TerrainModule",
+      "Milliseconds": 0.0445,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:CoreModule",
+      "Milliseconds": 0.0238,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:HealthModule",
+      "Milliseconds": 8.2549,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:ManaModule",
+      "Milliseconds": 1.2326,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:NpcBehaviorModule",
+      "Milliseconds": 7.5061,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:MovementModule",
+      "Milliseconds": 0.749,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:DeathModule",
+      "Milliseconds": 0.4487,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:ProcessingTierModule",
+      "Milliseconds": 0.1922,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:RaceModule",
+      "Milliseconds": 0.0217,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:ClassModule",
+      "Milliseconds": 0.0203,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:BlueprintsModule",
+      "Milliseconds": 0.016,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:ActionsModule",
+      "Milliseconds": 5.444,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:CoreActionsModule",
+      "Milliseconds": 0.0313,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:StatusEffectsModule",
+      "Milliseconds": 0.5706,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:StatModifiersModule",
+      "Milliseconds": 1.084,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:AbilityScoresModule",
+      "Milliseconds": 0.2703,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:BodyPartEffectsModule",
+      "Milliseconds": 0.3701,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:BurningModule",
+      "Milliseconds": 1.1867,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:PoisonModule",
+      "Milliseconds": 1.1208,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:ParalysisModule",
+      "Milliseconds": 0.4586,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:TerrainContactsModule",
+      "Milliseconds": 0.9275,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:AurasModule",
+      "Milliseconds": 3.3497,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:AchievementModule",
+      "Milliseconds": 7.4442,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:CrawlerModule",
+      "Milliseconds": 0.0219,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:InventoryModule",
+      "Milliseconds": 1.4605,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:CoreItemsModule",
+      "Milliseconds": 0.0185,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:LootboxModule",
+      "Milliseconds": 0.1524,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:CurrencyModule",
+      "Milliseconds": 0.0244,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:ContainersModule",
+      "Milliseconds": 0.4047,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:ItemPilesModule",
+      "Milliseconds": 1.6823,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:ShopModule",
+      "Milliseconds": 0.0243,
+      "Depth": 5
+    },
+    {
+      "Name": "RegisterBehavior:AreasModule",
+      "Milliseconds": 0.0181,
+      "Depth": 5
+    },
+    {
+      "Name": "World/Map Build",
+      "Milliseconds": 42.8731,
+      "Depth": 1
+    },
+    {
+      "Name": "Module Load",
+      "Milliseconds": 32.9205,
+      "Depth": 1
+    },
+    {
+      "Name": "DeclareModules",
+      "Milliseconds": 0.2225,
+      "Depth": 2
+    },
+    {
+      "Name": "RegisterComponents",
+      "Milliseconds": 5.3413,
+      "Depth": 2
+    },
+    {
+      "Name": "RegisterComponents:TerrainModule",
+      "Milliseconds": 0.0039,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:CoreModule",
+      "Milliseconds": 0.0939,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:HealthModule",
+      "Milliseconds": 0.0377,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:ManaModule",
+      "Milliseconds": 0.0049,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:NpcBehaviorModule",
+      "Milliseconds": 0.0094,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:MovementModule",
+      "Milliseconds": 0.0068,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:DeathModule",
+      "Milliseconds": 0.0103,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:ProcessingTierModule",
+      "Milliseconds": 0.0115,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:RaceModule",
+      "Milliseconds": 0.0196,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:ClassModule",
+      "Milliseconds": 0.0086,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:BlueprintsModule",
+      "Milliseconds": 0.021,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:ActionsModule",
+      "Milliseconds": 0.0498,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:CoreActionsModule",
+      "Milliseconds": 0.0013,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:StatusEffectsModule",
+      "Milliseconds": 0.0068,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:StatModifiersModule",
+      "Milliseconds": 0.0139,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:AbilityScoresModule",
+      "Milliseconds": 0.0123,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:BodyPartEffectsModule",
+      "Milliseconds": 0.0087,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:BurningModule",
+      "Milliseconds": 0.0157,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:PoisonModule",
+      "Milliseconds": 0.0075,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:ParalysisModule",
+      "Milliseconds": 0.0061,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:TerrainContactsModule",
+      "Milliseconds": 0.0054,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:AurasModule",
+      "Milliseconds": 0.0286,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:AchievementModule",
+      "Milliseconds": 0.0087,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:CrawlerModule",
+      "Milliseconds": 0.0074,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:InventoryModule",
+      "Milliseconds": 0.0309,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:CoreItemsModule",
+      "Milliseconds": 0.0009,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:LootboxModule",
+      "Milliseconds": 0.0009,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:CurrencyModule",
+      "Milliseconds": 0.007,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:ContainersModule",
+      "Milliseconds": 0.0079,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:ItemPilesModule",
+      "Milliseconds": 0.0083,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:ShopModule",
+      "Milliseconds": 4.8683,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:AreasModule",
+      "Milliseconds": 0.0017,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure",
+      "Milliseconds": 3.012,
+      "Depth": 2
+    },
+    {
+      "Name": "Configure:TerrainModule",
+      "Milliseconds": 0.0124,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:CoreModule",
+      "Milliseconds": 0.0013,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:HealthModule",
+      "Milliseconds": 0.0038,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:ManaModule",
+      "Milliseconds": 0,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:NpcBehaviorModule",
+      "Milliseconds": 0.0001,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:MovementModule",
+      "Milliseconds": 0.0001,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:DeathModule",
+      "Milliseconds": 0.0001,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:ProcessingTierModule",
+      "Milliseconds": 0.0001,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:RaceModule",
+      "Milliseconds": 0,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:ClassModule",
+      "Milliseconds": 0.0001,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:BlueprintsModule",
+      "Milliseconds": 0.0059,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:ActionsModule",
+      "Milliseconds": 0.0001,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:CoreActionsModule",
+      "Milliseconds": 1.5026,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:StatusEffectsModule",
+      "Milliseconds": 0.0005,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:StatModifiersModule",
+      "Milliseconds": 0.0001,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:AbilityScoresModule",
+      "Milliseconds": 0.0001,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:BodyPartEffectsModule",
+      "Milliseconds": 0.0001,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:BurningModule",
+      "Milliseconds": 0.0228,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:PoisonModule",
+      "Milliseconds": 0.0081,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:ParalysisModule",
+      "Milliseconds": 0.0074,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:TerrainContactsModule",
+      "Milliseconds": 0.0001,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:AurasModule",
+      "Milliseconds": 0.0001,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:AchievementModule",
+      "Milliseconds": 0.0398,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:CrawlerModule",
+      "Milliseconds": 0.0001,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:InventoryModule",
+      "Milliseconds": 0.0002,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:CoreItemsModule",
+      "Milliseconds": 0.4083,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:LootboxModule",
+      "Milliseconds": 0.0195,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:CurrencyModule",
+      "Milliseconds": 0.0019,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:ContainersModule",
+      "Milliseconds": 0.0003,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:ItemPilesModule",
+      "Milliseconds": 0.0001,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:ShopModule",
+      "Milliseconds": 0.0013,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:AreasModule",
+      "Milliseconds": 0.9502,
+      "Depth": 3
+    },
+    {
+      "Name": "ResolveBlueprints",
+      "Milliseconds": 0.0883,
+      "Depth": 2
+    },
+    {
+      "Name": "RegisterBehavior",
+      "Milliseconds": 6.4272,
+      "Depth": 2
+    },
+    {
+      "Name": "RegisterBehavior:TerrainModule",
+      "Milliseconds": 0.0033,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:CoreModule",
+      "Milliseconds": 0.002,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:HealthModule",
+      "Milliseconds": 0.4741,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:ManaModule",
+      "Milliseconds": 0.1089,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:NpcBehaviorModule",
+      "Milliseconds": 5.3888,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:MovementModule",
+      "Milliseconds": 0.0374,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:DeathModule",
+      "Milliseconds": 0.0067,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:ProcessingTierModule",
+      "Milliseconds": 0.0036,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:RaceModule",
+      "Milliseconds": 0.0029,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:ClassModule",
+      "Milliseconds": 0.0016,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:BlueprintsModule",
+      "Milliseconds": 0.001,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:ActionsModule",
+      "Milliseconds": 0.0849,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:CoreActionsModule",
+      "Milliseconds": 0.0011,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:StatusEffectsModule",
+      "Milliseconds": 0.0095,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:StatModifiersModule",
+      "Milliseconds": 0.0115,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:AbilityScoresModule",
+      "Milliseconds": 0.0018,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:BodyPartEffectsModule",
+      "Milliseconds": 0.1008,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:BurningModule",
+      "Milliseconds": 0.0285,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:PoisonModule",
+      "Milliseconds": 0.01,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:ParalysisModule",
+      "Milliseconds": 0.0109,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:TerrainContactsModule",
+      "Milliseconds": 0.0133,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:AurasModule",
+      "Milliseconds": 0.0237,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:AchievementModule",
+      "Milliseconds": 0.0404,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:CrawlerModule",
+      "Milliseconds": 0.0029,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:InventoryModule",
+      "Milliseconds": 0.0217,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:CoreItemsModule",
+      "Milliseconds": 0.0009,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:LootboxModule",
+      "Milliseconds": 0.0015,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:CurrencyModule",
+      "Milliseconds": 0.0014,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:ContainersModule",
+      "Milliseconds": 0.0036,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:ItemPilesModule",
+      "Milliseconds": 0.0066,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:ShopModule",
+      "Milliseconds": 0.0013,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:AreasModule",
+      "Milliseconds": 0.0023,
+      "Depth": 3
+    },
+    {
+      "Name": "BuildSpawnRecordRebuilderStaging",
+      "Milliseconds": 3.9902,
+      "Depth": 2
+    },
+    {
+      "Name": "DeclareModules",
+      "Milliseconds": 0.1036,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents",
+      "Milliseconds": 0.223,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterComponents:TerrainModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:CoreModule",
+      "Milliseconds": 0.0283,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:HealthModule",
+      "Milliseconds": 0.0641,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:ManaModule",
+      "Milliseconds": 0.0036,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:NpcBehaviorModule",
+      "Milliseconds": 0.0014,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:MovementModule",
+      "Milliseconds": 0.0007,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:DeathModule",
+      "Milliseconds": 0.0021,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:ProcessingTierModule",
+      "Milliseconds": 0.0012,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:RaceModule",
+      "Milliseconds": 0.0061,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:ClassModule",
+      "Milliseconds": 0.0022,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:BlueprintsModule",
+      "Milliseconds": 0.0014,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:ActionsModule",
+      "Milliseconds": 0.0178,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:CoreActionsModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:StatusEffectsModule",
+      "Milliseconds": 0.0012,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:StatModifiersModule",
+      "Milliseconds": 0.0017,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:AbilityScoresModule",
+      "Milliseconds": 0.0097,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:BodyPartEffectsModule",
+      "Milliseconds": 0.0016,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:BurningModule",
+      "Milliseconds": 0.0024,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:PoisonModule",
+      "Milliseconds": 0.0009,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:ParalysisModule",
+      "Milliseconds": 0.0007,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:TerrainContactsModule",
+      "Milliseconds": 0.0008,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:AurasModule",
+      "Milliseconds": 0.01,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:AchievementModule",
+      "Milliseconds": 0.0019,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:CrawlerModule",
+      "Milliseconds": 0.0155,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:InventoryModule",
+      "Milliseconds": 0.0089,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:CoreItemsModule",
+      "Milliseconds": 0.0002,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:LootboxModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:CurrencyModule",
+      "Milliseconds": 0.0009,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:ContainersModule",
+      "Milliseconds": 0.0009,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:ItemPilesModule",
+      "Milliseconds": 0.0011,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:ShopModule",
+      "Milliseconds": 0.0046,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterComponents:AreasModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure",
+      "Milliseconds": 1.8791,
+      "Depth": 3
+    },
+    {
+      "Name": "Configure:TerrainModule",
+      "Milliseconds": 0.0033,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:CoreModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:HealthModule",
+      "Milliseconds": 0.0002,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:ManaModule",
+      "Milliseconds": 0,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:NpcBehaviorModule",
+      "Milliseconds": 0,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:MovementModule",
+      "Milliseconds": 0,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:DeathModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:ProcessingTierModule",
+      "Milliseconds": 0,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:RaceModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:ClassModule",
+      "Milliseconds": 0,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:BlueprintsModule",
+      "Milliseconds": 0.0037,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:ActionsModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:CoreActionsModule",
+      "Milliseconds": 1.0029,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:StatusEffectsModule",
+      "Milliseconds": 0.0005,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:StatModifiersModule",
+      "Milliseconds": 0,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:AbilityScoresModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:BodyPartEffectsModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:BurningModule",
+      "Milliseconds": 0.0026,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:PoisonModule",
+      "Milliseconds": 0.0011,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:ParalysisModule",
+      "Milliseconds": 0.0006,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:TerrainContactsModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:AurasModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:AchievementModule",
+      "Milliseconds": 0.0072,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:CrawlerModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:InventoryModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:CoreItemsModule",
+      "Milliseconds": 0.0014,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:LootboxModule",
+      "Milliseconds": 0.0063,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:CurrencyModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:ContainersModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:ItemPilesModule",
+      "Milliseconds": 0,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:ShopModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "Configure:AreasModule",
+      "Milliseconds": 0.8276,
+      "Depth": 4
+    },
+    {
+      "Name": "ResolveBlueprints",
+      "Milliseconds": 0.0722,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior",
+      "Milliseconds": 1.0047,
+      "Depth": 3
+    },
+    {
+      "Name": "RegisterBehavior:TerrainModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:CoreModule",
+      "Milliseconds": 0.0002,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:HealthModule",
+      "Milliseconds": 0.2317,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:ManaModule",
+      "Milliseconds": 0.1194,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:NpcBehaviorModule",
+      "Milliseconds": 0.2694,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:MovementModule",
+      "Milliseconds": 0.0292,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:DeathModule",
+      "Milliseconds": 0.0017,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:ProcessingTierModule",
+      "Milliseconds": 0.0008,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:RaceModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:ClassModule",
+      "Milliseconds": 0,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:BlueprintsModule",
+      "Milliseconds": 0.0002,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:ActionsModule",
+      "Milliseconds": 0.0683,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:CoreActionsModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:StatusEffectsModule",
+      "Milliseconds": 0.0133,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:StatModifiersModule",
+      "Milliseconds": 0.0119,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:AbilityScoresModule",
+      "Milliseconds": 0.0005,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:BodyPartEffectsModule",
+      "Milliseconds": 0.1035,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:BurningModule",
+      "Milliseconds": 0.0292,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:PoisonModule",
+      "Milliseconds": 0.0129,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:ParalysisModule",
+      "Milliseconds": 0.0136,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:TerrainContactsModule",
+      "Milliseconds": 0.0175,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:AurasModule",
+      "Milliseconds": 0.0319,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:AchievementModule",
+      "Milliseconds": 0.0133,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:CrawlerModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:InventoryModule",
+      "Milliseconds": 0.0162,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:CoreItemsModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:LootboxModule",
+      "Milliseconds": 0.0007,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:CurrencyModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:ContainersModule",
+      "Milliseconds": 0.0008,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:ItemPilesModule",
+      "Milliseconds": 0.0042,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:ShopModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "RegisterBehavior:AreasModule",
+      "Milliseconds": 0.0001,
+      "Depth": 4
+    },
+    {
+      "Name": "Entity Population",
+      "Milliseconds": 3030.1849,
+      "Depth": 1
+    },
+    {
+      "Name": "Player Spawn",
+      "Milliseconds": 30.5361,
+      "Depth": 1
+    },
+    {
+      "Name": "Window Headroom",
+      "Milliseconds": 29.9359,
+      "Depth": 1
+    },
+    {
+      "Name": "Heap Compaction",
+      "Milliseconds": 146.6031,
+      "Depth": 1
+    },
+    {
+      "Name": "Aura Field Build",
+      "Milliseconds": 2168.4793,
+      "Depth": 1
+    },
+    {
+      "Name": "Presentation Bootstrap",
+      "Milliseconds": 300.8571,
+      "Depth": 0
+    },
+    {
+      "Name": "Window/Shell Setup",
+      "Milliseconds": 73.6754,
+      "Depth": 0
+    }
+  ]
+}

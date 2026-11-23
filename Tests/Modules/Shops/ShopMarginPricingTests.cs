@@ -24,27 +24,13 @@ public sealed class ShopMarginPricingTests
         Assert.AreEqual(0.5f, ShopMarginPricing.ComputeMarginReductionFraction(charismaTotal: 300), delta: 0.0001f);
 
     [TestMethod]
-    public void ApplyMarginReduction_NoReduction_MultiplierUnchanged()
+    [DataRow(0f, 1.20f, 0.80f, DisplayName = "ApplyMarginReduction_NoReduction_MultiplierUnchanged")]
+    [DataRow(0.5f, 1.10f, 0.90f, DisplayName = "ApplyMarginReduction_HalfReduction_HalvesTheMarginOnBothSidesOfParity")]
+    [DataRow(1f, 1.0f, 1.0f, DisplayName = "ApplyMarginReduction_FullReduction_MultiplierReachesExactParity")]
+    public void ApplyMarginReduction_MovesBothMultipliersTowardParity(float reductionFraction, float expectedBuyMultiplier, float expectedSellMultiplier)
     {
-        Assert.AreEqual(1.20f, ShopMarginPricing.ApplyMarginReduction(1.20f, reductionFraction: 0f), delta: 0.0001f);
-        Assert.AreEqual(0.80f, ShopMarginPricing.ApplyMarginReduction(0.80f, reductionFraction: 0f), delta: 0.0001f);
-    }
-
-    [TestMethod]
-    public void ApplyMarginReduction_HalfReduction_HalvesTheMarginOnBothSidesOfParity()
-    {
-        // BuyMultiplier's margin is (1.20 - 1) = 0.20 -- halved is 0.10, so 1.10.
-        Assert.AreEqual(1.10f, ShopMarginPricing.ApplyMarginReduction(1.20f, reductionFraction: 0.5f), delta: 0.0001f);
-
-        // SellMultiplier's margin is (1 - 0.80) = 0.20 -- halved is 0.10, so 0.90.
-        Assert.AreEqual(0.90f, ShopMarginPricing.ApplyMarginReduction(0.80f, reductionFraction: 0.5f), delta: 0.0001f);
-    }
-
-    [TestMethod]
-    public void ApplyMarginReduction_FullReduction_MultiplierReachesExactParity()
-    {
-        Assert.AreEqual(1.0f, ShopMarginPricing.ApplyMarginReduction(1.20f, reductionFraction: 1f), delta: 0.0001f);
-        Assert.AreEqual(1.0f, ShopMarginPricing.ApplyMarginReduction(0.80f, reductionFraction: 1f), delta: 0.0001f);
+        Assert.AreEqual(expectedBuyMultiplier, ShopMarginPricing.ApplyMarginReduction(1.20f, reductionFraction), delta: 0.0001f);
+        Assert.AreEqual(expectedSellMultiplier, ShopMarginPricing.ApplyMarginReduction(0.80f, reductionFraction), delta: 0.0001f);
     }
 
     [TestMethod]

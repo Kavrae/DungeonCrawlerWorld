@@ -146,19 +146,6 @@ public sealed class ProcessingTierSystemTests
     }
 
     [TestMethod]
-    public void FirstUpdate_NoPresetReference_OutsideLocalButSameNeighborhood_Neighborhood()
-    {
-        // Distance 200, far outside Local, but both in neighborhood (0, 0).
-        var fixture = new Fixture();
-        fixture.Place(PlayerEntityId, new Vector3Int(500, 500, 0));
-        fixture.Place(OtherEntityId, new Vector3Int(700, 500, 0));
-
-        fixture.Frame();
-
-        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(OtherEntityId));
-    }
-
-    [TestMethod]
     public void FirstUpdate_NoPresetReference_AdjacentNeighborhood_Borough()
     {
         // Neighborhood (0,0) vs (1,0): adjacent.

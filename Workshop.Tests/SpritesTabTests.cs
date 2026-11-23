@@ -7,8 +7,6 @@ namespace Workshop.Tests;
 [TestClass]
 public sealed class SpritesTabTests
 {
-    private const string SolutionFileName = "DungeonCrawlerWorld.sln";
-
     private static SpriteManifestCell Cell(int column = 0, int columnSpan = 0, string sheet = "sheet.png", string? tint = null) =>
         new(sheet, column, 0, 16, 16, columnSpan, Tint: tint);
 
@@ -17,17 +15,6 @@ public sealed class SpritesTabTests
 
     private static List<SpriteManifestCell?> CardinalSet(SpriteManifestCell? fallback) =>
         [.. Enumerable.Range(0, SpriteLinks.CellsPerSet(SpriteLinking.Cardinal)).Select(mask => mask == SpriteLinks.FallbackMask(SpriteLinking.Cardinal) ? fallback : null)];
-
-    private static string FindRepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, SolutionFileName)))
-        {
-            directory = directory.Parent;
-        }
-
-        return directory?.FullName ?? throw new InvalidOperationException("Could not locate the repository root from the test assembly's location.");
-    }
 
     [TestMethod]
     public void Options_AreOnePart()
@@ -151,7 +138,7 @@ public sealed class SpritesTabTests
     [TestMethod]
     public void ShippedManifest_ReadsWithNoErrors()
     {
-        var content = Path.Combine(FindRepositoryRoot(), "DungeonCrawlerWorld", "Content");
+        var content = Path.Combine(TestRepository.Root, "DungeonCrawlerWorld", "Content");
         var entries = SpriteManifest.ReadEntries(Path.Combine(content, "SpriteManifest.json"));
 
         var views = SpriteEntryView.Read(entries, sheetPath => File.Exists(Path.Combine(content, "Spritesheets", sheetPath)));

@@ -4544,21 +4544,12 @@ would clutter the screen in play live in a UI edit mode, as FFXIV's HUD Layout d
 
 ### High Priority
 
-#### TOP PRIORITY: Investigate the tests that fail on some runs
+#### Find the one-off allocation in `WithTheLinkOn_ASimulationFrameAllocatesNothing`
 
-Seen 2026-11-14: three runs of `Workshop.Tests` with nothing rebuilt between them gave 6, 5 and 0 failures. The five
-named each time are the Debug tab's launch tests (`TheGamesOutput_IsCaptured_WithErrorsMarked`,
-`AGameThatExitsWithAnErrorCode_SaysSoInTheStatus`, `ExtraArguments_ComeAfterTheTargetsOwn_ForThatLaunchOnly`,
-`TheNextGame_AfterTheFirstEnded_GetsAFreshSession`, `AfterTheGameExits_IsGameRunningIsFalse_AndPlayStartsAnotherOne`);
-the sixth of the first run wasn't recorded.
-- Find what they wait on: each starts a real process and reads its output and exit, so a fixed wait, a race between the
-  exit and the last output line, or two tests sharing a port, log file or `Log/workshop-game-output-*.log` would fail
-  only sometimes. Check whether they run in parallel with each other or with other tests (`[DoNotParallelize]`).
-- Run the suite many times in a loop (and the five alone) to get a failure rate before and after, and record the
-  messages and stack traces of each failure.
-- Fix the cause, never a longer timeout or a retry; a test that can't be made deterministic waits on an event the code
-  raises, not on time.
-- Then do the same for `Tests` (none seen failing yet) so an unfiltered run is trusted again.
+Failed once in 20 idle runs of `Tests` on 2026-11-22 (4,992 bytes where it expects 0) and hasn't recurred; the cause is
+unknown (`PLAN-unit-test-structure.md`, Phase 1 step 8). The test now names each allocating frame, its bytes, and the
+methods compiled and gen 0 collections during the measurement. When it fails again, read that message and fix the cause,
+never a retry or a looser zero.
 
 #### Remove XNA from Game and Presentation, starting with a colour wrapper
 

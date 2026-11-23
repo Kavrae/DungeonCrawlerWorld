@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    What the test projects share: the one font service, waits, repository paths, and the serial resources the CAD0004
+    analyzer enforces. It references no IDE project, so Tests can use it and WorkshopArchitectureTests still holds.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>TestSupport</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest.TestFramework" Version="4.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cadence\Engine\Engine.csproj" />
+    <ProjectReference Include="..\Cadence\UIEngine\UIEngine.csproj" />
+  </ItemGroup>
+
+</Project>

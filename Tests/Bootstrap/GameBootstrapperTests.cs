@@ -23,27 +23,11 @@ namespace Tests.Bootstrap;
 [TestClass]
 public sealed class GameBootstrapperTests
 {
-    internal static string FindRepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "DungeonCrawlerWorld.sln")))
-        {
-            directory = directory.Parent;
-        }
-
-        if (directory is null)
-        {
-            throw new InvalidOperationException("Could not locate the repository root from the test assembly's location.");
-        }
-
-        return directory.FullName;
-    }
-
     internal static string FindAssemblyPath(string projectName)
     {
         var assemblyFileName = $"{projectName}.dll";
         return Directory.EnumerateFiles(
-                Path.Combine(FindRepositoryRoot(), "DungeonCrawlerWorld", "Mods", projectName, "bin"),
+                Path.Combine(TestRepository.Root, "DungeonCrawlerWorld", "Mods", projectName, "bin"),
                 assemblyFileName,
                 SearchOption.AllDirectories)
             .First();
@@ -59,26 +43,6 @@ public sealed class GameBootstrapperTests
 
     private static GameSession BuildWithModsFrom(string modsDirectory) =>
         GameBootstrapper.Build(ModValidation.Validate(modsDirectory, TestContent.Layers, []), new Map(new Vector3Int(5, 5, 1)), TestContent.Layers, sessionSeed: 0, initialEntityCapacity: 100, initialComponentCapacity: 50);
-
-    /// <summary>
-    /// ModuleLoader's collectible AssemblyLoadContext is never explicitly unloaded (by
-    /// design -- see its doc comment), so on Windows the mod DLL it loaded stays
-    /// memory-mapped, and therefore locked on disk, for the rest of this test process's
-    /// lifetime. Best-effort cleanup only; leaving a temp directory behind is harmless.
-    /// </summary>
-    internal static void TryDeleteDirectory(string path)
-    {
-        try
-        {
-            Directory.Delete(path, recursive: true);
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
-        catch (IOException)
-        {
-        }
-    }
 
     [TestMethod]
     public void Build_EmptyModsDirectory_BehavesLikeNoModsInstalled()
@@ -115,7 +79,7 @@ public sealed class GameBootstrapperTests
         }
         finally
         {
-            TryDeleteDirectory(directory.FullName);
+            TestDirectory.TryDelete(directory.FullName);
         }
     }
 
@@ -135,7 +99,7 @@ public sealed class GameBootstrapperTests
         }
         finally
         {
-            TryDeleteDirectory(directory.FullName);
+            TestDirectory.TryDelete(directory.FullName);
         }
     }
 
@@ -160,7 +124,7 @@ public sealed class GameBootstrapperTests
         }
         finally
         {
-            TryDeleteDirectory(directory.FullName);
+            TestDirectory.TryDelete(directory.FullName);
         }
     }
 
@@ -179,7 +143,7 @@ public sealed class GameBootstrapperTests
         }
         finally
         {
-            TryDeleteDirectory(directory.FullName);
+            TestDirectory.TryDelete(directory.FullName);
         }
     }
 
@@ -198,7 +162,7 @@ public sealed class GameBootstrapperTests
         }
         finally
         {
-            TryDeleteDirectory(directory.FullName);
+            TestDirectory.TryDelete(directory.FullName);
         }
     }
 }

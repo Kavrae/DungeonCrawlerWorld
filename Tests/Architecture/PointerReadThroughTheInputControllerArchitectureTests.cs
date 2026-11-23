@@ -24,7 +24,7 @@ public sealed partial class PointerReadThroughTheInputControllerArchitectureTest
     [TestMethod]
     public void UiCode_ReadsTheMouseOnlyInUiInputController()
     {
-        var repositoryRoot = RepositoryProjects.FindRepositoryRoot();
+        var repositoryRoot = TestRepository.Root;
         var violations = new List<string>();
         foreach (var folder in UiSourceFolders)
         {

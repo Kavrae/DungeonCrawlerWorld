@@ -97,23 +97,15 @@ public sealed class PlayerHealthBarContentTests
     private static readonly Point OutsideBar = new(-100, -100);
 
     [TestMethod]
-    public void Update_SimpleHealth_ValueTextShowsCurrentOverMaximum()
+    [DataRow(false, "50 / 100", DisplayName = "Update_SimpleHealth_ValueTextShowsCurrentOverMaximum")]
+    [DataRow(true, "54 / 64", DisplayName = "Update_ComplexHealth_ValueTextShowsBodyPartTotals")]
+    public void Update_ValueTextShowsCurrentOverMaximum(bool complexHealth, string expected)
     {
-        var (content, _, _) = Build(complexHealth: false);
+        var (content, _, _) = Build(complexHealth);
 
         content.Update(ScreenBounds);
 
-        Assert.AreEqual("50 / 100", content.ValueText);
-    }
-
-    [TestMethod]
-    public void Update_ComplexHealth_ValueTextShowsBodyPartTotals()
-    {
-        var (content, _, _) = Build(complexHealth: true);
-
-        content.Update(ScreenBounds);
-
-        Assert.AreEqual("54 / 64", content.ValueText);
+        Assert.AreEqual(expected, content.ValueText);
     }
 
     [TestMethod]

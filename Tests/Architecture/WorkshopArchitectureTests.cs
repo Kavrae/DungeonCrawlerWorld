@@ -16,7 +16,7 @@ public sealed class WorkshopArchitectureTests
     [TestMethod]
     public void OnlyWorkshopProjects_ReferenceWorkshopProjects()
     {
-        var repositoryRoot = RepositoryProjects.FindRepositoryRoot();
+        var repositoryRoot = TestRepository.Root;
         var workshopProjectPaths = WorkshopProjectFiles
             .Select(relativePath => Path.GetFullPath(Path.Combine(repositoryRoot, relativePath)))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);

@@ -4148,3 +4148,24 @@ diagnostics, generated at build time; nothing on the frame reads it.
 - **Cost** (Phase 0, Release): reading every property of a component through the traversal is about 33 ns and
   allocates nothing; formatting rows through it about 350-410 ns, against `ToString`'s 580-680 ns and 371 bytes and
   cached reflection's 770-815 ns.
+
+### Test isolation
+
+`PLAN-unit-test-structure.md` holds the review, the baselines and the phases.
+
+- **Three kinds of test.** Isolated (the default, in parallel), shared read-only, and serial (`[DoNotParallelize]`). A
+  shared fixture is never written, and a catalog read that caches counts as a write: `ActionCatalog.GetOrCreateDerived`
+  writes an unlocked dictionary, so `BlueprintTestContext` keeps one built session per test thread.
+- **`CAD0004` (`SerialTestResourceAnalyzer`).** Runs only in a compilation that can see `TestSupport`'s attribute. It
+  follows what each member names, lambdas and field initializers included, and counts a test class's constructors,
+  `TestInitialize` and `TestCleanup` as part of every test. The error gives the path to the resource. It doesn't follow
+  a virtual or interface call to its implementations, or a call into another assembly: following them would flag every
+  test that calls `Dispose`.
+- **Allowances are exact counts** (`TestIsolationArchitectureTests`), so a new use in an allowed file fails, and so does
+  a listed use that has gone.
+- **A blocking wait on a dedicated thread must not depend on the thread pool.** `DiagnosticsLink` waited on
+  `ConnectAsync(...).Wait(5 s)`; with the pool busy the completion arrived late and it closed a connection that had
+  already been accepted. Its sender thread now connects synchronously.
+- **A test that waits is `async`** (`TestWait.UntilAsync`), so it holds no pool thread while what it waits for needs
+  one, and neither suite raises the pool's minimum. A per-thread measurement (`GC.GetAllocatedBytesForCurrentThread`)
+  stays between two awaits, because a continuation can resume on another thread.

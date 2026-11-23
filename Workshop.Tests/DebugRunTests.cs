@@ -7,7 +7,6 @@ namespace Workshop.Tests;
 [DoNotParallelize]
 public sealed class DebugRunTests
 {
-    private static readonly TimeSpan WaitTimeout = TimeSpan.FromSeconds(10);
     private static readonly string Cmd = Path.Combine(Environment.SystemDirectory, "cmd.exe");
     private static readonly DebugLaunchOptions HeadlessOptions = DebugLaunchOptions.Default with { RunsBenchmark = true, Headless = true };
     private static readonly FrameCostRowId AuraSystemRow = FrameCostRowIds.Of(FrameCostCategory.Update, "SystemManager", "AuraSystem");
@@ -31,25 +30,14 @@ public sealed class DebugRunTests
 
     private static GameLaunchTarget SleepingGame => CmdTarget("/c ping -n 30 127.0.0.1 > nul");
 
-    private static void FrameUntil(DebugTabHarness harness, Func<bool> condition, string description)
-    {
-        var deadline = DateTime.UtcNow + WaitTimeout;
-        while (true)
-        {
-            harness.Frame();
-            if (condition())
+    private static Task FrameUntilAsync(DebugTabHarness harness, Func<bool> condition, string description) =>
+        TestWait.UntilAsync(
+            () =>
             {
-                return;
-            }
-
-            if (DateTime.UtcNow > deadline)
-            {
-                Assert.Fail($"Timed out waiting until {description}; the status line said \"{harness.Status.LastMessage}\".");
-            }
-
-            Thread.Sleep(5);
-        }
-    }
+                harness.Frame();
+                return condition();
+            },
+            () => $"{description}; the status line said \"{harness.Status.LastMessage}\"");
 
     private static void Launch(DebugTabHarness harness, DebugLaunchOptions options)
     {
@@ -66,7 +54,7 @@ public sealed class DebugRunTests
     }
 
     [TestMethod]
-    public void AHeadlessRun_CountsItsFramesTowardTheRangesEnd_OnTheStatusLineAndTheLiveHeader()
+    public async Task AHeadlessRun_CountsItsFramesTowardTheRangesEnd_OnTheStatusLineAndTheLiveHeader()
     {
         using var harness = new DebugTabHarness(_optionsPath, launchTarget: SleepingGame);
         Launch(harness, HeadlessOptions);
@@ -78,7 +66,7 @@ public sealed class DebugRunTests
             link.RecordFrame(frame, TimeSpan.FromMilliseconds(3), tracker);
         }
 
-        FrameUntil(harness, () => harness.Status.LastMessage == "Headless benchmark: frame 1,200 of 3,600", "the status line counted the frames");
+        await FrameUntilAsync(harness, () => harness.Status.LastMessage == "Headless benchmark: frame 1,200 of 3,600", "the status line counted the frames");
 
         var live = harness.View.Live;
         Assert.AreEqual(DebugSection.Live, harness.View.Section);
@@ -101,13 +89,13 @@ public sealed class DebugRunTests
     }
 
     [TestMethod]
-    public void AWindowedRun_LeavesTheConnectionOnTheStatusLine_AndShowsNoProgress()
+    public async Task AWindowedRun_LeavesTheConnectionOnTheStatusLine_AndShowsNoProgress()
     {
         using var harness = new DebugTabHarness(_optionsPath, launchTarget: SleepingGame);
         Launch(harness, DebugLaunchOptions.Default);
         using var link = ConnectedLink(harness);
 
-        FrameUntil(harness, () => harness.Status.LastMessage.StartsWith("Diagnostics: connected (pid", StringComparison.Ordinal), "the connection was shown");
+        await FrameUntilAsync(harness, () => harness.Status.LastMessage.StartsWith("Diagnostics: connected (pid", StringComparison.Ordinal), "the connection was shown");
 
         Assert.IsFalse(harness.View.Live.ProgressBar!.IsVisible);
         Assert.AreEqual(string.Empty, harness.View.Live.ProgressText);
@@ -115,7 +103,7 @@ public sealed class DebugRunTests
     }
 
     [TestMethod]
-    public void ACompletedBenchmark_IsSelectedAndOpenedInReports_WithItsFingerprintOnTheStatusLine()
+    public async Task ACompletedBenchmark_IsSelectedAndOpenedInReports_WithItsFingerprintOnTheStatusLine()
     {
         var benchmark = new FrameRangeBenchmark(new BenchmarkFrameRange(600, 602));
         for (var frame = 600; frame < 602; frame++)
@@ -133,7 +121,7 @@ public sealed class DebugRunTests
         link.SendBenchmarkCompleted(new DiagnosticsLinkBenchmarkCompletion(600, 602, reportPath, null, null));
 
         var reports = harness.View.Reports;
-        FrameUntil(harness, () => reports.OpenSession is not null, "the completed benchmark's report opened");
+        await FrameUntilAsync(harness, () => reports.OpenSession is not null, "the completed benchmark's report opened");
 
         var fileName = Path.GetFileName(reportPath);
         Assert.AreEqual(DebugSection.Reports, harness.View.Section);
@@ -155,7 +143,7 @@ public sealed class DebugRunTests
     }
 
     [TestMethod]
-    public void ACompletedBenchmark_WhileReportsIsNotShown_PointsThere_AndOpensWhenItIsShown()
+    public async Task ACompletedBenchmark_WhileReportsIsNotShown_PointsThere_AndOpensWhenItIsShown()
     {
         var benchmark = new FrameRangeBenchmark(new BenchmarkFrameRange(600, 601));
         benchmark.SimulationFrameStarting(600);
@@ -168,39 +156,39 @@ public sealed class DebugRunTests
         link.SendBenchmarkCompleted(new DiagnosticsLinkBenchmarkCompletion(600, 601, reportPath, null, null));
 
         var fileName = Path.GetFileName(reportPath);
-        FrameUntil(harness, () => harness.Status.LastMessage.StartsWith("Benchmark complete", StringComparison.Ordinal), "the completion was shown");
+        await FrameUntilAsync(harness, () => harness.Status.LastMessage.StartsWith("Benchmark complete", StringComparison.Ordinal), "the completion was shown");
 
         Assert.AreEqual($"Benchmark complete: {fileName} -- open Debug > Reports", harness.Status.LastMessage);
         Assert.AreEqual(DebugSection.Live, harness.View.Section);
         Assert.IsNull(harness.View.Reports.OpenSession);
 
         harness.View.ShowSection(DebugSection.Reports);
-        FrameUntil(harness, () => harness.View.Reports.OpenSession is not null, "the report opened once Reports was shown");
+        await FrameUntilAsync(harness, () => harness.View.Reports.OpenSession is not null, "the report opened once Reports was shown");
         harness.Launcher.Stop(out _);
     }
 
     [TestMethod]
-    public void AHeadlessRunTheGameRefuses_SaysItEndedEarly_WithTheGamesOwnErrorLine()
+    public async Task AHeadlessRunTheGameRefuses_SaysItEndedEarly_WithTheGamesOwnErrorLine()
     {
         using var harness = new DebugTabHarness(_optionsPath, launchTarget: CmdTarget($"/c (echo {HeadlessArgument.RequiresRangeMessage})1>&2 & exit 2"));
         Launch(harness, HeadlessOptions);
 
-        FrameUntil(harness, () => harness.Status.LastMessage.StartsWith("Headless benchmark ended early", StringComparison.Ordinal), "the run ended");
+        await FrameUntilAsync(harness, () => harness.Status.LastMessage.StartsWith("Headless benchmark ended early", StringComparison.Ordinal), "the run ended");
 
         Assert.AreEqual($"Headless benchmark ended early (exit code 2): {HeadlessArgument.RequiresRangeMessage}", harness.Status.LastMessage);
     }
 
     [TestMethod]
-    public void AStoppedHeadlessRun_SaysGameStopped_EvenAfterItsLinkCloses()
+    public async Task AStoppedHeadlessRun_SaysGameStopped_EvenAfterItsLinkCloses()
     {
         using var harness = new DebugTabHarness(_optionsPath, launchTarget: SleepingGame);
         Launch(harness, HeadlessOptions);
         var link = ConnectedLink(harness);
-        FrameUntil(harness, () => harness.Debugging.LaunchedSession?.Hello is not null, "the game connected");
+        await FrameUntilAsync(harness, () => harness.Debugging.LaunchedSession?.Hello is not null, "the game connected");
 
         Assert.IsTrue(harness.Debugging.Stop(out var status));
         link.Dispose();
-        FrameUntil(harness, () => harness.Debugging.LaunchedSession!.State == DiagnosticsConnectionState.Ended, "the link closed");
+        await FrameUntilAsync(harness, () => harness.Debugging.LaunchedSession!.State == DiagnosticsConnectionState.Ended, "the link closed");
 
         Assert.AreEqual(GameLauncher.GameStoppedStatus, status);
         Assert.AreEqual(GameLauncher.GameStoppedStatus, harness.Status.LastMessage);

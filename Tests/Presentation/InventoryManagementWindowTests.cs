@@ -251,12 +251,8 @@ public sealed class InventoryManagementWindowTests
     [TestMethod]
     public void SortOrder_RecentlyAcquiredDescending_OrdersCellsNewestFirst()
     {
-        // Build() already grants firstItemId; secondItemId and scrollItemId are granted here,
-        // each after a short sleep, so the three stacks have distinctly ordered AcquiredSequence.
         var (window, componentManager, firstItemId, secondItemId, scrollItemId) = Build();
-        Thread.Sleep(5);
         InventoryActions.AddItem(componentManager, EntityId, secondItemId, quantity: 1);
-        Thread.Sleep(5);
         InventoryActions.AddItem(componentManager, EntityId, scrollItemId, quantity: 1);
 
         var grid = FindActiveGrid(window);
@@ -274,10 +270,8 @@ public sealed class InventoryManagementWindowTests
         // into one badged cell) -- the second grant, well after firstItemId, must be what the
         // merged cell sorts by, not either member's Quantity or the group's oldest timestamp.
         var (window, componentManager, firstItemId, secondItemId, _) = Build();
-        Thread.Sleep(5);
         var secondItemDefinition = new ItemDefinition(secondItemId, "Potion B", null, "b", Color.White, Tags: [GameTags.ItemConsumablePotion], Effects: []);
         InventoryActions.AddDivergentItem(componentManager, EntityId, secondItemDefinition with { Description = "batch 1" });
-        Thread.Sleep(5);
         InventoryActions.AddDivergentItem(componentManager, EntityId, secondItemDefinition with { Description = "batch 2" });
 
         var grid = FindActiveGrid(window);

@@ -5,24 +5,6 @@ namespace Tests.Architecture;
 /// <summary>The solution's project files on disk and the projects each one references, read from the source tree.</summary>
 internal static class RepositoryProjects
 {
-    private const string SolutionFileName = "DungeonCrawlerWorld.sln";
-
-    public static string FindRepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, SolutionFileName)))
-        {
-            directory = directory.Parent;
-        }
-
-        if (directory is null)
-        {
-            throw new InvalidOperationException("Could not locate the repository root from the test assembly's location.");
-        }
-
-        return directory.FullName;
-    }
-
     /// <summary>Every project file under folder, build output and logs skipped.</summary>
     public static List<string> ProjectFilesUnder(string folder) =>
         Directory.EnumerateFiles(folder, "*.csproj", SearchOption.AllDirectories)

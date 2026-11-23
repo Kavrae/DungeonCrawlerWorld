@@ -13,7 +13,7 @@ public sealed class HealthGrantArchitectureTests
     [TestMethod]
     public void Blueprints_NeverBuildASimpleHealthComponent()
     {
-        var repositoryRoot = RepositoryProjects.FindRepositoryRoot();
+        var repositoryRoot = TestRepository.Root;
         var violations = new List<string>();
         foreach (var sourceFile in Directory.EnumerateFiles(Path.Combine(repositoryRoot, BlueprintsFolder), "*.cs", SearchOption.AllDirectories))
         {

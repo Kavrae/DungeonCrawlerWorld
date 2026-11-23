@@ -17,19 +17,13 @@ public sealed class CommandLineSettingsSourceTests
     }
 
     [TestMethod]
-    public void TheValue_IsEverythingAfterTheSecondEquals()
+    [DataRow("--setting=Shop.Greeting=a=b", "a=b", DisplayName = "TheValue_IsEverythingAfterTheSecondEquals")]
+    [DataRow("--setting=Shop.Greeting=", "", DisplayName = "AnEmptyValue_IsKept")]
+    public void TheValue_IsEverythingAfterTheNameAndItsEquals(string argument, string expectedValue)
     {
-        var source = new CommandLineSettingsSource(["--setting=Shop.Greeting=a=b"]);
+        var source = new CommandLineSettingsSource([argument]);
 
-        Assert.AreEqual(new SettingOverride("Shop", "Greeting", "a=b"), Assert.ContainsSingle(source.Overrides));
-    }
-
-    [TestMethod]
-    public void AnEmptyValue_IsKept()
-    {
-        var source = new CommandLineSettingsSource(["--setting=Shop.Greeting="]);
-
-        Assert.AreEqual(new SettingOverride("Shop", "Greeting", ""), Assert.ContainsSingle(source.Overrides));
+        Assert.AreEqual(new SettingOverride("Shop", "Greeting", expectedValue), Assert.ContainsSingle(source.Overrides));
     }
 
     [TestMethod]

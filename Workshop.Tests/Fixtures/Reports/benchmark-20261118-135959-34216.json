@@ -1,0 +1,304 @@
+{
+  "TimestampUtc": "2026-11-18T13:59:59.6169235Z",
+  "RandomSeed": 1,
+  "ProcessId": 34216,
+  "StartFrame": 600,
+  "EndFrame": 3600,
+  "FrameCount": 3000,
+  "WallClockMilliseconds": 4434.794,
+  "Update": {
+    "SystemManager": [
+      {
+        "Name": "NpcDecisionSystem",
+        "TotalMilliseconds": 2024.0953999999997,
+        "MillisecondsPerFrame": 0.6746984666666666,
+        "WorstMilliseconds": 3.3188,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "AuraSystem",
+        "TotalMilliseconds": 1079.0747,
+        "MillisecondsPerFrame": 0.35969156666666663,
+        "WorstMilliseconds": 5.0159,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "MovementSystem",
+        "TotalMilliseconds": 295.2768000000005,
+        "MillisecondsPerFrame": 0.09842560000000017,
+        "WorstMilliseconds": 0.5235,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "BodyPartBurningSystem",
+        "TotalMilliseconds": 272.2732000000007,
+        "MillisecondsPerFrame": 0.09075773333333358,
+        "WorstMilliseconds": 5.5403,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "ActionActivationSystem",
+        "TotalMilliseconds": 164.04040000000015,
+        "MillisecondsPerFrame": 0.05468013333333338,
+        "WorstMilliseconds": 2.6149,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "TerrainContactSystem",
+        "TotalMilliseconds": 124.26009999999988,
+        "MillisecondsPerFrame": 0.04142003333333329,
+        "WorstMilliseconds": 2.2466,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "DelayedActionSystem",
+        "TotalMilliseconds": 113.26889999999997,
+        "MillisecondsPerFrame": 0.03775629999999999,
+        "WorstMilliseconds": 0.3512,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "ComplexHealthRegenSystem",
+        "TotalMilliseconds": 71.70940000000016,
+        "MillisecondsPerFrame": 0.023903133333333385,
+        "WorstMilliseconds": 0.2393,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "BurningSystem",
+        "TotalMilliseconds": 58.995200000000104,
+        "MillisecondsPerFrame": 0.019665066666666703,
+        "WorstMilliseconds": 0.4439,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "ItemActivationSystem",
+        "TotalMilliseconds": 49.58680000000023,
+        "MillisecondsPerFrame": 0.016528933333333412,
+        "WorstMilliseconds": 10.8511,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "BodyPartEffectsSystem",
+        "TotalMilliseconds": 49.543499999999945,
+        "MillisecondsPerFrame": 0.01651449999999998,
+        "WorstMilliseconds": 0.1793,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "ProcessingTierSystem",
+        "TotalMilliseconds": 29.7624999999999,
+        "MillisecondsPerFrame": 0.0099208333333333,
+        "WorstMilliseconds": 0.2292,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "SimpleHealthRegenSystem",
+        "TotalMilliseconds": 23.60779999999997,
+        "MillisecondsPerFrame": 0.007869266666666656,
+        "WorstMilliseconds": 0.1563,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "ManaRegenSystem",
+        "TotalMilliseconds": 15.898800000000005,
+        "MillisecondsPerFrame": 0.0052996000000000015,
+        "WorstMilliseconds": 0.0458,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "DamageLedgerExpirySystem",
+        "TotalMilliseconds": 13.157899999999994,
+        "MillisecondsPerFrame": 0.004385966666666664,
+        "WorstMilliseconds": 3.0965,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "DeathSystem",
+        "TotalMilliseconds": 11.866799999999694,
+        "MillisecondsPerFrame": 0.003955599999999898,
+        "WorstMilliseconds": 5.6391,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "PoisonSystem",
+        "TotalMilliseconds": 8.41819999999999,
+        "MillisecondsPerFrame": 0.002806066666666663,
+        "WorstMilliseconds": 0.2914,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "AchievementPollingSystem",
+        "TotalMilliseconds": 3.30849999999997,
+        "MillisecondsPerFrame": 0.0011028333333333233,
+        "WorstMilliseconds": 0.0445,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "PotionCooldownSystem",
+        "TotalMilliseconds": 2.814000000000072,
+        "MillisecondsPerFrame": 0.000938000000000024,
+        "WorstMilliseconds": 1.0688,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "DisabledActivationSystem",
+        "TotalMilliseconds": 1.8129999999999369,
+        "MillisecondsPerFrame": 0.0006043333333333123,
+        "WorstMilliseconds": 1.1237,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "AuraSourceExpirySystem",
+        "TotalMilliseconds": 0.7304999999999724,
+        "MillisecondsPerFrame": 0.0002434999999999908,
+        "WorstMilliseconds": 0.0044,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "ParalysisSystem",
+        "TotalMilliseconds": 0.6022999999999772,
+        "MillisecondsPerFrame": 0.00020076666666665906,
+        "WorstMilliseconds": 0.016,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "ToggleUpkeepSystem",
+        "TotalMilliseconds": 0.5864999999999778,
+        "MillisecondsPerFrame": 0.0001954999999999926,
+        "WorstMilliseconds": 0.004,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "ItemCooldownSystem",
+        "TotalMilliseconds": 0.57889999999998,
+        "MillisecondsPerFrame": 0.00019296666666665998,
+        "WorstMilliseconds": 0.0013,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "NeighborhoodStreamer",
+        "TotalMilliseconds": 0.5787999999999784,
+        "MillisecondsPerFrame": 0.00019293333333332614,
+        "WorstMilliseconds": 0.0105,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "StatusEffectImmunityExpirySystem",
+        "TotalMilliseconds": 0.571399999999978,
+        "MillisecondsPerFrame": 0.00019046666666665935,
+        "WorstMilliseconds": 0.0133,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "DodgeExpirySystem",
+        "TotalMilliseconds": 0.5639999999999785,
+        "MillisecondsPerFrame": 0.00018799999999999283,
+        "WorstMilliseconds": 0.0059,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "StatModifierExpirySystem",
+        "TotalMilliseconds": 0.48379999999997986,
+        "MillisecondsPerFrame": 0.00016126666666665994,
+        "WorstMilliseconds": 0.0017,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "SpawnMoves",
+        "TotalMilliseconds": 0.3540999999999838,
+        "MillisecondsPerFrame": 0.00011803333333332794,
+        "WorstMilliseconds": 0.0139,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "AuraAnchorEndingSystem",
+        "TotalMilliseconds": 0.31059999999998783,
+        "MillisecondsPerFrame": 0.00010353333333332928,
+        "WorstMilliseconds": 0.0045,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "ItemPileEndingSystem",
+        "TotalMilliseconds": 0.2696999999999903,
+        "MillisecondsPerFrame": 8.989999999999676E-05,
+        "WorstMilliseconds": 0.0085,
+        "RecordCount": 3000
+      },
+      {
+        "Name": "ContainerDestructionSystem",
+        "TotalMilliseconds": 0.2522999999999915,
+        "MillisecondsPerFrame": 8.409999999999715E-05,
+        "WorstMilliseconds": 0.0092,
+        "RecordCount": 3000
+      }
+    ],
+    "EventBus": [
+      {
+        "Name": "StatusEffectAppliedEvent",
+        "TotalMilliseconds": 9.238399999992872,
+        "MillisecondsPerFrame": 0.0030794666666642905,
+        "WorstMilliseconds": 0.0939,
+        "RecordCount": 284505
+      },
+      {
+        "Name": "EntityHealedEvent",
+        "TotalMilliseconds": 8.041900000000002,
+        "MillisecondsPerFrame": 0.002680633333333334,
+        "WorstMilliseconds": 0.2468,
+        "RecordCount": 141
+      },
+      {
+        "Name": "EntityStaggeredEvent",
+        "TotalMilliseconds": 6.451300000001404,
+        "MillisecondsPerFrame": 0.0021504333333338013,
+        "WorstMilliseconds": 0.0652,
+        "RecordCount": 31459
+      },
+      {
+        "Name": "AuraSourceRemovedEvent",
+        "TotalMilliseconds": 5.3442,
+        "MillisecondsPerFrame": 0.0017814,
+        "WorstMilliseconds": 5.0821,
+        "RecordCount": 29
+      },
+      {
+        "Name": "ActivationUsedEvent",
+        "TotalMilliseconds": 5.125300000001266,
+        "MillisecondsPerFrame": 0.0017084333333337552,
+        "WorstMilliseconds": 0.0897,
+        "RecordCount": 89630
+      },
+      {
+        "Name": "EntityDamagedEvent",
+        "TotalMilliseconds": 1.0326,
+        "MillisecondsPerFrame": 0.00034419999999999996,
+        "WorstMilliseconds": 0.1754,
+        "RecordCount": 12
+      },
+      {
+        "Name": "PotionCooldownAbusedEvent",
+        "TotalMilliseconds": 0.8992999999999862,
+        "MillisecondsPerFrame": 0.00029976666666666206,
+        "WorstMilliseconds": 0.7477,
+        "RecordCount": 845
+      }
+    ],
+    "GameLoop": [
+      {
+        "Name": "EcsContext.Update (all systems)",
+        "TotalMilliseconds": 4433.199399999999,
+        "MillisecondsPerFrame": 1.4777331333333328,
+        "WorstMilliseconds": 14.7447,
+        "RecordCount": 3000
+      }
+    ]
+  },
+  "Draw": {},
+  "Conditions": {
+    "Features": "None",
+    "IsHeadless": true,
+    "HasLink": false,
+    "BuildConfiguration": "Release"
+  }
+}

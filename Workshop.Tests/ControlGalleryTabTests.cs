@@ -14,7 +14,7 @@ public sealed class ControlGalleryTabTests
 {
     private static readonly Vector2 ScreenSize = new(1600, 900);
 
-    private static readonly FontService SharedFonts = new("Fonts");
+    private static readonly FontService SharedFonts = TestFonts.Shared;
 
     private sealed class RecordingStatus : IWorkshopStatus
     {
@@ -105,23 +105,15 @@ public sealed class ControlGalleryTabTests
     }
 
     [TestMethod]
-    public void Button_Click_ShowsOnTheStatusLine()
+    [DataRow("Button", "Button: pressed", DisplayName = "Button_Click_ShowsOnTheStatusLine")]
+    [DataRow("Toggle", "Toggle: off", DisplayName = "Toggle_Click_ShowsItsNewStateOnTheStatusLine")]
+    public void AControl_Click_ShowsWhatHappenedOnTheStatusLine(string caption, string expectedMessage)
     {
         var harness = new Harness();
 
-        harness.Click(harness.ControlCaptioned("Button").Rectangle.Center);
+        harness.Click(harness.ControlCaptioned(caption).Rectangle.Center);
 
-        CollectionAssert.Contains(harness.Status.Messages, "Button: pressed");
-    }
-
-    [TestMethod]
-    public void Toggle_Click_ShowsItsNewStateOnTheStatusLine()
-    {
-        var harness = new Harness();
-
-        harness.Click(harness.ControlCaptioned("Toggle").Rectangle.Center);
-
-        CollectionAssert.Contains(harness.Status.Messages, "Toggle: off");
+        CollectionAssert.Contains(harness.Status.Messages, expectedMessage);
     }
 
     [TestMethod]

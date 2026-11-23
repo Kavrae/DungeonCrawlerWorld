@@ -25,6 +25,7 @@
     <ProjectReference Include="..\DungeonCrawlerWorld\Game\Game.csproj" />
     <ProjectReference Include="..\DungeonCrawlerWorld\Presentation\Presentation.csproj" />
     <ProjectReference Include="..\Cadence\SpriteFormat\SpriteFormat.csproj" />
+    <ProjectReference Include="..\Tests.Support\Tests.Support.csproj" />
     <!--
       Build-order only: GameBootstrapperTests/ModuleLoaderTests load Mods.ExampleMod.dll at
       runtime via reflection (the real modding pipeline), not by compile-time reference.
@@ -38,6 +39,7 @@
 
   <ItemGroup>
     <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+    <Using Include="TestSupport" />
   </ItemGroup>
 
 </Project>

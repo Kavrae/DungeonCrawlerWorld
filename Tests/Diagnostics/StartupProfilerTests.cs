@@ -100,20 +100,23 @@ public sealed class StartupProfilerTests
     [TestMethod]
     public void WarmupThenSteady_SettlesAtTheFirstSteadyWindow_NotWhenItWasConfirmed()
     {
+        var beforeConstruction = Stopwatch.GetTimestamp();
         var profiler = new StartupProfiler();
         var constructed = Stopwatch.GetTimestamp();
         TickWindows(profiler, 9, 6);
         var steadyBegins = Stopwatch.GetElapsedTime(constructed);
 
+        var lastWindowBegins = TimeSpan.Zero;
         for (var windowIndex = 0; windowIndex < StartupProfiler.RequiredAgreeingWindows; windowIndex++)
         {
+            lastWindowBegins = Stopwatch.GetElapsedTime(beforeConstruction);
             TickWindows(profiler, 2.0);
             Thread.Sleep(100);
         }
 
         Assert.IsTrue(profiler.IsStable);
         Assert.IsGreaterThanOrEqualTo(steadyBegins, profiler.TimeToStable!.Value);
-        Assert.IsLessThan(steadyBegins + TimeSpan.FromMilliseconds(200), profiler.TimeToStable.Value);
+        Assert.IsLessThan(lastWindowBegins, profiler.TimeToStable.Value);
     }
 
     [TestMethod]

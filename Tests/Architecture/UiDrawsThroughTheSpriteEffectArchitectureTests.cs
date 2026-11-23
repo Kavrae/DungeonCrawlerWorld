@@ -23,7 +23,7 @@ public sealed partial class UiDrawsThroughTheSpriteEffectArchitectureTests
     [TestMethod]
     public void UiCode_NamesNoSpriteBatch()
     {
-        var repositoryRoot = RepositoryProjects.FindRepositoryRoot();
+        var repositoryRoot = TestRepository.Root;
         var violations = new List<string>();
         foreach (var folder in UiSourceFolders)
         {

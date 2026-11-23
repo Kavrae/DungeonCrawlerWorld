@@ -859,7 +859,7 @@ public sealed class ContentSavingTests
     }
 
     [TestMethod]
-    public void ARebuild_KeepsUnsavedEditsOfOtherRecords_AndTheUndoLog()
+    public async Task ARebuild_KeepsUnsavedEditsOfOtherRecords_AndTheUndoLog()
     {
         var (editing, items) = Open();
         var wand = Named(items, "Wand of Fireball");
@@ -870,12 +870,13 @@ public sealed class ContentSavingTests
         editing.Publish(items, wand.Id);
         Assert.IsTrue(editing.Workspace.IsRebuilding);
 
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (editing.Workspace.SessionVersion == 0 && DateTime.UtcNow < deadline)
-        {
-            editing.Update();
-            Thread.Sleep(10);
-        }
+        await TestWait.UntilAsync(
+            () =>
+            {
+                editing.Update();
+                return editing.Workspace.SessionVersion != 0;
+            },
+            "the rebuilt session was swapped in");
 
         Assert.AreEqual(1, editing.Workspace.SessionVersion);
         Assert.AreSame(potion, items.Find(potion.Id));

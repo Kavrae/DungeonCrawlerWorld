@@ -14,7 +14,7 @@ internal sealed class DebugTabHarness : IDisposable
 {
     public static readonly Vector2 ScreenSize = new(1600, 900);
 
-    private static readonly FontService SharedFonts = new("Fonts");
+    private static readonly FontService SharedFonts = TestFonts.Shared;
 
     private MouseState _mouse;
     private KeyboardState _keyboard;

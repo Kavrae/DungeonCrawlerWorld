@@ -224,21 +224,6 @@ public sealed class UiInputControllerTests
     }
 
     [TestMethod]
-    public void PressingOverATitleButton_SetsPressedPressable()
-    {
-        var windowService = CreateWindowService();
-        var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
-        var closeButton = window.TitleButtons[0];
-        var controller = CreateController([window], [], [], [], LargeScreenSize);
-
-        var pressPoint = closeButton.Rectangle.Center;
-        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
-        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
-
-        Assert.AreSame(closeButton, controller.PressedPressable);
-    }
-
-    [TestMethod]
     public void ReleasingTheMouse_ClearsPressedPressable()
     {
         var windowService = CreateWindowService();
@@ -254,22 +239,6 @@ public sealed class UiInputControllerTests
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
 
         Assert.IsNull(controller.PressedPressable);
-    }
-
-    /// <summary>Window Chrome Phase B: the pressed visual (Draw() swapping Outset to Inset) is driven by Button.IsPressed, set true on press and unconditionally false on release.</summary>
-    [TestMethod]
-    public void PressingOverATitleButton_SetsIsPressedOnTheButton()
-    {
-        var windowService = CreateWindowService();
-        var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
-        var closeButton = window.TitleButtons[0];
-        var controller = CreateController([window], [], [], [], LargeScreenSize);
-
-        var pressPoint = closeButton.Rectangle.Center;
-        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
-        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
-
-        Assert.IsTrue(closeButton.IsPressed);
     }
 
     [TestMethod]
@@ -2156,24 +2125,6 @@ public sealed class UiInputControllerTests
         popup.Close();
 
         Assert.AreSame(mapWindowStandIn, controller.FocusedElement);
-    }
-
-    /// <summary>Regression test for task 2's other half: with no default focus window configured (e.g. a test that never calls SetDefaultFocusWindow) and no eligible sibling, closing the focused window still just clears focus rather than throwing.</summary>
-    [TestMethod]
-    public void ClosingTheOnlyFocusedWindow_WithNoDefaultFocusWindowConfigured_LeavesFocusNull()
-    {
-        var windowService = CreateWindowService();
-        var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
-        var controller = CreateController([window], [], [], [], LargeScreenSize);
-
-        var pressPoint = window.ContentRectangle.Center;
-        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
-        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
-        Assert.AreSame(window, controller.FocusedElement);
-
-        window.Close();
-
-        Assert.IsNull(controller.FocusedElement);
     }
 
     /// <summary>

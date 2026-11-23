@@ -10,26 +10,26 @@ namespace Tests.Blueprints;
 
 internal static class BlueprintTestContext
 {
-    /// <summary>The built-in modules, built once; the blueprint and action registries below are theirs.</summary>
-    private static readonly GameBuildPassResult BuiltIns = BuiltInTestModules.Build(GameBuildPass.CreatePlaceholderMap());
+    /// <summary>The built-in modules, built once per test thread, because building an entity can write a derived definition into their catalogs.</summary>
+    private static readonly ThreadLocal<GameBuildPassResult> BuiltIns = new(static () => BuiltInTestModules.Build(GameBuildPass.CreatePlaceholderMap()));
 
-    /// <summary>The built-in blueprints, registered once the way BlueprintsModule does it -- races and classes are looked up in these, and their action grants live on them.</summary>
-    public static BlueprintRegistry Definitions { get; } = BuiltIns.Context.Definitions;
+    /// <summary>This thread's built-in blueprints, registered the way BlueprintsModule does it -- races and classes are looked up in these, and their action grants live on them.</summary>
+    public static BlueprintRegistry Definitions => BuiltIns.Value!.Context.Definitions;
 
-    /// <summary>The built-in actions, registered the way CoreActionsModule does it.</summary>
-    public static ActionCatalog Actions { get; } = BuiltIns.Context.Actions;
+    /// <summary>This thread's built-in actions, registered the way CoreActionsModule does it.</summary>
+    public static ActionCatalog Actions => BuiltIns.Value!.Context.Actions;
 
-    /// <summary>The built-in items, registered the way CoreItemsModule does it.</summary>
-    public static Game.Modules.Inventory.ItemCatalog Items { get; } = BuiltIns.Context.Items;
+    /// <summary>This thread's built-in items, registered the way CoreItemsModule does it.</summary>
+    public static Game.Modules.Inventory.ItemCatalog Items => BuiltIns.Value!.Context.Items;
 
     public static BlueprintContext ContextFor(this EcsContext ecsContext, int entityId, int seed = 1, BlueprintRegistry? creatures = null) =>
         new(ecsContext.ComponentManager, entityId, new MathUtility(new SeededRandom((ulong)seed)), ecsContext.EntityManager.Keys, (uint)seed, creatures ?? Definitions, Actions, Items);
 
     /// <summary>The player's blueprint (see FloorBuilder.CreatePlayer).</summary>
-    public static ushort PlayerBlueprint { get; } = Definitions.GetId(Player.Id);
+    public static ushort PlayerBlueprint => Definitions.GetId(Player.Id);
 
     /// <summary>A goblin engineer's blueprint (see TestMapBuilder's fixtures).</summary>
-    public static ushort GoblinEngineerBlueprint { get; } = Definitions.GetId(GoblinEngineer.Id);
+    public static ushort GoblinEngineerBlueprint => Definitions.GetId(GoblinEngineer.Id);
 
     /// <summary>Builds a whole blueprint, includes and all, the way EntityFactory does in the real world.</summary>
     public static void BuildBlueprint(this EcsContext ecsContext, int entityId, ushort blueprintId, int seed = 1) =>

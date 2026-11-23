@@ -92,17 +92,11 @@ public sealed class FairyMagicMissileTests
     }
 
     [TestMethod]
-    public void PlayerAdjacent_FairyDoesNotCast()
+    [DataRow(1, DisplayName = "PlayerAdjacent_FairyDoesNotCast")]
+    [DataRow(9, DisplayName = "PlayerOutOfRange_FairyDoesNotCast")]
+    public void PlayerOutsideTheCastingBand_FairyDoesNotCast(int playerX)
     {
-        var session = BuildSession(new Vector3Int(1, 0, 0));
-
-        Assert.IsEmpty(session.RunCollectingCasts(3 * FramesPerSecond));
-    }
-
-    [TestMethod]
-    public void PlayerOutOfRange_FairyDoesNotCast()
-    {
-        var session = BuildSession(new Vector3Int(9, 0, 0));
+        var session = BuildSession(new Vector3Int(playerX, 0, 0));
 
         Assert.IsEmpty(session.RunCollectingCasts(3 * FramesPerSecond));
     }

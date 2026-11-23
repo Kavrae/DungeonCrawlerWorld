@@ -31,38 +31,24 @@ internal sealed class LoopbackDiagnosticsReceiver : IDisposable
     public IReadOnlyList<(DiagnosticsLinkMessageType Type, byte[] Payload)> Messages => [.. _messages];
 
     /// <summary>Waits until a message of type has arrived and returns the first one.</summary>
-    public byte[] WaitFor(DiagnosticsLinkMessageType type)
+    public async Task<byte[]> WaitForAsync(DiagnosticsLinkMessageType type)
     {
-        var deadline = DateTime.UtcNow + WaitTimeout;
-        while (DateTime.UtcNow < deadline)
-        {
-            foreach (var message in _messages)
-            {
-                if (message.Type == type)
-                {
-                    return message.Payload;
-                }
-            }
-
-            Thread.Sleep(5);
-        }
-
-        throw new AssertFailedException($"No {type} message arrived within {WaitTimeout.TotalSeconds} s.");
+        byte[]? payload = null;
+        await TestWait.UntilAsync(() => (payload = FirstPayloadOf(type)) is not null, $"a {type} message arrived");
+        return payload!;
     }
 
-    /// <summary>Waits until count messages of type have arrived.</summary>
-    public void WaitForCount(DiagnosticsLinkMessageType type, int count)
+    private byte[]? FirstPayloadOf(DiagnosticsLinkMessageType type)
     {
-        var deadline = DateTime.UtcNow + WaitTimeout;
-        while (_messages.Count(message => message.Type == type) < count)
+        foreach (var message in _messages)
         {
-            if (DateTime.UtcNow > deadline)
+            if (message.Type == type)
             {
-                throw new AssertFailedException($"Fewer than {count} {type} messages arrived within {WaitTimeout.TotalSeconds} s.");
+                return message.Payload;
             }
-
-            Thread.Sleep(5);
         }
+
+        return null;
     }
 
     public void Dispose()

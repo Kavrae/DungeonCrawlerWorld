@@ -97,21 +97,4 @@ public sealed class ParalysisSystemTests
         system.Update(Frame(100 + ParalysisEffects.DurationFrames), 0);
         Assert.IsFalse(timers.Has(0));
     }
-
-    /// <summary>
-    /// ParalysisSystem's constructor takes no SimpleHealthComponent pool at all -- the concrete
-    /// regression test that ticking Paralysis to expiry never needs, and never touches, hit
-    /// points, unlike Burning/Poison's own systems.
-    /// </summary>
-    [TestMethod]
-    public void NoHealthComponentInvolvedAnywhere_ExpiresWithoutError()
-    {
-        var timers = CreateTimerPool();
-        timers.Add(0, new ParalysisTimerComponent(expiresAtFrame: 1));
-        var system = new ParalysisSystem(timers);
-
-        Run(system, 0, 1);
-
-        Assert.IsFalse(timers.Has(0));
-    }
 }

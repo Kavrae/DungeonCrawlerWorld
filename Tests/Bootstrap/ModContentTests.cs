@@ -20,7 +20,7 @@ public sealed class ModContentTests
     [TestInitialize]
     public void CreateDirectory() => _modsDirectory = Directory.CreateTempSubdirectory().FullName;
 
-    /// <summary>A loaded mod's DLL stays locked for the rest of the run (GameBootstrapperTests.TryDeleteDirectory), so the folder may be left behind.</summary>
+    /// <summary>A loaded mod's DLL stays locked for the rest of the run (TestDirectory.TryDelete), so the folder may be left behind.</summary>
     [TestCleanup]
     public void DeleteDirectory()
     {

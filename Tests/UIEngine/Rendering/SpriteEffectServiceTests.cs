@@ -12,7 +12,7 @@ public sealed class SpriteEffectServiceTests
     private const string OverridePath = @"C:\Game\Effects\SpriteUber.fxb";
 
     private static string ShaderPath(string fileName) =>
-        Path.Combine(RepositoryProjects.FindRepositoryRoot(), "Cadence", "UIEngine", "Shaders", fileName);
+        Path.Combine(TestRepository.Root, "Cadence", "UIEngine", "Shaders", fileName);
 
     [TestMethod]
     public void SpriteEffect_IsEmbedded_AsAnFx20Binary()

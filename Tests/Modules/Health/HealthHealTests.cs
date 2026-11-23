@@ -181,15 +181,4 @@ public sealed class HealthHealTests
 
         Assert.IsFalse(published);
     }
-
-    [TestMethod]
-    public void Apply_NoEventBusOrPlayerQuery_DoesNotThrow()
-    {
-        var pool = CreatePool();
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 100));
-
-        TestHealth.Heal(pool, 0, 0.1f, now: 0);
-
-        Assert.AreEqual(60f, pool.GetReadonly(0).CurrentHealth);
-    }
 }

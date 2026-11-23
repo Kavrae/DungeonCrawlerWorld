@@ -122,12 +122,13 @@ public sealed class DiagnosticsLinkListener : IDisposable
         }
         finally
         {
-            session.MarkEnded();
             lock (_connectionLock)
             {
                 client.Dispose();
                 _connectedClient = null;
             }
+
+            session.MarkEnded();
         }
     }
 }

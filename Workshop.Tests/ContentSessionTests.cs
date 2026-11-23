@@ -8,42 +8,14 @@ namespace Workshop.Tests;
 [TestClass]
 public sealed class ContentSessionTests
 {
-    private const string SolutionFileName = "DungeonCrawlerWorld.sln";
-
-    private static string FindRepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, SolutionFileName)))
-        {
-            directory = directory.Parent;
-        }
-
-        return directory?.FullName ?? throw new InvalidOperationException("Could not locate the repository root from the test assembly's location.");
-    }
-
     private static void CopyModTo(string modsDirectory, string projectName)
     {
         var sourcePath = Directory.EnumerateFiles(
-                Path.Combine(FindRepositoryRoot(), "DungeonCrawlerWorld", "Mods", projectName, "bin"),
+                Path.Combine(TestRepository.Root, "DungeonCrawlerWorld", "Mods", projectName, "bin"),
                 $"{projectName}.dll",
                 SearchOption.AllDirectories)
             .First();
         File.Copy(sourcePath, Path.Combine(modsDirectory, Path.GetFileName(sourcePath)), overwrite: true);
-    }
-
-    /// <summary>ModuleLoader never unloads a mod's AssemblyLoadContext, so its DLL stays locked on Windows for the rest of the run; leaving the folder behind is harmless.</summary>
-    private static void TryDeleteDirectory(string path)
-    {
-        try
-        {
-            Directory.Delete(path, recursive: true);
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
-        catch (IOException)
-        {
-        }
     }
 
     private static (GameSession Session, string FailureLog) BuildWithMods(params string[] modProjectNames) =>
@@ -65,7 +37,7 @@ public sealed class ContentSessionTests
         }
         finally
         {
-            TryDeleteDirectory(modsDirectory.FullName);
+            TestDirectory.TryDelete(modsDirectory.FullName);
         }
     }
 
@@ -146,7 +118,7 @@ public sealed class ContentSessionTests
         }
         finally
         {
-            TryDeleteDirectory(masterDirectory.FullName);
+            TestDirectory.TryDelete(masterDirectory.FullName);
         }
     }
 
@@ -187,11 +159,11 @@ public sealed class ContentSessionTests
         }
         finally
         {
-            TryDeleteDirectory(masterDirectory.FullName);
+            TestDirectory.TryDelete(masterDirectory.FullName);
         }
     }
 
-    private static string MasterManifestDirectory() => Path.Combine(FindRepositoryRoot(), "DungeonCrawlerWorld", "Content", "Definitions", "Master");
+    private static string MasterManifestDirectory() => Path.Combine(TestRepository.Root, "DungeonCrawlerWorld", "Content", "Definitions", "Master");
 
     [TestMethod]
     public void AModsRecords_AreLabelledWithTheMod_AndMastersAreNot()
@@ -199,7 +171,7 @@ public sealed class ContentSessionTests
         var modsDirectory = Directory.CreateTempSubdirectory();
         try
         {
-            var output = Path.GetDirectoryName(Directory.EnumerateFiles(Path.Combine(FindRepositoryRoot(), "DungeonCrawlerWorld", "Mods", "Mods.ExampleMod", "bin"), "Mods.ExampleMod.dll", SearchOption.AllDirectories).First())!;
+            var output = Path.GetDirectoryName(Directory.EnumerateFiles(Path.Combine(TestRepository.Root, "DungeonCrawlerWorld", "Mods", "Mods.ExampleMod", "bin"), "Mods.ExampleMod.dll", SearchOption.AllDirectories).First())!;
             foreach (var file in Directory.EnumerateFiles(output, "*", SearchOption.AllDirectories))
             {
                 var target = Path.Combine(modsDirectory.FullName, "ExampleMod", Path.GetRelativePath(output, file));
@@ -216,7 +188,7 @@ public sealed class ContentSessionTests
         }
         finally
         {
-            TryDeleteDirectory(modsDirectory.FullName);
+            TestDirectory.TryDelete(modsDirectory.FullName);
         }
     }
 

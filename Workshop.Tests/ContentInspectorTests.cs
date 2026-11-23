@@ -19,7 +19,7 @@ namespace Workshop.Tests;
 [DoNotParallelize]
 public sealed class ContentInspectorTests
 {
-    private static readonly FontService SharedFonts = new("Fonts");
+    private static readonly FontService SharedFonts = TestFonts.Shared;
     private static readonly Vector2 ScreenSize = new(1600, 900);
 
     private sealed class NoAdditions : IContentInspectorSource
