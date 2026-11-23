@@ -13,14 +13,14 @@ public sealed partial class TestIsolationArchitectureTests
 
     private static readonly Dictionary<string, (int Count, string Reason)> AllowedSleeps = new()
     {
-        ["Tests/Diagnostics/FrameCostNestingTests.cs"] = (6, "Frame cost windows close on real time."),
-        ["Tests/Diagnostics/StartupProfilerTests.cs"] = (2, "Startup windows close on real time."),
+        ["Tests/EngineTests/Diagnostics/FrameCostNestingTests.cs"] = (6, "Frame cost windows close on real time."),
+        ["Tests/EngineTests/Diagnostics/StartupProfilerTests.cs"] = (2, "Startup windows close on real time."),
     };
 
     private static readonly Dictionary<string, (int Count, string Reason)> AllowedMachinePaths = new()
     {
         ["Tests/Architecture/RepositoryProjects.cs"] = (1, "Skips the Log folder when listing project files."),
-        ["Tests/Bootstrap/ModContentTests.cs"] = (3, "Checks where the player folders are, reading nothing in them."),
+        ["Tests/GameTests/Bootstrap/ModContentTests.cs"] = (3, "Checks where the player folders are, reading nothing in them."),
     };
 
     [GeneratedRegex(@"\bThread\.Sleep\b")]

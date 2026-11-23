@@ -2643,7 +2643,7 @@ so creatures kept their looks when it moved out of Game.
 - The builder references `SpriteFormat` and nothing else: the same records, JSON, reach check and message,
   placement and link masks the game loads with, and Save runs the game's own load check last. Link groups
   are not in the manifest (they are `TerrainDefinition.LinkGroup`); an old file's `LinkGroup` is dropped.
-- `Tests/SpriteManifestFormat` parses the checked-in `Content/SpriteManifest.json` and re-serializes it
+- `Tests/EngineTests/SpriteManifestFormat` parses the checked-in `Content/SpriteManifest.json` and re-serializes it
   byte for byte.
 
 ### Sprite fit outside the map (2026-11-20)
@@ -4105,7 +4105,7 @@ diagnostics, generated at build time; nothing on the frame reads it.
   seconds or a derived row; a component added or removed rebuilds the view. An unsimulated creature's defaults are
   `CopyUnsimulatedDefaults`, which rebuilds the record in a staging world. Body part state is added only once something
   happens to a part, so an untouched creature lists no `BodyPartStateComponent` (the subject block's bar still shows
-  its health). Components have no `ToString`: a test comparing two entities reads `Tests/ComponentProperties/ComponentSnapshots`.
+  its health). Components have no `ToString`: a test comparing two entities reads `Tests/GameTests/ComponentProperties/ComponentSnapshots`.
 - **Editing** (Phase 3, 2026-11-18): `AdminTools.ComponentPropertyEdits` (`ComponentPropertyEdits`) writes one value by
   entity key through the pool's table write and keeps the edit for revert; a keyed timer is named by its key, anything
   else by position and refused if the entity's count of that component changed. Destroyed is refused, dead is not; a
@@ -4169,3 +4169,6 @@ diagnostics, generated at build time; nothing on the frame reads it.
 - **A test that waits is `async`** (`TestWait.UntilAsync`), so it holds no pool thread while what it waits for needs
   one, and neither suite raises the pool's minimum. A per-thread measurement (`GC.GetAllocatedBytesForCurrentThread`)
   stays between two awaits, because a continuation can resume on another thread.
+- **A test of concurrent access forces the overlap.** Dedicated threads released together from a `Barrier`, never
+  `Parallel.For`, which may run the body one at a time and pass without the race ever happening
+  (`ARecordDecodedFromManyThreadsAtOnce_IsOneInstance`).

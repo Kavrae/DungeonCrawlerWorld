@@ -1,0 +1,126 @@
+using Engine.ECS.Components;
+using Engine.ECS.Entities;
+using Engine.ECS.Systems;
+using Engine.Events;
+using Engine.Math;
+using Game;
+using Game.Effects;
+using Game.Effects.Entries;
+using Game.Modules.Health.Components;
+using Game.Modules.Inventory;
+using Game.Modules.Poison;
+using Game.Modules.Poison.Components;
+using Game.Modules.StatModifiers.Components;
+using Game.Modules.StatusEffects;
+using Game.Modules.StatusEffects.Components;
+using Game.World;
+
+namespace Tests.GameTests.Effects.Entries;
+
+[TestClass]
+public sealed class StatusEffectRemovalTests
+{
+    private const int SourceEntityId = 1;
+    private const int TargetEntityId = 2;
+
+    private readonly struct PoisonImmunityMatcher : IComponentMatcher<StatusEffectImmunityComponent>
+    {
+        public bool Matches(in StatusEffectImmunityComponent immunity) => immunity.EffectType == StatusEffectType.Poison;
+    }
+
+    private sealed record Setup(ComponentManager ComponentManager, StatusEffectApplierRegistry Appliers, EntityKeys EntityKeys)
+    {
+        public EffectContext Context(long now) => TestActionEffects.Context(
+            SourceEntityId: SourceEntityId,
+            TargetEntityId: TargetEntityId,
+            Health: ComponentManager.GetPackedPool<SimpleHealthComponent>(),
+            EventBus: new EventBus(),
+            MathUtility: new MathUtility(),
+            ComponentManager: ComponentManager,
+            EntityKeys: EntityKeys,
+            ActivatorName: "Test",
+            ActivatorTags: [], Now: now,
+            StatModifiers: ComponentManager.GetMultiPool<StatModifierComponent>(),
+            StatusEffectAppliers: Appliers);
+
+        public void Poison(int stacks)
+        {
+            PoisonEffects.ApplyStacks(ComponentManager, TargetEntityId, stacks, ActionSource.Admin, durationTicks: 10, now: 0, new EventBus(), TestPlayerQuery.NoPlayer);
+        }
+
+        public int PoisonStacks => ComponentManager.GetPackedPool<PoisonTimerComponent>().TryGetReadonly(TargetEntityId, out var timer) ? timer.StackCount : 0;
+    }
+
+    private static Setup Build()
+    {
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
+        var entityKeys = new EntityKeys();
+        var appliers = new StatusEffectApplierRegistry();
+        appliers.Register(new TimerBasedStatusEffectApplier<PoisonTimerComponent>(StatusEffectType.Poison, componentManager.GetPackedPool<PoisonTimerComponent>(), PoisonEffects.MaxStacks, takesDuration: true,
+            (entityId, count, source, now, announcesRefusal, immunityAlreadyChecked, durationTicks) => PoisonEffects.ApplyStacks(componentManager, entityId, count, source, durationTicks ?? (ushort)10, now, new EventBus(), TestPlayerQuery.NoPlayer, announcesRefusal, immunityAlreadyChecked)));
+        return new Setup(componentManager, appliers, entityKeys);
+    }
+
+    [TestMethod]
+    public void Apply_RemovesEveryStackOfTheType()
+    {
+        var setup = Build();
+        setup.Poison(stacks: 4);
+        Assert.AreEqual(4, setup.PoisonStacks, "Sanity check: poisoned.");
+
+        new StatusEffectRemoval(StatusEffectType.Poison).Apply(setup.Context(now: 0));
+
+        Assert.AreEqual(0, setup.PoisonStacks);
+    }
+
+    [TestMethod]
+    public void Apply_OnATargetWithoutTheEffect_DoesNothing()
+    {
+        var setup = Build();
+
+        new StatusEffectRemoval(StatusEffectType.Poison).Apply(setup.Context(now: 0));
+
+        Assert.AreEqual(0, setup.PoisonStacks);
+    }
+
+    [TestMethod]
+    public void Apply_ForATypeWithNoRegisteredApplier_IsSkipped()
+    {
+        var setup = Build();
+        setup.Poison(stacks: 2);
+
+        new StatusEffectRemoval(StatusEffectType.Burning).Apply(setup.Context(now: 0));
+
+        Assert.AreEqual(2, setup.PoisonStacks);
+    }
+
+    [TestMethod]
+    public void CurePoisonPotion_RemovesPoison_ThenBlocksNewPoisonForFiveMinutes()
+    {
+        var setup = Build();
+        setup.Poison(stacks: 3);
+        var context = setup.Context(now: 100);
+
+        foreach (var effect in TestContent.Item(BuiltInItemIds.CurePoisonPotion).Effects)
+        {
+            foreach (var entry in effect.Entries)
+            {
+                entry.Apply(context);
+            }
+        }
+
+        Assert.AreEqual(0, setup.PoisonStacks);
+        setup.Poison(stacks: 1);
+        Assert.AreEqual(0, setup.PoisonStacks, "Immune right after drinking.");
+
+        var immunity = setup.ComponentManager.GetMultiPool<StatusEffectImmunityComponent>();
+        Assert.IsTrue(immunity.TryGetFirst(TargetEntityId, new PoisonImmunityMatcher(), out var poisonImmunity));
+        Assert.AreEqual(FrameDeadline.After(100, 5 * 60 * GameFrameRate.FramesPerSecond), poisonImmunity.ExpiresAtFrame);
+    }
+
+    [TestMethod]
+    public void CurePoisonPotion_IsWorthFiftyGold()
+    {
+        Assert.AreEqual(50, TestContent.Item(BuiltInItemIds.CurePoisonPotion).GoldValue);
+    }
+}

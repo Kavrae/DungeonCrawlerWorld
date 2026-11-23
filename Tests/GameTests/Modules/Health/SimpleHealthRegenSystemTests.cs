@@ -1,0 +1,199 @@
+using Game;
+using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
+using Game.Modules.AbilityScores;
+using Game.Modules.AbilityScores.Components;
+using Game.Modules.Death.Components;
+using Game.Modules.Health.Components;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
+using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
+using Game.World;
+
+namespace Tests.GameTests.Modules.Health;
+
+[TestClass]
+public sealed class SimpleHealthRegenSystemTests
+{
+    private static PackedComponentPool<SimpleHealthComponent> CreatePool() =>
+        new(entityCapacity: 10, initialCapacity: 4,
+            static (ref existing, incoming) => existing = incoming);
+
+    /// <summary>
+    /// Seeds entity 0's tier explicitly rather than leaving it absent. An entity with no
+    /// ProcessingTierComponent is bucketed as Beyond (see ProcessingTierWiring's own doc on why
+    /// unknown fails open to the cheapest tier), so leaving it out meant these tests were
+    /// exercising an 8x-divisor cadence while reading as if they tested the default one.
+    /// </summary>
+    private static DirectComponentPool<ProcessingTierComponent> CreateTiersPool(ProcessingTierLevel tier = ProcessingTierLevel.Local)
+    {
+        var pool = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: 10,
+            static (ref existing, incoming) => existing = incoming);
+        pool.Add(0, new ProcessingTierComponent(tier));
+        return pool;
+    }
+
+    /// <summary>Constitution total 300 -- SimpleHealthRegenSystem's MaxHealthRegenPerSecond, a flat 6 HP/sec -- so any entity regens a clean 6/visit at Local tier (StripeCount is a full second's worth of frames), and proportionally more per visit at a coarser tier (the visit covers StripeCount * divisor frames -- see ProcessingTierDivisors).</summary>
+    private static PackedComponentPool<AbilityScoresComponent> CreateAbilityScoresPoolWithMaxConstitution(int entityId)
+    {
+        var pool = AbilityScoreTestPools.CreatePool(entityCapacity: 10, initialCapacity: 4);
+        pool.Add(entityId, AbilityScoreTestPools.Score(AbilityScoreType.Constitution, baseValue: 300, total: 300));
+        return pool;
+    }
+
+    [TestMethod]
+    public void Update_RegeneratesHealthByLiveComputedConstitutionAmount()
+    {
+        var pool = CreatePool();
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 200));
+        var system = TestSystems.SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(56, pool.GetReadonly(0).CurrentHealth);
+    }
+
+    [TestMethod]
+    public void Update_ClampsAtMaximumHealth()
+    {
+        var pool = CreatePool();
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 199, baseMaximumHealth: 200));
+        var system = TestSystems.SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(200, pool.GetReadonly(0).CurrentHealth);
+    }
+
+    [TestMethod]
+    public void Update_DeadEntity_DoesNotRegenerate()
+    {
+        var pool = CreatePool();
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 0, baseMaximumHealth: 200));
+        var deadEntities = new PackedComponentPool<DeadComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
+        deadEntities.Add(0, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
+        var system = TestSystems.SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers: null, deadEntities: deadEntities, abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(0, pool.GetReadonly(0).CurrentHealth);
+    }
+
+    [TestMethod]
+    public void Update_NoAbilityScorePool_LeavesCurrentHealthUnchanged()
+    {
+        var pool = CreatePool();
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 200));
+        var system = TestSystems.SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents());
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(50, pool.GetReadonly(0).CurrentHealth);
+    }
+
+    [TestMethod]
+    public void Update_NoConstitutionScoreForEntity_LeavesCurrentHealthUnchanged()
+    {
+        var pool = CreatePool();
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 200));
+        var abilityScores = AbilityScoreTestPools.CreatePool(entityCapacity: 10, initialCapacity: 4);
+        var system = TestSystems.SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: abilityScores);
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(50, pool.GetReadonly(0).CurrentHealth);
+    }
+
+    /// <summary>
+    /// Regression test: CurrentHealth += effectiveRegen used to compute in short and could
+    /// silently overflow/underflow before the subsequent clamp ran. A large negative
+    /// HealthRegen modifier against a very negative CurrentHealth underflows short's range and
+    /// wraps to a large positive number -- if that wrapped value were what got clamped, it would
+    /// land near MaximumHealth instead of the mathematically correct 0.
+    /// </summary>
+    [TestMethod]
+    public void Update_LargeNegativeHealthRegenModifier_ClampsToZeroInsteadOfUnderflowWrapping()
+    {
+        var pool = CreatePool();
+        pool.Add(0, new SimpleHealthComponent(currentHealth: -32000, baseMaximumHealth: 200));
+        var abilityScores = AbilityScoreTestPools.CreatePool(entityCapacity: 10, initialCapacity: 4);
+        abilityScores.Add(0, AbilityScoreTestPools.Score(AbilityScoreType.Constitution, baseValue: 1, total: 1));
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
+        statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.HealthRegen, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
+            canModify: false, magnitude: -100000f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
+        var system = TestSystems.SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers: statModifiers, abilityScores: abilityScores);
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(0, pool.GetReadonly(0).CurrentHealth);
+    }
+
+    [TestMethod]
+    public void Update_ThrottledEntity_OffCycle_DoesNotRegenerate()
+    {
+        var pool = CreatePool();
+        var tiers = CreateTiersPool(ProcessingTierLevel.Neighborhood);
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 200));
+        var system = TestSystems.SimpleHealthRegenSystem(pool, tiers, new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
+
+        // Entity 0, Neighborhood-tiered (StripeCount * the Neighborhood divisor) lands in bucket 0 -- due only when FrameCount is a multiple of that product.
+        system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
+
+        Assert.AreEqual(50, pool.GetReadonly(0).CurrentHealth);
+    }
+
+    /// <summary>Regen is now routed through HealthHeal.Apply (sourceEntityId: entityId, a self-heal) -- an IncomingHealing modifier scales the regen tick the same way it would scale a potion or spell.</summary>
+    [TestMethod]
+    public void Update_IncomingHealingModifier_ScalesRegenTick()
+    {
+        var pool = CreatePool();
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 200));
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
+        statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingHealing, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+            canModify: false, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
+        var system = TestSystems.SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers, abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(59, pool.GetReadonly(0).CurrentHealth, "6 base regen * 1.5 = 9; 50 + 9 = 59.");
+    }
+
+    [TestMethod]
+    public void Update_AdditiveIncomingHealingOnThrottledEntity_AddsPerSecondNotPerVisit()
+    {
+        var pool = CreatePool();
+        var tiers = CreateTiersPool(ProcessingTierLevel.Neighborhood);
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 500));
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
+        statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingHealing, StatModifierOperation.Additive, StatModifierPolarity.Buff,
+            canModify: false, magnitude: 1f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
+        var system = TestSystems.SimpleHealthRegenSystem(pool, tiers, new ProcessingTierEvents(), statModifiers, abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
+
+        system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
+
+        var secondsPerVisit = system.StripeCount * ProcessingTierDivisors.ByTierIndex[(int)ProcessingTierLevel.Neighborhood] / (float)GameFrameRate.FramesPerSecond;
+        Assert.AreEqual(50f + (6f + 1f) * secondsPerVisit, pool.GetReadonly(0).CurrentHealth, 0.001f);
+    }
+
+    [TestMethod]
+    public void Update_ThrottledEntity_OnEligibleCycle_Regenerates()
+    {
+        var pool = CreatePool();
+        var tiers = CreateTiersPool(ProcessingTierLevel.Neighborhood);
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 200));
+        var system = TestSystems.SimpleHealthRegenSystem(pool, tiers, new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
+
+        // A Neighborhood visit covers StripeCount * divisor frames rather than Local's
+        // StripeCount, so the per-visit amount is proportionally larger -- the same total rate
+        // over time, just delivered in coarser instalments. Derived from ProcessingTierDivisors
+        // rather than hardcoded so re-tuning the divisors doesn't silently invalidate this.
+        system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
+
+        const float regenPerSecond = 6f; // MaxHealthRegenPerSecond -- see CreateAbilityScoresPoolWithMaxConstitution.
+        var framesPerVisit = system.StripeCount * ProcessingTierDivisors.ByTierIndex[(int)ProcessingTierLevel.Neighborhood];
+        var expected = 50f + (regenPerSecond * framesPerVisit / GameFrameRate.FramesPerSecond);
+
+        Assert.AreEqual(expected, pool.GetReadonly(0).CurrentHealth, 0.0001f);
+    }
+}

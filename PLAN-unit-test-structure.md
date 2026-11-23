@@ -6,8 +6,8 @@ redundant tests. It also finishes TODO.md's "TOP PRIORITY: Investigate the tests
 
 **Status:** written 2026-11-22 from a read of the code, a syntax-tree scan of every test and repeated runs. Decisions
 1-4 accepted the same day, as recommended. Phase 0 done 2026-11-22; it found three failing `Tests` methods (see its
-results). Phase 1 built and checked 2026-11-22, with one cause still open (its step 8). Phases 2, 3 and 4 built and
-checked the same day. Phase 5 awaits the go-ahead.
+results). Phase 1 built and checked 2026-11-22, with one cause still open (its step 8). Phases 2 to 5 built and
+checked the same day. Phase 5 awaits review and its commit.
 
 ## What the review found
 
@@ -119,14 +119,14 @@ Missing:
 ```
 Tests.Support/    new: TestWait, TestDirectory, TestRepository, TestFonts, the serial resource attributes
 Tests/
-  Engine/         ECS, Events, Math, Tags, Diagnostics, Persistence, ...
+  EngineTests/    ECS, Events, Math, Tags, Diagnostics, Persistence, ...
   UIEngine/
-  Game/           Modules, Blueprints, Effects, World, Floors, Spawning, ...
+  GameTests/      Modules, Blueprints, Effects, World, Floors, Spawning, ...
   Presentation/
   Architecture/   every *ArchitectureTests file
-  Determinism/    seeded-world and worker-count checks
-  Fixtures/       the helpers now at the project root
-Workshop.Tests/   Shell/, Debug/, Editing/, Browsing/, Map/
+  Determinism/    seeded-world and worker-count checks (Phase 6)
+  Fixtures/       the helpers that were at the project root
+Workshop.Tests/   Shell/, DebugTab/, Editing/, Browsing/, MapAreas/, Fixtures/
 Analyzers.Tests/
 ```
 
@@ -335,6 +335,26 @@ lost; those two lines' coverage depends on timing between threads.
 One mechanical commit: files moved with plain `mv`, namespaces following folders, solution folders mirroring them.
 
 **Check:** the same test count passes before and after, and the diff holds only moves and namespace lines.
+
+**Results, 2026-11-22:**
+
+| Check | Result |
+|---|---|
+| Files moved | 367, each identical to its committed version apart from namespace references, except the one test below |
+| Other files changed | The two test `.csproj` files (a global using each), the isolation test's allowed paths, and two paths in IMPLEMENTATION-NOTES |
+| Cases | `Tests` 4,711, `Workshop.Tests` 394, `Analyzers.Tests` 47, as before. Two display names changed because they print a helper type's namespace |
+| Product lines covered | 52,761: 0 lost, 0 gained |
+| Whole solution | Builds with no errors |
+| `Workshop.Tests` | 0 of 10 idle and 0 of 3 loaded runs failing |
+| `Tests` | 0 of 10 idle and 0 of 3 loaded runs failing |
+
+- **Folder names differ from the first layout.** `Engine` and `Game` would have made namespaces hiding the real ones
+  across 416 files and about 3,600 references, and `Map` would hide the `Map` type. They are `EngineTests`, `GameTests`
+  and `MapAreas`, and `Debug` is `DebugTab`.
+- **One test changed beyond its namespace.** `ARecordDecodedFromManyThreadsAtOnce_IsOneInstance` used `Parallel.For`,
+  which overlapped only by luck: the new test order stopped it reaching the lock's contended path (10 of 10 runs before,
+  0 of 8 after). It now releases 32 dedicated threads from a barrier and reached that path in 10 of 10 runs.
+- `SpriteManifestResolver.cs:160-161` and `ContentTableLines.cs:170` still vary between runs with timing and random Guids.
 
 ### Phase 6 -- Ready for workers
 

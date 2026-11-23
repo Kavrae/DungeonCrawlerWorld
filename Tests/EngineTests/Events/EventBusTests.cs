@@ -1,0 +1,233 @@
+using Engine.Diagnostics;
+using Engine.Events;
+
+namespace Tests.EngineTests.Events;
+
+[TestClass]
+public sealed class EventBusTests
+{
+    private sealed record TestEvent(int Value);
+    private sealed record OtherEvent;
+    private sealed record BufferedTestEvent(int Value) : IBufferedEvent;
+
+    [TestMethod]
+    public void Publish_NoSubscribers_DoesNotThrow()
+    {
+        var bus = new EventBus();
+
+        bus.Publish(new TestEvent(1));
+    }
+
+    [TestMethod]
+    public void Publish_InvokesSubscriber()
+    {
+        var bus = new EventBus();
+        var received = -1;
+        bus.Subscribe<TestEvent>(e => received = e.Value);
+
+        bus.Publish(new TestEvent(42));
+
+        Assert.AreEqual(42, received);
+    }
+
+    [TestMethod]
+    public void Publish_MultipleSubscribers_InvokesAll()
+    {
+        var bus = new EventBus();
+        var count = 0;
+        bus.Subscribe<TestEvent>(_ => count++);
+        bus.Subscribe<TestEvent>(_ => count++);
+
+        bus.Publish(new TestEvent(1));
+
+        Assert.AreEqual(2, count);
+    }
+
+    [TestMethod]
+    public void Publish_OnlyInvokesSubscribersOfMatchingType()
+    {
+        var bus = new EventBus();
+        var testEventFired = false;
+        var otherEventFired = false;
+        bus.Subscribe<TestEvent>(_ => testEventFired = true);
+        bus.Subscribe<OtherEvent>(_ => otherEventFired = true);
+
+        bus.Publish(new TestEvent(1));
+
+        Assert.IsTrue(testEventFired);
+        Assert.IsFalse(otherEventFired);
+    }
+
+    [TestMethod]
+    public void Unsubscribe_StopsReceivingFutureEvents()
+    {
+        var bus = new EventBus();
+        var count = 0;
+        void Handler(TestEvent e) => count++;
+        bus.Subscribe<TestEvent>(Handler);
+
+        bus.Unsubscribe<TestEvent>(Handler);
+        bus.Publish(new TestEvent(1));
+
+        Assert.AreEqual(0, count);
+    }
+
+    [TestMethod]
+    public void Publish_BufferedEvent_DoesNotDispatchUntilDispatchBuffered()
+    {
+        var bus = new EventBus();
+        var received = -1;
+        bus.Subscribe<BufferedTestEvent>(e => received = e.Value);
+
+        bus.Publish(new BufferedTestEvent(9));
+
+        Assert.AreEqual(-1, received);
+
+        bus.DispatchBuffered<BufferedTestEvent>();
+
+        Assert.AreEqual(9, received);
+    }
+
+    [TestMethod]
+    public void DispatchBuffered_MultiplePublishesBeforeOneDispatch_DeliversAllInOrder()
+    {
+        var bus = new EventBus();
+        var received = new List<int>();
+        bus.Subscribe<BufferedTestEvent>(e => received.Add(e.Value));
+
+        bus.Publish(new BufferedTestEvent(1));
+        bus.Publish(new BufferedTestEvent(2));
+        bus.Publish(new BufferedTestEvent(3));
+
+        bus.DispatchBuffered<BufferedTestEvent>();
+
+        CollectionAssert.AreEqual(new[] { 1, 2, 3 }, received);
+    }
+
+    [TestMethod]
+    public void DispatchBuffered_NothingQueued_DoesNotThrow()
+    {
+        var bus = new EventBus();
+
+        bus.DispatchBuffered<BufferedTestEvent>();
+    }
+
+    [TestMethod]
+    public void DispatchBuffered_CalledTwice_SecondCallDeliversNothingNew()
+    {
+        var bus = new EventBus();
+        var received = new List<int>();
+        bus.Subscribe<BufferedTestEvent>(e => received.Add(e.Value));
+        bus.Publish(new BufferedTestEvent(1));
+        bus.DispatchBuffered<BufferedTestEvent>();
+
+        bus.DispatchBuffered<BufferedTestEvent>();
+
+        CollectionAssert.AreEqual(new[] { 1 }, received);
+    }
+
+    [TestMethod]
+    public void SubscribeOnce_NoCondition_FiresOnFirstPublish()
+    {
+        var bus = new EventBus();
+        var received = -1;
+        bus.SubscribeOnce<TestEvent>(e => received = e.Value);
+
+        bus.Publish(new TestEvent(1));
+
+        Assert.AreEqual(1, received);
+    }
+
+    [TestMethod]
+    public void SubscribeOnce_NoCondition_DoesNotFireAgainOnSecondPublish()
+    {
+        var bus = new EventBus();
+        var count = 0;
+        bus.SubscribeOnce<TestEvent>(_ => count++);
+
+        bus.Publish(new TestEvent(1));
+        bus.Publish(new TestEvent(2));
+
+        Assert.AreEqual(1, count);
+    }
+
+    [TestMethod]
+    public void SubscribeOnce_WithCondition_IgnoresNonMatchingPublishes()
+    {
+        var bus = new EventBus();
+        var received = -1;
+        bus.SubscribeOnce<TestEvent>(e => received = e.Value, condition: e => e.Value > 10);
+
+        bus.Publish(new TestEvent(1));
+
+        Assert.AreEqual(-1, received);
+    }
+
+    [TestMethod]
+    public void SubscribeOnce_WithCondition_FiresOnFirstMatchThenStops()
+    {
+        var bus = new EventBus();
+        var receivedValues = new List<int>();
+        bus.SubscribeOnce<TestEvent>(e => receivedValues.Add(e.Value), condition: e => e.Value > 10);
+
+        bus.Publish(new TestEvent(1));
+        bus.Publish(new TestEvent(20));
+        bus.Publish(new TestEvent(30));
+
+        CollectionAssert.AreEqual(new[] { 20 }, receivedValues);
+    }
+
+    [TestMethod]
+    public void SubscribeOnce_OtherSubscribersOfSameType_StillReceiveEveryPublish()
+    {
+        var bus = new EventBus();
+        var onceCount = 0;
+        var everyCount = 0;
+        bus.SubscribeOnce<TestEvent>(_ => onceCount++);
+        bus.Subscribe<TestEvent>(_ => everyCount++);
+
+        bus.Publish(new TestEvent(1));
+        bus.Publish(new TestEvent(2));
+
+        Assert.AreEqual(1, onceCount);
+        Assert.AreEqual(2, everyCount);
+    }
+
+    // Dispatch with a FrameCosts listener is a separate code path from the default -- these cover its
+    // functional correctness (still dispatches to the right handlers) rather than its timing
+    // output, the same reason PerformanceCounter/FrameBudgetTracker themselves have no direct
+    // tests: Snapshot/TopEntries only populate once a real wall-clock second has elapsed, which
+    // isn't something to assert on in a fast unit test.
+
+    [TestMethod]
+    [DoNotParallelize]
+    public void Publish_WithFrameCostsListener_StillInvokesSubscriber()
+    {
+        using var frameCostSubscription = EngineHooks.FrameCosts.Subscribe(new FrameBudgetTracker());
+        var bus = new EventBus();
+        var received = -1;
+        bus.Subscribe<TestEvent>(e => received = e.Value);
+
+        bus.Publish(new TestEvent(42));
+
+        Assert.AreEqual(42, received);
+    }
+
+    [TestMethod]
+    [DoNotParallelize]
+    public void Publish_WithFrameCostsListener_InvokesEveryHandlerExactlyOnce()
+    {
+        using var frameCostSubscription = EngineHooks.FrameCosts.Subscribe(new FrameBudgetTracker());
+        var bus = new EventBus();
+        var firstCount = 0;
+        var secondCount = 0;
+        bus.Subscribe<TestEvent>(_ => firstCount++);
+        bus.Subscribe<TestEvent>(_ => secondCount++);
+
+        bus.Publish(new TestEvent(1));
+        bus.Publish(new TestEvent(1));
+
+        Assert.AreEqual(2, firstCount);
+        Assert.AreEqual(2, secondCount);
+    }
+}

@@ -1,0 +1,74 @@
+using Engine.ECS.Entities;
+using Engine.ECS.Context;
+using Engine.Events;
+using Engine.Math;
+using Engine.Modules;
+using Game.Modules;
+using Game.Modules.AbilityScores;
+using Game.Modules.AbilityScores.Components;
+using Game.Modules.Core;
+using Game.Modules.Movement;
+using Game.Modules.ProcessingTier;
+using Game.Modules.StatModifiers;
+using Game.World;
+
+namespace Tests.GameTests.Modules.AbilityScores;
+
+/// <summary>
+/// End-to-end coverage through the real Bootstrapper -- AbilityScoreEffectsTests already covers
+/// AbilityScoreEffects/AbilityScoreMath directly against a hand-built ComponentManager; this
+/// class instead proves the module wiring itself (Requires enforcement, and the
+/// StatModifierExpiredEvent subscription actually firing end-to-end through real systems).
+/// </summary>
+[TestClass]
+public sealed class AbilityScoresModuleTests
+{
+    private static (EcsContext EcsContext, int EntityId) BuildAndGrantStrength(ushort baseValue)
+    {
+        var ecsContext = BuiltInTestModules.Build(new Map(new Vector3Int(5, 5, 1)), initialEntityCapacity: 10, initialComponentCapacity: 10).EcsContext;
+
+        var entityId = ecsContext.EntityManager.CreateEntity();
+        AbilityScoreEffects.Grant(ecsContext.ComponentManager, entityId, AbilityScoreType.Strength, baseValue);
+
+        return (ecsContext, entityId);
+    }
+
+    private static AbilityScoreValue GetStrength(EcsContext ecsContext, int entityId) =>
+        AbilityScoreQueries.TryGetComponent(ecsContext.ComponentManager.GetPackedPool<AbilityScoresComponent>(), entityId, AbilityScoreType.Strength, out var score)
+            ? score
+            : throw new InvalidOperationException("No Strength ability score found.");
+
+    [TestMethod]
+    public void Build_MissingStatModifiersModule_ThrowsInvalidOperationException()
+    {
+        IReadOnlyList<IModule<GameModuleContext>> modules = [new ProcessingTierModule(), new AbilityScoresModule()];
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => BuiltInTestModules.BuildModules(modules));
+    }
+
+    [TestMethod]
+    public void Build_WithStatModifiersModule_RegistersAbilityScoresComponentPool()
+    {
+        var (ecsContext, _) = BuildAndGrantStrength(baseValue: 5);
+
+        Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<AbilityScoresComponent>());
+    }
+
+    [TestMethod]
+    public void TemporaryModifierExpiring_UpdatesTotalThroughRealEventSubscription()
+    {
+        var (ecsContext, entityId) = BuildAndGrantStrength(baseValue: 5);
+
+        AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, AbilityScoreType.Strength, StatModifierOperation.Additive, StatModifierPolarity.Buff,
+            canModify: true, magnitude: 3f, expiresAtFrame: 0, ActionSource.Admin);
+        Assert.AreEqual((ushort)8, GetStrength(ecsContext, entityId).Total);
+
+        // The modifier's deadline is frame 0, which is the frame this Update runs, so
+        // StatModifierExpirySystem fires it immediately: removed, and StatModifierExpiredEvent
+        // published -- which AbilityScoresModule's subscription should react to by recomputing
+        // Total back down.
+        ecsContext.Update(default);
+
+        Assert.AreEqual((ushort)5, GetStrength(ecsContext, entityId).Total);
+    }
+}

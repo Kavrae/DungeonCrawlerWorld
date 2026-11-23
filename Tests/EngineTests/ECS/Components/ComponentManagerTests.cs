@@ -1,0 +1,294 @@
+using Engine.ECS.Components;
+
+namespace Tests.EngineTests.ECS.Components;
+
+[TestClass]
+public sealed class ComponentManagerTests
+{
+    private struct DirectTestComponent
+    {
+        public int Value;
+    }
+
+    private struct PackedTestComponent
+    {
+        public int Value;
+    }
+
+    private struct MultiTestComponent
+    {
+        public int Value;
+    }
+
+    [TestMethod]
+    public void RegisterDirectPool_ThenGetDirectPool_ReturnsSamePool()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
+
+        manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing = incoming);
+
+        Assert.IsTrue(manager.IsRegistered<DirectTestComponent>());
+
+        var pool = manager.GetDirectPool<DirectTestComponent>();
+        pool.Add(0, new DirectTestComponent { Value = 5 });
+        Assert.AreEqual(5, manager.GetDirectPool<DirectTestComponent>().GetReadonly(0).Value);
+    }
+
+    [TestMethod]
+    public void RegisterSameTypeTwice_Throws()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
+        manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing = incoming);
+
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing = incoming));
+    }
+
+    [TestMethod]
+    public void GetPackedPool_WrongPoolKind_Throws()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
+        manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing = incoming);
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => manager.GetPackedPool<DirectTestComponent>());
+    }
+
+    [TestMethod]
+    public void GetPool_Unregistered_Throws()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => manager.GetDirectPool<DirectTestComponent>());
+    }
+
+    [TestMethod]
+    public void ResizeEntityCapacity_ResizesEveryRegisteredPool()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4);
+        manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing = incoming);
+        manager.RegisterPackedPool<PackedTestComponent>((ref existing, incoming) => existing = incoming);
+        manager.RegisterMultiPool<MultiTestComponent>();
+
+        manager.ResizeEntityCapacity(50);
+
+        Assert.AreEqual(50, manager.GetDirectPool<DirectTestComponent>().Capacity);
+        // Packed/Multi pools accept entity ids up to the new capacity without throwing.
+        manager.GetPackedPool<PackedTestComponent>().Add(49, new PackedTestComponent { Value = 1 });
+        manager.GetMultiPool<MultiTestComponent>().Add(49, new MultiTestComponent { Value = 1 });
+    }
+
+    /// <summary>ResizeEntityCapacity grows a Packed or Multi pool's page table only -- a flat entity index would grow by thousands of bytes here, the page table by a pointer and a count per page.</summary>
+    [TestMethod]
+    public void ResizeEntityCapacity_AllocatesNoEntityPagesForPackedOrMultiPools()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4);
+        manager.RegisterPackedPool<PackedTestComponent>((ref existing, incoming) => existing = incoming);
+        manager.RegisterMultiPool<MultiTestComponent>();
+        var packed = manager.GetPackedPool<PackedTestComponent>();
+        var multi = manager.GetMultiPool<MultiTestComponent>();
+        var packedBytes = packed.EstimatedBytes;
+        var multiBytes = multi.EstimatedBytes;
+
+        manager.ResizeEntityCapacity(100_000);
+
+        Assert.IsLessThan(2_000, packed.EstimatedBytes - packedBytes);
+        Assert.IsLessThan(2_000, multi.EstimatedBytes - multiBytes);
+    }
+
+    [TestMethod]
+    public void RarePool_CostsTheEntityPagesItsHoldersFallIn_NotTheWorldsEntityCapacity()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 1_000_000, initialComponentCapacity: 4);
+        manager.RegisterPackedPool<PackedTestComponent>((ref existing, incoming) => existing = incoming);
+        manager.RegisterMultiPool<MultiTestComponent>();
+
+        manager.GetPackedPool<PackedTestComponent>().Add(500_000, new PackedTestComponent { Value = 1 });
+        manager.GetMultiPool<MultiTestComponent>().Add(500_000, new MultiTestComponent { Value = 1 });
+
+        Assert.IsLessThan(64_000L, manager.GetPackedPool<PackedTestComponent>().EstimatedBytes);
+        Assert.IsLessThan(64_000L, manager.GetMultiPool<MultiTestComponent>().EstimatedBytes);
+        Assert.IsTrue(manager.GetPackedPool<PackedTestComponent>().Has(500_000));
+        Assert.AreEqual(1, manager.GetMultiPool<MultiTestComponent>().CountForEntity(500_000));
+    }
+
+    [TestMethod]
+    public void PackedAndMultiPools_AcceptEntityIdsBeyondTheInitialCapacity()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4);
+        manager.RegisterPackedPool<PackedTestComponent>((ref existing, incoming) => existing = incoming, initialCapacity: 8);
+        manager.RegisterMultiPool<MultiTestComponent>(initialCapacity: 8);
+
+        manager.GetPackedPool<PackedTestComponent>().Add(99_999, new PackedTestComponent { Value = 1 });
+        manager.GetMultiPool<MultiTestComponent>().Add(99_999, new MultiTestComponent { Value = 1 });
+
+        Assert.IsTrue(manager.GetPackedPool<PackedTestComponent>().Has(99_999));
+        Assert.IsTrue(manager.GetMultiPool<MultiTestComponent>().Has(99_999));
+    }
+
+    [TestMethod]
+    public void RemoveAllComponents_RemovesAcrossAllPoolKinds()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
+        manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing = incoming);
+        manager.RegisterPackedPool<PackedTestComponent>((ref existing, incoming) => existing = incoming);
+        manager.RegisterMultiPool<MultiTestComponent>();
+
+        manager.GetDirectPool<DirectTestComponent>().Add(0, new DirectTestComponent());
+        manager.GetPackedPool<PackedTestComponent>().Add(0, new PackedTestComponent());
+        manager.GetMultiPool<MultiTestComponent>().Add(0, new MultiTestComponent());
+        manager.GetMultiPool<MultiTestComponent>().Add(0, new MultiTestComponent());
+
+        manager.RemoveAllComponents(0);
+
+        Assert.IsFalse(manager.GetDirectPool<DirectTestComponent>().Has(0));
+        Assert.IsFalse(manager.GetPackedPool<PackedTestComponent>().Has(0));
+        Assert.IsFalse(manager.GetMultiPool<MultiTestComponent>().Has(0));
+    }
+
+    /// <summary>
+    /// Merge&lt;T&gt; lets a caller (e.g. a blueprint) add or merge a component without knowing
+    /// which pool kind T was registered as -- these four tests cover the dispatch to each
+    /// kind, using a merge lambda that combines values (rather than overwriting) so a
+    /// passing test actually proves Merge, not just Add, was called underneath.
+    /// </summary>
+    [TestMethod]
+    public void Merge_DirectPool_AbsentComponent_AddsIt()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
+        manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing.Value += incoming.Value);
+
+        manager.Merge(0, new DirectTestComponent { Value = 5 });
+
+        Assert.AreEqual(5, manager.GetDirectPool<DirectTestComponent>().GetReadonly(0).Value);
+    }
+
+    [TestMethod]
+    public void Merge_DirectPool_ExistingComponent_CombinesViaMergeAction()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
+        manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing.Value += incoming.Value);
+        manager.Merge(0, new DirectTestComponent { Value = 5 });
+
+        manager.Merge(0, new DirectTestComponent { Value = 3 });
+
+        Assert.AreEqual(8, manager.GetDirectPool<DirectTestComponent>().GetReadonly(0).Value);
+    }
+
+    [TestMethod]
+    public void Merge_PackedPool_ExistingComponent_CombinesViaMergeAction()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
+        manager.RegisterPackedPool<PackedTestComponent>((ref existing, incoming) => existing.Value += incoming.Value);
+        manager.Merge(0, new PackedTestComponent { Value = 5 });
+
+        manager.Merge(0, new PackedTestComponent { Value = 3 });
+
+        Assert.AreEqual(8, manager.GetPackedPool<PackedTestComponent>().GetReadonly(0).Value);
+    }
+
+    [TestMethod]
+    public void Merge_MultiPool_AlwaysAddsRatherThanCombining()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
+        manager.RegisterMultiPool<MultiTestComponent>();
+
+        manager.Merge(0, new MultiTestComponent { Value = 5 });
+        manager.Merge(0, new MultiTestComponent { Value = 3 });
+
+        var pool = manager.GetMultiPool<MultiTestComponent>();
+        Assert.AreEqual(2, pool.CountForEntity(0));
+    }
+
+    [TestMethod]
+    public void Merge_UnregisteredType_Throws()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => manager.Merge(0, new DirectTestComponent { Value = 1 }));
+    }
+
+    [TestMethod]
+    public void ObserveChanges_BeforeThePoolIsRegistered_RegistersItObserved()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
+
+        manager.ObserveChanges<MultiTestComponent>();
+        manager.RegisterMultiPool<MultiTestComponent>();
+
+        var pool = manager.GetMultiPool<MultiTestComponent>();
+        var changes = 0;
+        pool.ComponentChanged += (_, _) => changes++;
+        pool.Add(0, new MultiTestComponent { Value = 1 });
+        Assert.AreEqual(ComponentChangeObservation.Observed, pool.Observation);
+        Assert.AreEqual(1, changes);
+    }
+
+    [TestMethod]
+    public void ObserveChanges_AfterThePoolIsRegistered_MakesItObserved()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
+        manager.RegisterPackedPool<PackedTestComponent>((ref existing, incoming) => existing = incoming);
+
+        manager.ObserveChanges<PackedTestComponent>();
+
+        var pool = manager.GetPackedPool<PackedTestComponent>();
+        var changes = 0;
+        pool.ComponentChanged += (_, _) => changes++;
+        pool.Add(0, new PackedTestComponent { Value = 1 });
+        Assert.AreEqual(ComponentChangeObservation.Observed, pool.Observation);
+        Assert.AreEqual(1, changes);
+    }
+
+    [TestMethod]
+    public void ObserveChanges_DirectPool_Throws()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
+        manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing = incoming);
+
+        Assert.ThrowsExactly<InvalidOperationException>(manager.ObserveChanges<DirectTestComponent>);
+    }
+
+    [TestMethod]
+    public void ObserveChanges_ThenRegisteringADirectPool_Throws()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
+        manager.ObserveChanges<DirectTestComponent>();
+
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing = incoming));
+    }
+
+    [TestMethod]
+    public void ReserveHeadroom_PopulatedPools_FillingToTheReservedCountNeverGrowsThemAgain()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 64, initialComponentCapacity: 4);
+        manager.RegisterPackedPool<PackedTestComponent>((ref existing, incoming) => existing = incoming);
+        manager.RegisterMultiPool<MultiTestComponent>();
+        var packed = manager.GetPackedPool<PackedTestComponent>();
+        var multi = manager.GetMultiPool<MultiTestComponent>();
+        for (var entityId = 0; entityId < 4; entityId++)
+        {
+            packed.Add(entityId, new PackedTestComponent { Value = entityId });
+            multi.Add(entityId, new MultiTestComponent { Value = entityId });
+        }
+
+        manager.ReserveHeadroom(3);
+        var packedBytes = packed.EstimatedBytes;
+        var multiBytes = multi.EstimatedBytes;
+        for (var entityId = 4; entityId < 12; entityId++)
+        {
+            packed.Add(entityId, new PackedTestComponent { Value = entityId });
+            multi.Add(entityId, new MultiTestComponent { Value = entityId });
+        }
+
+        Assert.AreEqual(packedBytes, packed.EstimatedBytes);
+        Assert.AreEqual(multiBytes, multi.EstimatedBytes);
+        Assert.AreEqual(11, packed.GetReadonly(11).Value);
+        Assert.AreEqual(3, multi.GetReadonlyByDenseIndex(multi.GetFirstDenseIndex(3)).Value);
+
+        packed.Add(12, new PackedTestComponent { Value = 12 });
+        multi.Add(12, new MultiTestComponent { Value = 12 });
+        Assert.IsGreaterThan(packedBytes, packed.EstimatedBytes);
+        Assert.IsGreaterThan(multiBytes, multi.EstimatedBytes);
+    }
+}
