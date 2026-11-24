@@ -39,7 +39,8 @@ public sealed class MainForm : Form
     private readonly ListBox _optionsListBox = new() { Height = 120, Width = SectionWidth, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 18 };
     private readonly ListBox _entriesListBox = new() { Height = 200, Width = SectionWidth, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 18 };
     private readonly PictureBox _pictureBox = new() { SizeMode = PictureBoxSizeMode.Normal, BackColor = Color.Black };
-    private readonly Panel _pictureScrollPanel = new() { AutoScroll = true, BorderStyle = BorderStyle.Fixed3D };
+    private readonly Panel _pictureScrollPanel = new() { AutoScroll = true, BorderStyle = BorderStyle.Fixed3D, BackColor = Color.Black };
+    private readonly TrackBar _sheetBackgroundTrackBar = new() { Minimum = 0, Maximum = 255, Value = 255, TickStyle = TickStyle.None, Dock = DockStyle.Fill };
 
     private readonly SlotGridControl _slotGrid;
     private readonly Label _selectedSlotLabel = new() { AutoSize = true, MaximumSize = new Size(SectionWidth, 0) };
@@ -210,10 +211,39 @@ public sealed class MainForm : Form
         rightColumn.Controls.Add(_linkPreviewSection);
         placementPanelHost.Controls.Add(rightColumn);
 
-        Controls.Add(_pictureScrollPanel);
+        _pictureScrollPanel.Dock = DockStyle.Fill;
+        var sheetColumn = new Panel { Dock = DockStyle.Fill };
+        sheetColumn.Controls.Add(_pictureScrollPanel);
+        sheetColumn.Controls.Add(BuildSheetBackgroundRow());
+
+        Controls.Add(sheetColumn);
         Controls.Add(placementPanelHost);
         Controls.Add(sidePanelHost);
-        _pictureScrollPanel.Dock = DockStyle.Fill;
+    }
+
+    private Control BuildSheetBackgroundRow()
+    {
+        _sheetBackgroundTrackBar.ValueChanged += (_, _) => ApplySheetBackground();
+        _toolTip.SetToolTip(_sheetBackgroundTrackBar, "The sheet view's background: white at the left, black at the right.");
+
+        var row = new TableLayoutPanel { Dock = DockStyle.Bottom, Height = 36, ColumnCount = 4, Padding = new Padding(4, 4, 4, 0) };
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row.Controls.Add(new Label { Text = "Background:", AutoSize = true, Padding = new Padding(0, 6, 4, 0) }, 0, 0);
+        row.Controls.Add(new Label { Text = "White", AutoSize = true, Padding = new Padding(0, 6, 0, 0) }, 1, 0);
+        row.Controls.Add(_sheetBackgroundTrackBar, 2, 0);
+        row.Controls.Add(new Label { Text = "Black", AutoSize = true, Padding = new Padding(0, 6, 0, 0) }, 3, 0);
+        return row;
+    }
+
+    private void ApplySheetBackground()
+    {
+        var brightness = _sheetBackgroundTrackBar.Maximum - _sheetBackgroundTrackBar.Value;
+        var background = Color.FromArgb(brightness, brightness, brightness);
+        _pictureBox.BackColor = background;
+        _pictureScrollPanel.BackColor = background;
     }
 
     private Control BuildWallPartRow()

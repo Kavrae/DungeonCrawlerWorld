@@ -12,7 +12,7 @@ namespace Tests.Presentation;
 /// <summary>
 /// A map view over a handful of occupants and walls, for the map's draw planners. An occupant occupies every tile of its
 /// footprint, a Blocking one as that tile's Blocking occupant. A wall is a structure drawn with the named sprite, every cell's seed 0.
-/// Everything inside 0..1023 is on the map; occupants are kept on MapLayer 0 of a real Map 256 tiles square, which the scans read.
+/// Everything inside 0..1023 is on the map; occupants are kept on their MapLayer (0 unless given) of a real Map 256 tiles square, which the scans read.
 /// </summary>
 internal sealed class FakeMapView : IMapViewQuery
 {
@@ -21,8 +21,8 @@ internal sealed class FakeMapView : IMapViewQuery
     private const int OccupancySize = 256;
 
     private readonly Dictionary<int, OccupantView> _occupants = [];
-    private readonly Dictionary<(int X, int Y), List<int>> _occupantsByTile = [];
-    private readonly Dictionary<(int X, int Y), int> _blockingByTile = [];
+    private readonly Dictionary<(int X, int Y, int Layer), List<int>> _occupantsByTile = [];
+    private readonly Dictionary<(int X, int Y, int Layer), int> _blockingByTile = [];
     private readonly Dictionary<(int X, int Y), ushort> _walls = [];
     private readonly Map _occupancy = new(new MapBounds(0, 0, OccupancySize, OccupancySize, 3));
     private int _nextLayerMarkerId = 1_000_000;
@@ -31,9 +31,9 @@ internal sealed class FakeMapView : IMapViewQuery
 
     public int PlayerEntityId => -1;
 
-    public int AddBlocking(int x, int y, Vector2Byte? size = null) => Add(x, y, size ?? new Vector2Byte(1, 1), NonBlockingKind.None, isDead: false, isBlocking: true);
+    public int AddBlocking(int x, int y, Vector2Byte? size = null, int layer = 0) => Add(x, y, size ?? new Vector2Byte(1, 1), NonBlockingKind.None, isDead: false, isBlocking: true, layer);
 
-    public int AddNonBlocking(int x, int y, Vector2Byte size, NonBlockingKind kind, bool isDead = false) => Add(x, y, size, kind, isDead, isBlocking: false);
+    public int AddNonBlocking(int x, int y, Vector2Byte size, NonBlockingKind kind, bool isDead = false, int layer = 0) => Add(x, y, size, kind, isDead, isBlocking: false, layer);
 
     /// <summary>Marks layer N occupied at (x, y) for each bit N of mask, with an occupant that has no OccupantView.</summary>
     public void SetOccupiedLayers(int x, int y, byte mask)
@@ -74,10 +74,10 @@ internal sealed class FakeMapView : IMapViewQuery
 
     public bool IsOnMap(Vector3Int position) => position.X >= 0 && position.Y >= 0 && position.X < MapSize && position.Y < MapSize;
 
-    public int GetBlockingEntityId(Vector3Int position) => _blockingByTile.TryGetValue((position.X, position.Y), out var entityId) ? entityId : -1;
+    public int GetBlockingEntityId(Vector3Int position) => _blockingByTile.TryGetValue((position.X, position.Y, position.Z), out var entityId) ? entityId : -1;
 
     public ReadOnlySpan<int> GetOccupants(Vector3Int position) =>
-        _occupantsByTile.TryGetValue((position.X, position.Y), out var occupants) ? occupants.ToArray() : [];
+        _occupantsByTile.TryGetValue((position.X, position.Y, position.Z), out var occupants) ? occupants.ToArray() : [];
 
     public OccupiedCellScan GetOccupiedCellsIn(int minX, int minY, int maxXExclusive, int maxYExclusive, int mapLayer) =>
         _occupancy.GetOccupiedCellsIn(minX, minY, maxXExclusive, maxYExclusive, mapLayer);
@@ -103,26 +103,26 @@ internal sealed class FakeMapView : IMapViewQuery
 
     public DropReceiverKind FindDropReceiver(ReadOnlySpan<int> occupants, out int receiverEntityId) => throw new NotSupportedException();
 
-    private int Add(int x, int y, Vector2Byte size, NonBlockingKind kind, bool isDead, bool isBlocking)
+    private int Add(int x, int y, Vector2Byte size, NonBlockingKind kind, bool isDead, bool isBlocking, int layer)
     {
         var entityId = _occupants.Count + 1;
-        _occupants[entityId] = new OccupantView(new Vector3Int(x, y, 0), size, kind, isDead);
+        _occupants[entityId] = new OccupantView(new Vector3Int(x, y, layer), size, kind, isDead);
 
         for (var tileX = x; tileX < x + size.X; tileX++)
         {
             for (var tileY = y; tileY < y + size.Y; tileY++)
             {
-                if (!_occupantsByTile.TryGetValue((tileX, tileY), out var occupants))
+                if (!_occupantsByTile.TryGetValue((tileX, tileY, layer), out var occupants))
                 {
-                    _occupantsByTile[(tileX, tileY)] = occupants = [];
+                    _occupantsByTile[(tileX, tileY, layer)] = occupants = [];
                 }
 
                 occupants.Add(entityId);
-                _occupancy.AddOccupantEntityId(new Vector3Int(tileX, tileY, 0), entityId);
+                _occupancy.AddOccupantEntityId(new Vector3Int(tileX, tileY, layer), entityId);
                 if (isBlocking)
                 {
-                    _blockingByTile[(tileX, tileY)] = entityId;
-                    _occupancy.SetBlockingEntityId(new Vector3Int(tileX, tileY, 0), entityId);
+                    _blockingByTile[(tileX, tileY, layer)] = entityId;
+                    _occupancy.SetBlockingEntityId(new Vector3Int(tileX, tileY, layer), entityId);
                 }
             }
         }

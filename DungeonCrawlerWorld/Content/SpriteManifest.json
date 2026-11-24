@@ -633,5 +633,128 @@
     ],
     "ColumnSpan": 2,
     "RowSpan": 2
+  },
+  {
+    "Name": "Shadows",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Structures/Buildings/Shadows.png",
+        "Column": 1,
+        "Row": 4,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "Rotation": 180
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Structures/Buildings/Shadows.png",
+        "Column": 1,
+        "Row": 4,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "Rotation": 180
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Structures/Buildings/Shadows.png",
+        "Column": 2,
+        "Row": 1,
+        "CellWidth": 16,
+        "CellHeight": 16
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Structures/Buildings/Shadows.png",
+        "Column": 2,
+        "Row": 1,
+        "CellWidth": 16,
+        "CellHeight": 16
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Structures/Buildings/Shadows.png",
+        "Column": 1,
+        "Row": 4,
+        "CellWidth": 16,
+        "CellHeight": 16
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Structures/Buildings/Shadows.png",
+        "Column": 6,
+        "Row": 1,
+        "CellWidth": 16,
+        "CellHeight": 16
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Structures/Buildings/Shadows.png",
+        "Column": 4,
+        "Row": 1,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "Rotation": 180
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Structures/Buildings/Shadows.png",
+        "Column": 5,
+        "Row": 1,
+        "CellWidth": 16,
+        "CellHeight": 16
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Structures/Buildings/Shadows.png",
+        "Column": 4,
+        "Row": 1,
+        "CellWidth": 16,
+        "CellHeight": 16
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Structures/Buildings/Shadows.png",
+        "Column": 4,
+        "Row": 1,
+        "CellWidth": 16,
+        "CellHeight": 16
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Structures/Buildings/Shadows.png",
+        "Column": 3,
+        "Row": 1,
+        "CellWidth": 16,
+        "CellHeight": 16
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Structures/Buildings/Shadows.png",
+        "Column": 3,
+        "Row": 1,
+        "CellWidth": 16,
+        "CellHeight": 16
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Structures/Buildings/Shadows.png",
+        "Column": 2,
+        "Row": 1,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "Rotation": 180
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Structures/Buildings/Shadows.png",
+        "Column": 7,
+        "Row": 1,
+        "CellWidth": 16,
+        "CellHeight": 16
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Structures/Buildings/Shadows.png",
+        "Column": 3,
+        "Row": 1,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "Rotation": 180
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Structures/Buildings/Shadows.png",
+        "Column": 6,
+        "Row": 1,
+        "CellWidth": 16,
+        "CellHeight": 16
+      }
+    ],
+    "Linking": "Cardinal"
   }
 ]

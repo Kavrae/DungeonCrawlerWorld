@@ -4050,6 +4050,10 @@ High) decides the gameplay light level per tile; this is drawing it.
 - **Local and viewport only;** off-screen lights cost nothing.
 - **Glow overlaps:** today's glow cache (`GlowRenderer`) draws light-like auras; decide whether glows
   become light sources or stay a separate effect.
+- **Flying shadows follow the light:** the shadow under a flying entity (IMPLEMENTATION-NOTES "Shadows under flying
+  entities") is scaled by one minus the glow under it (`SpriteDrawMode.Shadow`), so light put into the glow texture
+  cancels it with no change there. Its known gap belongs here: a tall creature standing in a shadowed tile is darkened
+  only across that tile, and darkening whole standing sprites along their ground row is this item's per-tile lighting.
 
 **Godot reference:** `PointLight2D` (a texture-shaped light with energy, colour, range and optional
 shadows), `DirectionalLight2D`, `LightOccluder2D` with an `OccluderPolygon2D` (TileSets can carry

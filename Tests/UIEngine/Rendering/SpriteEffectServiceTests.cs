@@ -127,6 +127,14 @@ public sealed class SpriteEffectServiceTests
     }
 
     [TestMethod]
+    public void DrawStyle_WritesAShadowsModeAndItsGlowAtThePixelIntoTheVertex()
+    {
+        var style = new SpriteDrawStyle(SpriteDrawMode.Shadow).WithGlowAtPixel();
+
+        Assert.AreEqual(new SpriteEffectVertexStyle(5, (byte)SpriteGlow.AtPixel, 0, 0, 0f), style.ToVertexStyle());
+    }
+
+    [TestMethod]
     public void Override_DeclaringThisVertexVersion_IsAcceptedSilently()
     {
         using var problems = new StringWriter();

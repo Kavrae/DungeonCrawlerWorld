@@ -14,6 +14,7 @@ using Game.Spawning;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
+using Presentation.MapRendering;
 using Presentation.UI.Characteristics;
 using Presentation.UI.ColorPalettes;
 using Presentation.UI.Looting;
@@ -29,9 +30,9 @@ namespace Presentation.UI.Content;
 /// InspectionWindow's content, driven entirely by MapViewState.InspectionMode:
 /// <list type="bullet">
 /// <item>Basic -- one padded block per subject on the currently selected map tile
-/// (SelectedMapNodePosition/CurrentMapLayer), then the structure, the terrain and every aura reaching the tile, strongest
-/// first (AuraView.CopyAurasAt). Rebuilt wholesale whenever the
-/// tile's own subject-id set or the auras reaching it actually change (tile clicked elsewhere, or an entity walked
+/// (SelectedMapNodePosition/CurrentMapLayer), then the structure, the terrain, every aura reaching the tile, strongest
+/// first (AuraView.CopyAurasAt), and a Shadow block when something flies above it (FlyingShadows). Rebuilt wholesale whenever the
+/// tile's own subject-id set, the auras reaching it or the shadow on it actually change (tile clicked elsewhere, or an entity walked
 /// on/off the still-selected tile) -- cheap, since one tile's occupant count is always small,
 /// unlike SelectionWindowContent's incremental add/remove diffing (built for a very different
 /// perf profile -- see its own doc comment, now retired in favor of this and Detail below).</item>
@@ -108,6 +109,7 @@ public sealed class InspectionWindowContent(
     private TerrainView? _lastTerrain;
     private readonly List<AuraAtCell> _scratchAuras = [];
     private readonly List<AuraAtCell> _lastAuras = [];
+    private EntitySizeCategory? _lastShadowCasterSize;
     private Point? _scratchAurasPosition;
     private int _scratchAurasMapLayer = -1;
     private int _scratchAurasVersion;
@@ -328,9 +330,10 @@ public sealed class InspectionWindowContent(
         TerrainView? terrain = mapView.TryGetTerrain(selected.X, selected.Y, currentMapLayer, out var foundTerrain) ? foundTerrain : null;
 
         CopyAurasAt(selected, currentMapLayer);
+        EntitySizeCategory? shadowCasterSize = FlyingShadows.TryGetLargestCasterSize(mapView, selected.X, selected.Y, currentMapLayer, out var largestCaster) ? largestCaster : null;
 
         var skeletonCount = _scratchSubjectIds.Count(IsSkeleton);
-        if (_hasContent && selected == _lastBasicPosition && currentMapLayer == _lastBasicMapLayer && _scratchSubjectIds.SequenceEqual(_lastSubjectIds) && skeletonCount == _lastSkeletonCount && structure == _lastStructure && terrain == _lastTerrain && _scratchAuras.SequenceEqual(_lastAuras))
+        if (_hasContent && selected == _lastBasicPosition && currentMapLayer == _lastBasicMapLayer && _scratchSubjectIds.SequenceEqual(_lastSubjectIds) && skeletonCount == _lastSkeletonCount && structure == _lastStructure && terrain == _lastTerrain && _scratchAuras.SequenceEqual(_lastAuras) && shadowCasterSize == _lastShadowCasterSize)
         {
             return;
         }
@@ -347,6 +350,7 @@ public sealed class InspectionWindowContent(
         _lastTerrain = terrain;
         _lastAuras.Clear();
         _lastAuras.AddRange(_scratchAuras);
+        _lastShadowCasterSize = shadowCasterSize;
         _lastDetailEntityId = -1; // Invalidates Detail's own cache so it rebuilds fresh if Detail mode resumes later.
 
         _hostWindow.TitleText = $"Tile ({selected.X}, {selected.Y})";
@@ -355,7 +359,7 @@ public sealed class InspectionWindowContent(
         _decisionWindow = null;
         _adminDumpWindows.Clear();
         _editableBlocks.Clear();
-        _hasContent = _scratchSubjectIds.Count > 0 || structure is not null || terrain is not null || _scratchAuras.Count > 0;
+        _hasContent = _scratchSubjectIds.Count > 0 || structure is not null || terrain is not null || _scratchAuras.Count > 0 || shadowCasterSize is not null;
 
         var blockWidth = _body.ContentSize.X;
         foreach (var entityId in _scratchSubjectIds)
@@ -376,6 +380,11 @@ public sealed class InspectionWindowContent(
         foreach (var aura in _scratchAuras)
         {
             BuildAuraBlock(aura, blockWidth);
+        }
+
+        if (shadowCasterSize is { } casterSize)
+        {
+            BuildShadowBlock(casterSize, blockWidth);
         }
 
         if (keepsScroll)
@@ -588,6 +597,15 @@ public sealed class InspectionWindowContent(
         }
 
         AddDescriptionRow(auraView.DescriptionOf(aura.AuraId), blockWidth);
+        BuildSpacer(blockWidth);
+    }
+
+    /// <summary>Something flying over the tile, after the auras: a "Shadow" header and how big the biggest thing above is, never what it is.</summary>
+    private void BuildShadowBlock(EntitySizeCategory casterSize, float blockWidth)
+    {
+        var header = CreateHeaderWindow(blockWidth, RowHeight, hasIcon: false);
+        AddTextRow(header, 0, 0, System.Math.Max(0f, blockWidth - WindowChrome.Padding * 2), "Shadow");
+        AddDescriptionRow(FlyingShadows.DescriptionFor(casterSize), blockWidth);
         BuildSpacer(blockWidth);
     }
 

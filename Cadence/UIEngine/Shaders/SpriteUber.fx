@@ -37,6 +37,10 @@
 // and the tile's TileOverlayTexelsPerTile texels, read point-sampled, are its wash, its fills (from the tile's bottom up to
 // their fraction, the top edge anti-aliased over a pixel), its ring (an inward fade, as FadeInwardMode's) and the fractions
 // -- premultiplied, laid over each other in that order.
+//
+// A shadow (ShadowMode) is a darkening the glow cancels: the texel times its colour, scaled by one minus the glow's strength
+// under the pixel (its alpha, how far Lit replaces a colour with the light), and never lit. Full where no glow reaches, thinner
+// under weak light, gone under the brightest.
 
 float4x4 MatrixTransform;
 float VertexVersion = 7;
@@ -49,6 +53,7 @@ static const float DesaturateMode = 1;
 static const float FadeInwardMode = 2;
 static const float FadeOutwardMode = 3;
 static const float TileOverlayMode = 4;
+static const float ShadowMode = 5;
 static const float TileOverlayTexelsPerTile = 5;
 static const float TileOverlayWashTexel = 0;
 static const float TileOverlayFirstFillTexel = 1;
@@ -231,6 +236,10 @@ float4 ShadeSprite(ShadedVertex input) : COLOR0
     else if (Is(input.Style.x, TileOverlayMode))
     {
         shaded = TileOverlayAt(input.OverlayTile);
+    }
+    else if (Is(input.Style.x, ShadowMode))
+    {
+        return Is(input.Style.y, NoGlow) ? shaded : shaded * (1 - GlowAt(input.GlowTexel).a);
     }
     else if (input.Style.x > DesaturateMode + 0.5)
     {

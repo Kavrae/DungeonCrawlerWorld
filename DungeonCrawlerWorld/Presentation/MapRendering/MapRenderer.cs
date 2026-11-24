@@ -69,6 +69,11 @@ public sealed class MapRenderer : IDisposable
     /// <summary>Fraction of a tile's own size the charging-action badge renders at, matching LootBagBadgeSizeFraction's own scale.</summary>
     private const float ChargingBadgeSizeFraction = 0.4f;
 
+    private const string ShadowSpriteName = "Shadows";
+
+    /// <summary>How strongly a shadow under something flying darkens what it lies on.</summary>
+    private const float FlyingShadowOpacity = 0.55f;
+
     private static readonly Color MapFillColor = new(40, 40, 40);
 
     /// <summary>What a tile off the loaded map is drawn as, so the edge of the world reads as an edge rather than as floor with nothing on it.</summary>
@@ -96,6 +101,9 @@ public sealed class MapRenderer : IDisposable
     /// to look the same on every corpse.
     /// </summary>
     private readonly SpriteView? _lootBagSprite;
+
+    /// <summary>The Shadows linked set, resolved once; null draws each shadowed tile as a plain dark square.</summary>
+    private readonly TerrainSpriteSet? _shadowSprites;
 
     /// <summary>What the occupant pass draws and in what order, re-planned every frame into the same buffers.</summary>
     private readonly MapDrawOrder _drawOrder = new();
@@ -150,6 +158,7 @@ public sealed class MapRenderer : IDisposable
         _badgeFontMeasurer = fontService.GetTextMeasurer(fontService.GetFont(GameFontChrome.MapBadgeFontSize)); // Double the tiny font, for the up/down layer-occupancy badges -- legible at a glance without competing with the main glyph.
 
         _lootBagSprite = spriteSheetService.Sprites.TryGetFirst(LootBagSpriteName, out var lootBagSprite) ? lootBagSprite : null;
+        _shadowSprites = spriteSheetService.Sprites.TryGetTerrainSprites(ShadowSpriteName, out var shadowSprites) ? shadowSprites : null;
 
         _drawGroundIntoCache = DrawGroundIntoCache;
         _drawTopsIntoCache = DrawTopsIntoCache;
@@ -443,6 +452,10 @@ public sealed class MapRenderer : IDisposable
                 case MapDrawItemKind.Overhang:
                     DrawOverhang(batch, _wallPlan.Overhangs[item.EntityId], footprintTopLeft, footprintSize);
                     break;
+
+                case MapDrawItemKind.Shadow:
+                    DrawShadow(batch, item.LinkMask, footprintTopLeft, footprintSize);
+                    break;
             }
         }
     }
@@ -640,6 +653,19 @@ public sealed class MapRenderer : IDisposable
         }
     }
 
+    /// <summary>The shadow piece for linkMask over its tile, translucent so it darkens whatever is drawn there and cancelled by the glow under it (SpriteDrawMode.Shadow); a plain dark square when the manifest has no Shadows set. The set's one variant is always used, so a moving shadow never changes look.</summary>
+    private void DrawShadow(SpriteEffectBatch batch, byte linkMask, Vector2 tileOrigin, Vector2 tileSize)
+    {
+        var style = new SpriteDrawStyle(SpriteDrawMode.Shadow).WithGlowAtPixel();
+        if (_shadowSprites is { } shadowSprites && shadowSprites.TryGetFace(seed: 0, linkMask, out var piece))
+        {
+            SpriteOrGlyphRenderer.Draw(batch, _spriteSheetService, piece, _mediumFontMeasurer, string.Empty, Color.White, tileOrigin, tileSize, SpriteFit.Fill, Color.White, FlyingShadowOpacity, style: style);
+            return;
+        }
+
+        batch.FillRectangle(new Rectangle((int)tileOrigin.X, (int)tileOrigin.Y, (int)tileSize.X, (int)tileSize.Y), Color.Black * FlyingShadowOpacity, style);
+    }
+
     /// <summary>Medium/large/huge glyph font, measured, by an entity's footprint width.</summary>
     private FontStashTextMeasurer FontMeasurerForSize(int sizeX) => sizeX switch
     {
@@ -649,7 +675,7 @@ public sealed class MapRenderer : IDisposable
     };
 
     /// <summary>
-    /// Blue up-arrow (top-right) if any layer above the current one is occupied; brown
+    /// Blue up-arrow (top-right) if any layer above the current one is occupied, except the Flying layer over Ground, which casts a shadow instead; brown
     /// down-arrow (bottom-right) if any layer below is. A tile-level badge -- unlike
     /// DrawEntityIcons, this describes the tile's other layers, not the Blocking occupant
     /// drawn on it -- so MapDrawOrder plans every badge after every occupant, where no later

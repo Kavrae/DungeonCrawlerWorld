@@ -2734,6 +2734,42 @@ How it's built:
 - Every icon reaches the drawing through `SpriteOrGlyphRenderer`, so a new sprite drawn anywhere goes through it too,
   never a texture draw of its own.
 
+### Shadows under flying entities (2026-11-24)
+
+**Something on the Flying layer casts a shadow on Ground, and that shadow is how the player knows it is overhead.** It
+replaced the blue "^" layer badge for that case (`PLAN-flying-shadows.md`).
+
+Why a linked sprite set rather than "Visual 2D lighting":
+- The lighting item draws the light map that "Field of view and perception" will provide, and that isn't built. The
+  flying cue is information the player needs now.
+- What the player needs is per tile, and the map already stores it: the Flying bit of the column occupancy masks, the bit
+  the "^" badge read. A Cardinal linked set needs only that bit and its four neighbours'.
+- A sprite-shaped shadow needs a silhouette pass, a render target and a projection, and in the three-quarter view it
+  says "something is above you" no better than a footprint patch.
+
+The rules:
+- **Only on Ground, only from Flying.** A Ground tile is shadowed when anything on the Flying layer covers it, every
+  tile of every footprint. Nothing casts a shadow onto Underground. While Ground is shown the badge scan leaves the
+  Flying bit out, so "^" is gone there; Underground still shows "^" for an occupied Ground tile, and "v" is unchanged.
+- **Shape:** each shadowed tile draws the `Shadows` manifest entry's piece for its Cardinal mask, so neighbouring
+  flyers join into one patch. `MapDrawOrder` reads the masks from a bit grid one tile wider than the grid on every
+  side, so a shadow the screen edge cuts stays joined. The set's one variant is drawn with seed 0, so a moving shadow
+  never changes look. With no `Shadows` entry, a tile draws a plain dark square.
+- **Draw order:** a `Shadow` item comes after its row's occupants and before the next row's overhangs. It lies over
+  corpses, piles, Tiny occupants and whatever stands on the tile, and anything anchored in a lower row draws over it.
+  Known limitation: a tall creature standing in a shadowed tile is darkened only across that tile, and its sprite above
+  stays lit. Darkening whole standing sprites belongs to the lighting item.
+- **Strength:** `MapRenderer.FlyingShadowOpacity` (0.55). The shadow is blended, so it compounds with darkness already
+  on the ground. Two Flying occupants of one tile set one bit and cast one shadow.
+- **Light cancels it.** `SpriteDrawMode.Shadow` (UIEngine) scales the draw by one minus the glow's strength under the
+  pixel and never lights it (`SpriteUber.fx`, drawn with `SpriteGlow.AtPixel`). The glow is the shown layer's, so only
+  same-level light cancels a shadow, and strong light washes it out while weak light thins it. Any light later added to
+  the glow texture cancels it the same way. If "bright" should become a threshold, it is one constant in the shader.
+- **The Inspection window names it.** Basic inspection of a shadowed tile while Ground is shown ends with a "Shadow"
+  block, no icon, saying something is in the sky above the tile ("something large" or "something huge" by the biggest
+  flyer's `EntitySizeCategories.Of`), never what it is. `FlyingShadows` (Presentation) is the one rule the map's planner
+  (`CastingLayerMaskOnto`) and the inspector (`TryGetLargestCasterSize`, `DescriptionFor`) both read.
+
 ## Pause modality
 
 `UiLayerStack`'s "menu mode" already implements the generalized modal concept TODO.md's old "Pause

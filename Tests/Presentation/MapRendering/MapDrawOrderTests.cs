@@ -150,4 +150,80 @@ public sealed class MapDrawOrderTests
         Assert.IsGreaterThan(IndexOf(items, behindTheWall, MapDrawItemKind.Blocking), overhangIndex);
         Assert.IsLessThan(IndexOf(items, westInTheWallsRow, MapDrawItemKind.Blocking), overhangIndex);
     }
+
+    private const byte FlyingOnly = 1 << (int)MapLayer.Flying;
+
+    private static List<MapDrawItem> Shadows(List<MapDrawItem> items) =>
+        items.Where(item => item.Kind == MapDrawItemKind.Shadow).ToList();
+
+    [TestMethod]
+    public void Plan_WhileGroundIsShown_AFlyingOccupiedTilesShadow_ComesAfterItsRowsOccupantsAndBeforeTheNextRows()
+    {
+        var map = new FakeMapView();
+        var underTheShadow = map.AddBlocking(14, 13, layer: (int)MapLayer.Ground);
+        var inTheRowBelow = map.AddBlocking(14, 14, layer: (int)MapLayer.Ground);
+        map.SetOccupiedLayers(14, 13, FlyingOnly);
+
+        var items = Plan(map, mapLayer: (int)MapLayer.Ground, layerCount: 3);
+
+        var shadows = Shadows(items);
+        Assert.HasCount(1, shadows);
+        Assert.AreEqual(new MapDrawItem(MapDrawItemKind.Shadow, -1, 14, 13, new Vector2Byte(1, 1)), shadows[0]);
+        var shadowIndex = items.IndexOf(shadows[0]);
+        Assert.IsGreaterThan(IndexOf(items, underTheShadow, MapDrawItemKind.Blocking), shadowIndex);
+        Assert.IsLessThan(IndexOf(items, inTheRowBelow, MapDrawItemKind.Blocking), shadowIndex);
+    }
+
+    [TestMethod]
+    public void Plan_AShadowsLinkMask_JoinsItsShadowedNeighbours_IncludingOnesPastTheGridsEdge()
+    {
+        var map = new FakeMapView();
+        map.SetOccupiedLayers(Scroll.X, Scroll.Y, FlyingOnly);
+        map.SetOccupiedLayers(Scroll.X - 1, Scroll.Y, FlyingOnly);
+        map.SetOccupiedLayers(Scroll.X, Scroll.Y + 1, FlyingOnly);
+
+        var shadows = Shadows(Plan(map, mapLayer: (int)MapLayer.Ground, layerCount: 3));
+
+        Assert.HasCount(2, shadows);
+        Assert.AreEqual(new Point(Scroll.X, Scroll.Y), new Point(shadows[0].MapX, shadows[0].MapY));
+        Assert.AreEqual((byte)(SpriteFormat.SpriteLinks.West | SpriteFormat.SpriteLinks.South), shadows[0].LinkMask);
+        Assert.AreEqual(new Point(Scroll.X, Scroll.Y + 1), new Point(shadows[1].MapX, shadows[1].MapY));
+        Assert.AreEqual((byte)SpriteFormat.SpriteLinks.North, shadows[1].LinkMask);
+    }
+
+    [TestMethod]
+    [DataRow((int)MapLayer.UnderGround)]
+    [DataRow((int)MapLayer.Flying)]
+    public void Plan_WhileGroundIsNotShown_PlansNoShadows(int mapLayer)
+    {
+        var map = new FakeMapView();
+        map.SetOccupiedLayers(12, 12, FlyingOnly);
+
+        Assert.IsEmpty(Shadows(Plan(map, mapLayer, layerCount: 3)));
+    }
+
+    [TestMethod]
+    public void Plan_WhileGroundIsShown_TheFlyingLayerRaisesNoUpBadge_AndTheLayerBelowStillDoes()
+    {
+        var map = new FakeMapView();
+        map.SetOccupiedLayers(12, 12, FlyingOnly);
+        map.SetOccupiedLayers(13, 12, FlyingOnly | 1 << (int)MapLayer.UnderGround);
+
+        var badges = Plan(map, mapLayer: (int)MapLayer.Ground, layerCount: 3).Where(item => item.Kind == MapDrawItemKind.LayerBadge).ToList();
+
+        Assert.HasCount(1, badges);
+        Assert.AreEqual(new MapDrawItem(MapDrawItemKind.LayerBadge, -1, 13, 12, new Vector2Byte(1, 1), HasHigherLayer: false, HasLowerLayer: true), badges[0]);
+    }
+
+    [TestMethod]
+    public void Plan_WhileUnderGroundIsShown_AnOccupiedGroundTileStillRaisesAnUpBadge()
+    {
+        var map = new FakeMapView();
+        map.SetOccupiedLayers(12, 12, 1 << (int)MapLayer.Ground);
+
+        var badges = Plan(map, mapLayer: (int)MapLayer.UnderGround, layerCount: 3).Where(item => item.Kind == MapDrawItemKind.LayerBadge).ToList();
+
+        Assert.HasCount(1, badges);
+        Assert.IsTrue(badges[0].HasHigherLayer);
+    }
 }

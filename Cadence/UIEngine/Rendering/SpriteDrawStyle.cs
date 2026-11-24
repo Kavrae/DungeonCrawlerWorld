@@ -17,6 +17,9 @@ public enum SpriteDrawMode : byte
 
     /// <summary>Not the texel: the batch's tile overlay (SpriteEffectTileOverlay) at each pixel -- the tile under it, its wash, fills and ring. Drawn as one quad over the overlay's grid.</summary>
     TileOverlay = 4,
+
+    /// <summary>Plain, its strength reduced by the batch's glow under each pixel and never lit by it: a darkening that light cancels, full where there is none and gone under the brightest. Drawn with SpriteGlow.AtPixel.</summary>
+    Shadow = 5,
 }
 
 /// <summary>Where a draw reads the batch's glow texture (SpriteEffectGlow), if at all.</summary>

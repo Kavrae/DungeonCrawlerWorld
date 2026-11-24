@@ -25,18 +25,22 @@ public enum MapDrawItemKind : byte
     /// <summary>A Phasing occupant, drawn translucently over the Blocking one, from the bottom-left tile of its footprint.</summary>
     Phasing,
 
-    /// <summary>A tile's up/down arrows for occupied layers above and below the one shown; always after every occupant.</summary>
+    /// <summary>A tile's up/down arrows for occupied layers above and below the one shown, the Flying layer's left out while Ground is shown (it casts a Shadow instead); always after every occupant.</summary>
     LayerBadge,
 
     /// <summary>A wall's face or top that covers a tile something can stand on, drawn at the start of its wall's row, ahead of that row's occupants.</summary>
     Overhang,
+
+    /// <summary>A Ground tile something on the Flying layer covers, drawn after its row's occupants, with the piece of the shadow set its LinkMask picks.</summary>
+    Shadow,
 }
 
 /// <summary>One thing the map draws, in the order it must be drawn.</summary>
 /// <param name="MapX">The footprint's top-left tile for an entity; the tile itself for a Tiny occupant or a layer badge; the tile it is drawn on for an overhang.</param>
-/// <param name="EntityId">-1 for a layer badge; the overhang's index in the overhang list for an overhang.</param>
-/// <param name="Size">The footprint in tiles; 1x1 for a Tiny occupant, a layer badge or an overhang.</param>
-public readonly record struct MapDrawItem(MapDrawItemKind Kind, int EntityId, int MapX, int MapY, Vector2Byte Size, bool HasHigherLayer = false, bool HasLowerLayer = false);
+/// <param name="EntityId">-1 for a layer badge or a shadow; the overhang's index in the overhang list for an overhang.</param>
+/// <param name="Size">The footprint in tiles; 1x1 for a Tiny occupant, a layer badge, an overhang or a shadow.</param>
+/// <param name="LinkMask">A shadow's Cardinal mask (SpriteLinks): which of its four neighbours are shadowed too; 0 for every other kind.</param>
+public readonly record struct MapDrawItem(MapDrawItemKind Kind, int EntityId, int MapX, int MapY, Vector2Byte Size, bool HasHigherLayer = false, bool HasLowerLayer = false, byte LinkMask = 0);
 
 /// <summary>A wall's face or top drawn live, in the row walk, because it covers a tile something can stand on.</summary>
 /// <param name="WallX">The wall's own tile, whose row the piece is drawn in.</param>
@@ -83,6 +87,11 @@ public readonly record struct MapOverhang(int WallX, int WallY, int AnchorX, int
 /// rows above, under anything standing beside it in its own row.
 /// </para>
 /// <para>
+/// <b>Shadows after their row.</b> While Ground is shown, each grid tile the Flying layer occupies gets a shadow, planned
+/// after its row's occupants: it lies over everything on its tile, and anything anchored in a lower row draws over it.
+/// Its link mask reads the tiles one past the grid too, so a shadow the screen's edge cuts stays joined.
+/// </para>
+/// <para>
 /// <b>Layer badges last.</b> They describe a tile, and a later row's tall sprite would paint over them, so they are
 /// planned after every occupant, from a second scan of the grid over the other layers.
 /// </para>
@@ -96,6 +105,14 @@ public sealed class MapDrawOrder
     private readonly List<MapDrawItem> _items = [];
     private readonly List<MapDrawItem> _phasingOccupants = [];
 
+    /// <summary>The grid's shadowed tiles, Y then X, as the walk emits them.</summary>
+    private readonly List<Point> _shadowTiles = [];
+
+    /// <summary>Whether each tile of the grid grown by one on every side is shadowed, row-major; read for the link masks.</summary>
+    private bool[] _shadowedTiles = [];
+
+    private int _shadowedTilesWidth;
+
     /// <summary>The last Plan's items, in draw order. Reused by the next Plan.</summary>
     public IReadOnlyList<MapDrawItem> Items => _items;
 
@@ -107,10 +124,13 @@ public sealed class MapDrawOrder
         _items.Clear();
 
         var allLayersMask = (1 << layerCount) - 1;
-        var higherLayerMask = allLayersMask & ~((1 << (mapLayer + 1)) - 1);
+        var shadowCastingLayerMask = FlyingShadows.CastingLayerMaskOnto(mapLayer, layerCount);
+        var higherLayerMask = allLayersMask & ~((1 << (mapLayer + 1)) - 1) & ~shadowCastingLayerMask;
         var lowerLayerMask = (1 << mapLayer) - 1;
         var nextOverhang = 0;
+        var nextShadow = 0;
         var gridMaxXExclusive = scroll.X + tileColumns;
+        CollectShadows(map, scroll, tileColumns, tileRows, shadowCastingLayerMask);
         var occupiedCells = map.GetOccupiedCellsIn(
             scroll.X - SpriteReach.MaximumColumnsBeside,
             scroll.Y,
@@ -141,6 +161,13 @@ public sealed class MapDrawOrder
                 PlanTile(map, cell.Position, cell.Occupants, isInGrid: isInGridRow && mapX >= scroll.X && mapX < gridMaxXExclusive);
                 hasOccupiedCell = occupiedCells.MoveNext();
             }
+
+            while (nextShadow < _shadowTiles.Count && _shadowTiles[nextShadow].Y == rowY)
+            {
+                var tile = _shadowTiles[nextShadow];
+                _items.Add(new MapDrawItem(MapDrawItemKind.Shadow, -1, tile.X, tile.Y, new Vector2Byte(1, 1), LinkMask: ShadowMaskAt(tile.X - scroll.X + 1, tile.Y - scroll.Y + 1)));
+                nextShadow++;
+            }
         }
 
         foreach (var column in map.GetOccupiedColumnsIn(scroll.X, scroll.Y, gridMaxXExclusive, scroll.Y + tileRows, (byte)(higherLayerMask | lowerLayerMask)))
@@ -148,6 +175,45 @@ public sealed class MapDrawOrder
             _items.Add(new MapDrawItem(MapDrawItemKind.LayerBadge, -1, column.X, column.Y, new Vector2Byte(1, 1), (column.LayerMask & higherLayerMask) != 0, (column.LayerMask & lowerLayerMask) != 0));
         }
     }
+
+    /// <summary>Marks every tile of the grid, and one past it on every side, that the shadow-casting layers occupy, and lists the grid's own; nothing when no layer casts shadows.</summary>
+    private void CollectShadows(IMapViewQuery map, Point scroll, int tileColumns, int tileRows, byte shadowCastingLayerMask)
+    {
+        _shadowTiles.Clear();
+        if (shadowCastingLayerMask == 0)
+        {
+            return;
+        }
+
+        _shadowedTilesWidth = tileColumns + 2;
+        var tileCount = _shadowedTilesWidth * (tileRows + 2);
+        if (_shadowedTiles.Length < tileCount)
+        {
+            _shadowedTiles = new bool[tileCount];
+        }
+        else
+        {
+            Array.Clear(_shadowedTiles, 0, tileCount);
+        }
+
+        foreach (var column in map.GetOccupiedColumnsIn(scroll.X - 1, scroll.Y - 1, scroll.X + tileColumns + 1, scroll.Y + tileRows + 1, shadowCastingLayerMask))
+        {
+            var gridX = column.X - scroll.X;
+            var gridY = column.Y - scroll.Y;
+            _shadowedTiles[gridX + 1 + (gridY + 1) * _shadowedTilesWidth] = true;
+            if (gridX >= 0 && gridX < tileColumns && gridY >= 0 && gridY < tileRows)
+            {
+                _shadowTiles.Add(new Point(column.X, column.Y));
+            }
+        }
+    }
+
+    /// <summary>The Cardinal mask (SpriteLinks) of the tile at (x, y) of the grown grid: which of its four neighbours are shadowed.</summary>
+    private byte ShadowMaskAt(int x, int y) => (byte)(
+        (_shadowedTiles[x + (y - 1) * _shadowedTilesWidth] ? SpriteLinks.North : 0) |
+        (_shadowedTiles[x + 1 + y * _shadowedTilesWidth] ? SpriteLinks.East : 0) |
+        (_shadowedTiles[x + (y + 1) * _shadowedTilesWidth] ? SpriteLinks.South : 0) |
+        (_shadowedTiles[x - 1 + y * _shadowedTilesWidth] ? SpriteLinks.West : 0));
 
     /// <summary>The tile's floor-level occupants (corpses, Tiny), then its Blocking occupant, then its Phasing ones -- each only from its anchor tile.</summary>
     private void PlanTile(IMapViewQuery map, Vector3Int tile, ReadOnlySpan<int> occupants, bool isInGrid)
