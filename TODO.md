@@ -3543,13 +3543,6 @@ Design one visualization that is better and consistent across range, area and au
 - **Overlap.** Coordinate with "Item Details for the targeting model", which covers the path, wall and range settings
   the preview should show.
 
-#### Tooltip indicators
-
-A small marker on an element that has a tooltip, for menus and panels where nothing else says one is there (the
-Workshop inspector's rows, settings and option lists, Item Details' lines with more behind them). Never on item grids,
-hotbars, the map or anything else the player hovers anyway: there it is only noise. One UIEngine marker drawn by the
-element that owns the tooltip, opted into per use, never added to every tooltip.
-
 #### Targeting preview: show the distance outside the area
 
 The shape preview (Item Details' Activation section, the Workshop's targeting preview) draws the area and the caster, but

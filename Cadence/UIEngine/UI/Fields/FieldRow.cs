@@ -29,6 +29,7 @@ public sealed class FieldRow(ElementServices services)
         base.Build(parent, options);
         _canContainChildren = true;
         ContentPadding = Vector2.Zero;
+        ShowsTooltipIndicator = true;
     }
 
     public const float RowHeight = 26f;
@@ -133,6 +134,25 @@ public sealed class FieldRow(ElementServices services)
 
     /// <summary>The label as drawn: the whole label, or its start with "..." when the label column can't hold it.</summary>
     public string DrawnLabel => _drawnLabel;
+
+    /// <summary>The drawn label's width, kept until it changes.</summary>
+    private readonly KeyedCache<string, float> _drawnLabelWidth = new();
+
+    /// <summary>The right end of the drawn label, at its line's top, where DrawContent puts it.</summary>
+    protected internal override Vector2? TextEndPosition
+    {
+        get
+        {
+            if (_drawnLabel.Length == 0)
+            {
+                return null;
+            }
+
+            var labelWidth = _drawnLabelWidth.Get(_drawnLabel, _labelMeasurer, static (label, measurer) => measurer.MeasureWidth(label));
+            var lineTop = (System.Math.Min(ContentSize.Y, RowHeight) - _font.LineHeight) / 2f;
+            return ContentDrawOrigin + new Vector2(LabelLeft + labelWidth, lineTop);
+        }
+    }
 
     /// <summary>Where the label starts: the inset and one indent per level.</summary>
     private float LabelLeft => FieldSectionHeader.TextInset + _description.Depth * FieldSectionHeader.IndentWidth;

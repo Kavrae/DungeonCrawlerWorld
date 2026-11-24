@@ -302,7 +302,9 @@ public sealed class ItemDetailsWindow(
         _sections.BuildDivider(this, width);
         foreach (var restriction in ItemRestrictions.Of(_definition))
         {
-            _sections.BuildFixedTextLine(this, width, ItemFactsText.NameOf(restriction), BodyTextColor).TooltipText = ItemFactsText.DescriptionOf(restriction);
+            var restrictionLine = _sections.BuildFixedTextLine(this, width, ItemFactsText.NameOf(restriction), BodyTextColor);
+            restrictionLine.TooltipText = ItemFactsText.DescriptionOf(restriction);
+            restrictionLine.ShowsTooltipIndicator = true;
         }
 
         _sections.BuildTagsSection(this, _definition.Tags, width, withDivider: false);

@@ -549,6 +549,13 @@ public class Element(ElementServices services)
     /// <summary>Shown in the shared tooltip once the pointer has rested on this element for PopupChrome.HoverTooltipDelayFrames (UiInputController); null shows nothing.</summary>
     public string? TooltipText { get; set; }
 
+    /// <summary>Whether a "*" just after this element's text (TextEndPosition; its top-right corner when it has none) says it has a tooltip, drawn while TooltipText is set.</summary>
+    /// <remarks>Opted into per use, for menus and panels where nothing else says a tooltip is there; never on what the player hovers anyway (item grids, the hotbar, the map).</remarks>
+    public bool ShowsTooltipIndicator { get; set; }
+
+    /// <summary>The glyph ShowsTooltipIndicator draws.</summary>
+    public const string TooltipIndicatorGlyph = "*";
+
     protected virtual bool RequiresContentViewport => CanUserScrollHorizontal || CanUserScrollVertical;
 
     /*========Scroll========*/
@@ -608,6 +615,7 @@ public class Element(ElementServices services)
         Tag = null;
         DropTarget = null;
         TooltipText = null;
+        ShowsTooltipIndicator = false;
 
         /*========Display========*/
         _geometry.DisplayMode = layout?.DisplayMode ?? ElementDisplayMode.Fixed;
@@ -876,7 +884,29 @@ public class Element(ElementServices services)
             {
                 DrawScrollbars(spriteBatch);
             }
+
+            if (ShowsTooltipIndicator && TooltipText is not null)
+            {
+                DrawTooltipIndicator(spriteBatch);
+            }
         }
+    }
+
+    /// <summary>Where this element's text ends on screen: the right end of its last line, at that line's top; null for an element with no text of its own.</summary>
+    protected internal virtual Vector2? TextEndPosition => null;
+
+    /// <summary>Draws the tooltip indicator's glyph centred in a square just after the text's end, at its line's top -- or in the top-right corner when the element has no text -- over everything else the element draws.</summary>
+    /// <remarks>After the text it is kept inside this element or its parent, whichever reaches further right: an element sized to its text (WrapContent) has no room of its own after it.</remarks>
+    private void DrawTooltipIndicator(SpriteEffectBatch spriteBatch)
+    {
+        var area = _contentState.BackgroundRectangle;
+        var side = WindowChrome.TooltipIndicatorSize;
+        var right = _parent is { } parent ? System.Math.Max(area.Right, parent._contentState.BackgroundRectangle.Right) : area.Right;
+        var topLeft = TextEndPosition is { } textEnd
+            ? new Vector2(System.MathF.Min(textEnd.X + WindowChrome.TooltipIndicatorGap, right - side), textEnd.Y)
+            : new Vector2(area.Right - side, area.Top);
+        var textMeasurer = FontService.GetTextMeasurer(FontService.GetFont(FontChrome.TooltipIndicatorFontSize));
+        LabelRenderer.DrawCentered(spriteBatch, textMeasurer, TooltipIndicatorGlyph, topLeft, new Vector2(side), WindowPalette.TooltipIndicatorColor);
     }
 
     /// <summary>Whether any of this element, with an exterior glow's reach around it, lies inside clipRectangle.</summary>

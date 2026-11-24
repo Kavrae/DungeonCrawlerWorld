@@ -53,6 +53,29 @@ public class TextWindow(ElementServices services) : Window(services)
         LabelRenderer.Draw(Render.Batch, ContentFont, DisplayText.FormattedText, origin, TextColor);
     }
 
+    /// <summary>The right end of the last wrapped line, at its top, where DrawContent puts it.</summary>
+    protected internal override Vector2? TextEndPosition
+    {
+        get
+        {
+            var formattedText = DisplayText.FormattedText;
+            if (string.IsNullOrWhiteSpace(formattedText))
+            {
+                return null;
+            }
+
+            var lastLineWidth = _lastLineWidth.Get(
+                (ContentFont, formattedText),
+                FontService,
+                static (key, fontService) => fontService.GetTextMeasurer(key.Font).MeasureWidth(key.FormattedText.AsSpan(key.FormattedText.LastIndexOf('\n') + 1))) + (Bold ? 1f : 0f);
+            var lastLineTop = LinePadding + ContentFont.LineHeight * System.Math.Max(0, DisplayText.LineCount - 1);
+            return ContentDrawOrigin + new Vector2(LinePadding + lastLineWidth, lastLineTop);
+        }
+    }
+
+    /// <summary>The last wrapped line's width, kept until the wrapped text or the font changes.</summary>
+    private readonly KeyedCache<(SpriteFontBase Font, string FormattedText), float> _lastLineWidth = new();
+
     protected override void RecalculateFixedSize()
     {
         base.RecalculateFixedSize();

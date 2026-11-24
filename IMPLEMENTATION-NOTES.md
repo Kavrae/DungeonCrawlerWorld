@@ -3939,6 +3939,28 @@ with SwiftUI's menu (a checkbox row is a toggle in a menu).
 - **Tabs are buttons.** The game's `TabbedContent`, the Workshop's tab strip, its command tiles and bottom panel, and the
   Debug tab's switches (`DebugTabElements.CreateTile`) are `Button`s, so they darken on hover with every other control.
 
+### Tooltip indicators (2026-11-24)
+
+An element that has a tooltip can say so with a "*" just after its text, for menus and panels where nothing else says
+one is there.
+
+- **Opted into per use**: `Element.ShowsTooltipIndicator`, false by default and reset when the pool reuses an element;
+  drawn only while `TooltipText` is set, so a row whose tooltip comes and goes (a `FieldRow`'s, a cut `Label`'s) needs
+  nothing more. `Element.Draw` draws it last, over the children and scrollbars, ink-centred in a
+  `WindowChrome.TooltipIndicatorSize` square, in `FontChrome.TooltipIndicatorFontSize` and
+  `WindowPalette.TooltipIndicatorColor` (amber, read on light and dark panels).
+- **Placed after the text**: `Element.TextEndPosition` is where an element's text ends on screen -- the right end of its
+  last line, at that line's top -- and the square sits `WindowChrome.TooltipIndicatorGap` after it, kept inside the
+  element or its parent, whichever reaches further right (an element sized to its text, WrapContent -- Item Details'
+  tags line -- has no room of its own after it). Each element that draws text answers it from what it draws, its widths cached: `Label` (its shown text),
+  `TextWindow` (its last wrapped line), `FieldRow` (its label), `FieldSectionHeader` (its title, held short of buttons
+  that follow it) and `PressableElement` (its filling label, else its first: a menu row, a button's text). An element
+  with no text (null) puts it in its top-right corner.
+- **Who opts in**: `FieldRow` and `FieldSectionHeader` (the Workshop inspector, Admin Mode's edit rows), every
+  `Dropdown` row (context menus, dropdown lists, the filter menu), and Item Details' lines with a tooltip (stat lines --
+  on the suffix when a line is split for its colours, so it is marked once --, tags and restrictions).
+- **Never** on item grids, the hotbar, HUD buttons, the map, browser row symbols or chips: what the player hovers anyway.
+
 ### Keys for lists and the Workshop browser (2026-11-17)
 
 A browser's list and its inspector take keys, as gestures for what a click or a command already does.

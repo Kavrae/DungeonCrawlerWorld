@@ -26,4 +26,7 @@ public static class FontChrome
 
     /// <summary>The "current / maximum" text on a resource bar, as a fraction of the drawn bar's height.</summary>
     public static float ResourceBarValueFontFraction = 0.85f;
+
+    /// <summary>The "*" an element with a tooltip shows in its top-right corner when it opts in (Element.ShowsTooltipIndicator).</summary>
+    public static int TooltipIndicatorFontSize = 14;
 }

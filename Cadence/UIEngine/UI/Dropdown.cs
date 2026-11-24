@@ -250,6 +250,7 @@ public sealed class Dropdown(ElementServices services)
         row.ContentPadding = new Vector2(RowTextInset, 0);
         row.Enabled = option.Enabled;
         row.TooltipText = option.TooltipText;
+        row.ShowsTooltipIndicator = true;
         AddChild(row);
 
         if (hasIcons)

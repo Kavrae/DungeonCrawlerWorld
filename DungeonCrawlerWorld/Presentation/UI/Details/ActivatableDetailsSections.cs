@@ -226,8 +226,8 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
     {
         var row = CreateRowWindow(host, width, RowHeight);
         row.ContentPadding = Vector2.Zero;
-        AddText(row, Vector2.Zero, RowHeight, AuraSwatchGlyph, aura.GlowColor, tooltip: null);
-        AddText(row, new Vector2(RowHeight, 0), width - RowHeight, $"{aura.Name} aura", GameWindowPalette.HeaderTextColor, tooltip: null);
+        AddText(row, Vector2.Zero, RowHeight, AuraSwatchGlyph, aura.GlowColor, tooltip: null, showsTooltipIndicator: false);
+        AddText(row, new Vector2(RowHeight, 0), width - RowHeight, $"{aura.Name} aura", GameWindowPalette.HeaderTextColor, tooltip: null, showsTooltipIndicator: false);
     }
 
     /// <summary>lines in a column on the left, and the aura's reach to their right: a diamond of size, each cell shaded by the aura's strength there.</summary>
@@ -398,6 +398,7 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
 
         var line = BuildWrappingTextLine(host, width, TagDisplayText(tags));
         line.TooltipText = TagDescriptionText(tags);
+        line.ShowsTooltipIndicator = true;
     }
 
     /// <summary>stat's line at position in parent, at most width wide, in style: its text, then style's suffix in its own colour; stat's tooltip over both.</summary>
@@ -406,16 +407,17 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
     {
         if (style.Suffix is not { } suffix)
         {
-            AddText(parent, position, width, stat.DisplayText, style.TextColor, stat.TooltipText);
+            AddText(parent, position, width, stat.DisplayText, style.TextColor, stat.TooltipText, showsTooltipIndicator: true);
             return;
         }
 
         var textWidth = System.MathF.Min(width, BodyFont.MeasureString(stat.DisplayText).X + LinePadding);
-        AddText(parent, position, textWidth, stat.DisplayText, style.TextColor, stat.TooltipText);
-        AddText(parent, position + new Vector2(textWidth + SuffixGap, 0), System.MathF.Max(0f, width - textWidth - SuffixGap), suffix, style.SuffixColor, stat.TooltipText);
+        AddText(parent, position, textWidth, stat.DisplayText, style.TextColor, stat.TooltipText, showsTooltipIndicator: false);
+        AddText(parent, position + new Vector2(textWidth + SuffixGap, 0), System.MathF.Max(0f, width - textWidth - SuffixGap), suffix, style.SuffixColor, stat.TooltipText, showsTooltipIndicator: true);
     }
 
-    private void AddText(Window parent, Vector2 position, float width, string text, Color color, string? tooltip)
+    /// <param name="showsTooltipIndicator">Whether this element marks the line's tooltip: the line's last element, so a line split for its colours marks it once, at its right.</param>
+    private void AddText(Window parent, Vector2 position, float width, string text, Color color, string? tooltip, bool showsTooltipIndicator)
     {
         var line = elementPoolService.CreateElement<TextWindow>(parent, new ElementOptions
         {
@@ -427,6 +429,7 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
         });
         line.ContentFont = BodyFont;
         line.TooltipText = tooltip;
+        line.ShowsTooltipIndicator = showsTooltipIndicator;
         parent.AddChild(line);
     }
 

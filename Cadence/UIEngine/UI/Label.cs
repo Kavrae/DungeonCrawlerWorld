@@ -26,6 +26,9 @@ public sealed class Label(ElementServices services) : Element(services)
     /// <summary>The text as drawn, kept until the text, the font or the width changes.</summary>
     private readonly KeyedCache<(string Text, SpriteFontBase Font, float Width), string> _shownText = new();
 
+    /// <summary>The shown text's width in its font, kept until either changes.</summary>
+    private readonly KeyedCache<(string Text, SpriteFontBase Font), float> _shownTextWidth = new();
+
     public string Text => _text;
 
     public SpriteFontBase Font => _font;
@@ -160,6 +163,29 @@ public sealed class Label(ElementServices services) : Element(services)
         }
 
         LabelRenderer.Draw(Render.Batch, _font, shownText, position, color, IsOutlined, alphaMultiplier);
+    }
+
+    /// <summary>The right end of the shown text, at its line's top, where DrawContent puts it.</summary>
+    protected internal override Vector2? TextEndPosition
+    {
+        get
+        {
+            var shownText = ShownText;
+            if (shownText.Length == 0)
+            {
+                return null;
+            }
+
+            var textWidth = _shownTextWidth.Get(
+                (shownText, _font),
+                FontService,
+                static (key, fontService) => fontService.GetTextMeasurer(key.Font).MeasureWidth(key.Text)) + (IsBold ? 1f : 0f);
+            var lineTop = MathF.Floor((ContentSize.Y - _font.LineHeight) / 2f);
+            var localEnd = IsCentered
+                ? new Vector2((ContentSize.X + textWidth) / 2f, lineTop)
+                : new Vector2(textWidth, System.Math.Max(0f, lineTop));
+            return ContentDrawOrigin + localEnd;
+        }
     }
 
     /// <summary>How opaque an outlined label is while its control is disabled.</summary>

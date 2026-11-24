@@ -24,4 +24,10 @@ public static class WindowChrome
 
     /// <summary>Shortest a scrollbar thumb gets, however long the content is.</summary>
     public static float ScrollbarMinimumThumbLength = 16f;
+
+    /// <summary>The side of the square a tooltip indicator is centred in (Element.ShowsTooltipIndicator).</summary>
+    public static float TooltipIndicatorSize = 10f;
+
+    /// <summary>The space between the end of an element's text and its tooltip indicator.</summary>
+    public static float TooltipIndicatorGap = 3f;
 }

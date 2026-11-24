@@ -102,4 +102,7 @@ public static class WindowPalette
 
     /// <summary>How wide that bar is.</summary>
     public const int ChangedValueMarkerWidth = 3;
+
+    /// <summary>The "*" in the top-right corner of an element that says it has a tooltip (Element.ShowsTooltipIndicator): read on light and dark panels alike.</summary>
+    public static Color TooltipIndicatorColor = new(214, 140, 40);
 }

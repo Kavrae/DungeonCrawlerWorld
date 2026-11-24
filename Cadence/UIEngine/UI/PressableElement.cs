@@ -57,6 +57,31 @@ public abstract class PressableElement(ElementServices services) : Element(servi
         return true;
     }
 
+    /// <summary>The end of the text of the label filling the control (a menu row's), else of its first label; null when it shows none.</summary>
+    protected internal override Vector2? TextEndPosition
+    {
+        get
+        {
+            Label? firstLabel = null;
+            foreach (var child in ChildElements)
+            {
+                if (child is not Label label)
+                {
+                    continue;
+                }
+
+                if (label.FillsRemaining)
+                {
+                    return label.TextEndPosition;
+                }
+
+                firstLabel ??= label;
+            }
+
+            return firstLabel?.TextEndPosition;
+        }
+    }
+
     /// <summary>What the keyboard activation does; nothing by default.</summary>
     protected virtual void OnActivated() { }
 

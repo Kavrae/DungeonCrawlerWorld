@@ -89,6 +89,7 @@ public sealed class FieldSectionHeader(ElementServices services)
         _buttonsFollowTitle = buttonsFollowTitle;
         _hint = hint;
         TooltipText = hint;
+        ShowsTooltipIndicator = true;
         _depth = depth;
         _isCollapsible = isCollapsible;
         IsExpanded = isExpanded;
@@ -243,14 +244,35 @@ public sealed class FieldSectionHeader(ElementServices services)
             Render.Batch.FillRectangle(new Rectangle(0, 0, WindowPalette.ChangedValueMarkerWidth, (int)ContentSize.Y), WindowPalette.ChangedValueMarkerColor);
         }
 
-        var x = TextInset + _depth * IndentWidth;
+        var x = TitleLeft;
         if (_isCollapsible)
         {
-            LabelRenderer.DrawLeftAligned(Render.Batch, _font, IsExpanded ? ExpandedMarker : CollapsedMarker, new Vector2(x, 0), new Vector2(MarkerWidth, ContentSize.Y), _titleColor);
-            x += MarkerWidth;
+            LabelRenderer.DrawLeftAligned(Render.Batch, _font, IsExpanded ? ExpandedMarker : CollapsedMarker, new Vector2(TextInset + _depth * IndentWidth, 0), new Vector2(MarkerWidth, ContentSize.Y), _titleColor);
         }
 
-        var titleRight = _buttonsFollowTitle && _buttons.Count > 0 ? _buttons[0].RelativePosition.X - ButtonGap : ContentSize.X - ButtonsWidth;
-        LabelRenderer.DrawLeftAligned(Render.Batch, _font, DrawnTitle, new Vector2(x, 0), new Vector2(System.Math.Max(1f, titleRight - x), ContentSize.Y), _titleColor);
+        LabelRenderer.DrawLeftAligned(Render.Batch, _font, DrawnTitle, new Vector2(x, 0), new Vector2(System.Math.Max(1f, TitleRight - x), ContentSize.Y), _titleColor);
+    }
+
+    /// <summary>Where the title's room ends: before the buttons that follow it, else before the buttons at the row's right.</summary>
+    private float TitleRight => _buttonsFollowTitle && _buttons.Count > 0 ? _buttons[0].RelativePosition.X - ButtonGap : ContentSize.X - ButtonsWidth;
+
+    /// <summary>The drawn title's width, kept until it changes.</summary>
+    private readonly KeyedCache<string, float> _drawnTitleWidth = new();
+
+    /// <summary>The right end of the drawn title, at its line's top, where DrawContent puts it -- held short of the buttons that follow it.</summary>
+    protected internal override Vector2? TextEndPosition
+    {
+        get
+        {
+            var drawnTitle = DrawnTitle;
+            if (drawnTitle.Length == 0)
+            {
+                return null;
+            }
+
+            var titleWidth = _drawnTitleWidth.Get(drawnTitle, FontService.GetTextMeasurer(_font), static (title, measurer) => measurer.MeasureWidth(title));
+            var titleEnd = System.MathF.Min(TitleLeft + titleWidth, TitleRight - WindowChrome.TooltipIndicatorGap - WindowChrome.TooltipIndicatorSize);
+            return ContentDrawOrigin + new Vector2(titleEnd, (ContentSize.Y - _font.LineHeight) / 2f);
+        }
     }
 }
