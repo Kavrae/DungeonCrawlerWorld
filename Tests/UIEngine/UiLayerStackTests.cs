@@ -209,6 +209,57 @@ public sealed class UiLayerStackTests
         Assert.IsTrue(layers.IsMenuWindow(newlyAdded), "An element added while menu mode is already active must be auto-promoted into the open menu-window set.");
     }
 
+    private static Window CreateClosableWindow(ElementPoolService windowService, bool staysOpenWhenInputClearsWindows) =>
+        windowService.CreateElement<Window>(null, new ElementOptions
+        {
+            Chrome = new ElementChromeOptions { CanUserClose = true, StaysOpenWhenInputClearsWindows = staysOpenWhenInputClearsWindows },
+        });
+
+    [TestMethod]
+    public void CloseAllClosableWindows_ForInput_LeavesWindowsThatStayOpenThroughInput()
+    {
+        var windowService = CreateWindowService();
+        var layers = new UiLayerStack();
+        var ordinaryWindow = CreateClosableWindow(windowService, staysOpenWhenInputClearsWindows: false);
+        var watchingWindow = CreateClosableWindow(windowService, staysOpenWhenInputClearsWindows: true);
+        layers.Add(UiLayer.DynamicHud, ordinaryWindow);
+        layers.Add(UiLayer.DynamicHud, watchingWindow);
+
+        layers.CloseAllClosableWindows(ClosableWindowSweep.ForInput);
+
+        Assert.IsFalse(ordinaryWindow.IsVisible);
+        Assert.IsTrue(watchingWindow.IsVisible);
+    }
+
+    [TestMethod]
+    public void CloseAllClosableWindows_Everything_ClosesWindowsThatStayOpenThroughInput()
+    {
+        var windowService = CreateWindowService();
+        var layers = new UiLayerStack();
+        var ordinaryWindow = CreateClosableWindow(windowService, staysOpenWhenInputClearsWindows: false);
+        var watchingWindow = CreateClosableWindow(windowService, staysOpenWhenInputClearsWindows: true);
+        layers.Add(UiLayer.DynamicHud, ordinaryWindow);
+        layers.Add(UiLayer.DynamicHud, watchingWindow);
+
+        layers.CloseAllClosableWindows(ClosableWindowSweep.Everything);
+
+        Assert.IsFalse(ordinaryWindow.IsVisible);
+        Assert.IsFalse(watchingWindow.IsVisible);
+    }
+
+    [TestMethod]
+    public void StaysOpenWhenInputClearsWindows_ReusedFromThePoolWithoutIt_IsReset()
+    {
+        var windowService = CreateWindowService();
+        var watchingWindow = CreateClosableWindow(windowService, staysOpenWhenInputClearsWindows: true);
+        windowService.CloseElement(watchingWindow);
+
+        var reusedWindow = CreateClosableWindow(windowService, staysOpenWhenInputClearsWindows: false);
+
+        Assert.AreSame(watchingWindow, reusedWindow);
+        Assert.IsFalse(reusedWindow.StaysOpenWhenInputClearsWindows);
+    }
+
     [TestMethod]
     public void Add_WhileMenuModeInactive_DoesNotPromoteElementToMenuWindow()
     {

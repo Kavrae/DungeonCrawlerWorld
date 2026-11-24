@@ -119,6 +119,10 @@ public class Window : Element
 
     public bool CanUserMinimize { get; set; }
 
+    /// <summary>Whether this window stays open when an input clears closable windows out of its way (a ClosableWindowSweep.ForInput sweep: arming or using an action or item).</summary>
+    /// <remarks>For windows that watch what the game does, such as Diagnostics. The window still closes from its close button, its hotkey, a single Escape and every sweep the player asks for (Escape held, Close All).</remarks>
+    public bool StaysOpenWhenInputClearsWindows { get; set; }
+
     public Window(ElementServices services)
         : base(services)
     {
@@ -144,6 +148,7 @@ public class Window : Element
 
         CanUserClose = chrome?.CanUserClose ?? false;
         CanUserMinimize = chrome?.CanUserMinimize ?? false;
+        StaysOpenWhenInputClearsWindows = chrome?.StaysOpenWhenInputClearsWindows ?? false;
 
         _headerState.OriginalSize = new Vector2(_geometry.OriginalSize.X, TitleFont.LineHeight + TitlePadding.Y * 2);
         _headerState.Size = _headerState.OriginalSize;

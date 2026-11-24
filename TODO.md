@@ -422,13 +422,6 @@ The moved-baseline check at publish applies to a mod's line the same way.
 Checks: on a record ExampleMod replaces, edits compare against ExampleMod's line, not master's, in the inspector,
 Changes and Compare Previews (its first column named for the mod).
 
-#### Name the Workshop "The Alchemist's Creation Station"
-
-A visual rename only: what the player and developer see -- the window title, the shell's title text, the About or start
-line, the executable's displayed product name if shown anywhere -- reads "The Alchemist's Creation Station". Projects,
-folders, assemblies, namespaces, types (`WorkshopShell`, `Cadence/Workshop`, `DungeonCrawlerWorld.Workshop.exe`) and
-CLAUDE.md's references stay "Workshop". Put the name in one constant the shell reads, so it changes in one place.
-
 #### Selectable read-only text
 
 Read-only limits editing, never copying: read-only text can be selected and copied like any text box's. First user:
@@ -3781,24 +3774,6 @@ bracket pricing, where each unit's price depends on the shop's stock, so find it
 quantities against it rather than dividing by a unit price. Room is counted in stacks
 (`InventoryCapacity.HasRoomForNewStack`), so as much as fits means topping up existing stacks of
 the item to their max stack size, then filling free slots.
-
-#### Windows exempt from close-on-input (Diagnostics first)
-
-Arming an action closes the Diagnostics window (F3), which is the moment its live gauges are most
-worth watching. Movement leaves it open; arming an action, an item or anything else that goes through
-`ActionTargetingController` calls `UiLayerStack.CloseAllClosableWindows`, which sweeps every closable
-window so none blocks targeting on the map.
-
-Generalize rather than special-casing Diagnostics: a window declares that it stays open when input is
-consumed, and the sweep skips it. First consumer: `DiagnosticsWindow`. Other monitoring windows (the
-debug window, a future AI debugger) opt in the same way.
-
-- Put the exemption on the window (a property set where the window is built), read in
-  `CloseAllClosableWindows`, so every caller of the sweep gets it and no call site names a window.
-- Decide per sweep whether the exemption applies: arming an action should respect it; Escape-hold
-  (`UiInputController`) and the HUD context menu's "Close All" (`DynamicHudContextMenus`) are the
-  player asking for everything closed, and probably should not.
-- An exempt window still closes from its own close button, its hotkey and a single Escape.
 
 #### Draw neighborhood borders and the Local radius in Admin Mode
 

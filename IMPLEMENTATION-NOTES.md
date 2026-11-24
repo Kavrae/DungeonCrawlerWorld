@@ -2753,6 +2753,24 @@ GameLoop code) -- built in a past session, just never reflected back into the TO
 **Test coverage**: `Tests/Presentation/UiLayerStackTests.cs` + additions to `UiInputControllerTests.cs`
 are the first dedicated coverage (previously one incidental test touched any of this).
 
+## Windows that stay open through input
+
+Arming or using an action, an item or a drop (`ActionTargetingController`) closes every closable
+window so none blocks targeting on the map. A window that watches the game run (Diagnostics, F3) is
+most worth seeing at exactly that moment, so it opts out.
+
+- The window declares it: `ElementChromeOptions.StaysOpenWhenInputClearsWindows` ->
+  `Window.StaysOpenWhenInputClearsWindows`, reset on every `Build` like the other chrome flags, so a
+  pooled window never inherits it. First consumer: `DiagnosticsWindowController`. No call site names a
+  window.
+- Each sweep states why it runs: `UiLayerStack.CloseAllClosableWindows(ClosableWindowSweep)`.
+  `ForInput` (every `ActionTargetingController` sweep) leaves exempt windows open; `Everything`
+  (Escape held, `UiInputController`) closes them -- the player asked for everything closed.
+- The HUD context menu's "Close All" (`DynamicHudContextMenus`) is its own DynamicHud-only loop and
+  closes exempt windows too, for the same reason.
+- An exempt window still closes from its close button, its hotkey and a single Escape
+  (`CloseTopmostClosableWindow` ignores the flag).
+
 ## Global
 
 ### Clean up unit tests

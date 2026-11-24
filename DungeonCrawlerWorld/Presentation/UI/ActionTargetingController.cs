@@ -521,7 +521,7 @@ public sealed class ActionTargetingController(
     /// <summary>Closes every closable window before arming -- the player is committing to targeting on the map, which a window left open (Inventory, Ability Scores, a future Magic Menu, ...) would otherwise block. See UiLayerStack.CloseAllClosableWindows's own doc comment for why this is a separate sweep from Escape-hold's.</summary>
     private void ArmAction(HotkeySlot slot, Guid actionId)
     {
-        uiLayers.CloseAllClosableWindows();
+        uiLayers.CloseAllClosableWindows(ClosableWindowSweep.ForInput);
 
         mapViewState.ArmedActionId = actionId;
         mapViewState.ArmedItemStackInstanceId = null;
@@ -540,7 +540,7 @@ public sealed class ActionTargetingController(
     /// <summary>Resolves targeting via TryGetArmedTargeting (not a parameter of its own) -- called after ArmedItemStackInstanceId is already set above, so it reads back the correctly (Scroll-)scaled spec instead of a stale unscaled one, the same single-chokepoint reasoning as ArmAction re-fetching Activator.Targeting itself rather than taking it as a parameter. Also, critically, what makes a diverged stack's own Override targeting (e.g. a wand with non-default Targeting) actually apply -- TryGetArmedTargeting resolves through the bound stack itself, not a bare catalog lookup by item id. slot is null for a menu-driven arm with no originating HotkeySlot (see ArmItemFromStack) -- every ArmedSlot consumer already treats null as "no slot to highlight/reuse for a same-slot re-press confirm," which is exactly correct there: a menu-armed item can only ever be confirmed via a map-tile click.</summary>
     private void ArmItem(HotkeySlot? slot, uint stackInstanceId)
     {
-        uiLayers.CloseAllClosableWindows(); // See ArmAction's own doc comment -- same reasoning, covers ArmItemFromStack (Inventory's Activate/double-click) too, since it delegates here.
+        uiLayers.CloseAllClosableWindows(ClosableWindowSweep.ForInput); // See ArmAction's own doc comment -- same reasoning, covers ArmItemFromStack (Inventory's Activate/double-click) too, since it delegates here.
 
         mapViewState.ArmedItemStackInstanceId = stackInstanceId;
         mapViewState.ArmedActionId = null;
@@ -604,7 +604,7 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        uiLayers.CloseAllClosableWindows();
+        uiLayers.CloseAllClosableWindows(ClosableWindowSweep.ForInput);
 
         SetArmedDrop(drop);
         mapViewState.ArmedActionId = null;
@@ -991,7 +991,7 @@ public sealed class ActionTargetingController(
             stepDirectionOnActivation = DodgeFootprint.StepDirection(aimedTile, casterTransform.Position, casterTransform.Size);
         }
 
-        uiLayers.CloseAllClosableWindows();
+        uiLayers.CloseAllClosableWindows(ClosableWindowSweep.ForInput);
 
         playerCommands.QueueAction(actionId, selection, stepDirectionOnActivation);
     }
@@ -999,7 +999,7 @@ public sealed class ActionTargetingController(
     /// <summary>Item counterpart to QueueActionActivation -- ItemActivationSystem is the only thing that applies its gameplay effects. See QueueActionActivation's own doc comment for why it also closes every closable window here.</summary>
     private void QueueItemActivation(uint stackInstanceId, TargetSelection selection, HotkeySlot? activatedFromSlot)
     {
-        uiLayers.CloseAllClosableWindows();
+        uiLayers.CloseAllClosableWindows(ClosableWindowSweep.ForInput);
 
         playerCommands.QueueItemActivation(stackInstanceId, selection, activatedFromSlot);
     }

@@ -651,7 +651,7 @@ public sealed class UiInputController
         if (!_escapeHoldCloseAllFired && _escapeHeldFrames >= EscapeHoldCloseAllFrames)
         {
             _escapeHoldCloseAllFired = true;
-            _layers.CloseAllClosableWindows();
+            _layers.CloseAllClosableWindows(ClosableWindowSweep.Everything);
         }
     }
 

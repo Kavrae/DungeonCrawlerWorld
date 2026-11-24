@@ -264,16 +264,18 @@ public sealed class UiLayerStack
     /// implementation for both "the player held Escape" (UiInputController.HandleEscape) and any host
     /// action that needs every closable window out of the way. Snapshots each layer's list first --
     /// Window.Close() self-removes via its own Closed handler, which would corrupt an in-progress
-    /// enumeration otherwise.
+    /// enumeration otherwise. A ClosableWindowSweep.ForInput sweep leaves every window with
+    /// Window.StaysOpenWhenInputClearsWindows open.
     /// </summary>
-    public void CloseAllClosableWindows()
+    public void CloseAllClosableWindows(ClosableWindowSweep sweep)
     {
         foreach (var layer in LayersDescending())
         {
             var snapshot = ElementsIn(layer).ToArray();
             for (var index = snapshot.Length - 1; index >= 0; index--)
             {
-                if (snapshot[index] is Window { CanUserClose: true } window)
+                if (snapshot[index] is Window { CanUserClose: true } window &&
+                    (sweep == ClosableWindowSweep.Everything || !window.StaysOpenWhenInputClearsWindows))
                 {
                     window.Close();
                 }

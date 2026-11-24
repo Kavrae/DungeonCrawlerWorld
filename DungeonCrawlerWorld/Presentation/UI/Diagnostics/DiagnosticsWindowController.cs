@@ -37,6 +37,7 @@ public sealed class DiagnosticsWindowController(ElementPoolService elementPoolSe
                 TitleText = "Diagnostics",
                 ShowBorder = true,
                 CanUserClose = true,
+                StaysOpenWhenInputClearsWindows = true,
                 CanUserMinimize = false,
                 CanUserMove = true,
                 CanUserResize = true,

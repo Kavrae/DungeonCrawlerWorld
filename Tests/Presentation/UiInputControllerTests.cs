@@ -1998,6 +1998,37 @@ public sealed class UiInputControllerTests
         Assert.IsFalse(back.IsVisible);
     }
 
+    [TestMethod]
+    public void HandleEscape_HeldPastThreshold_ClosesWindowsThatStayOpenThroughInput()
+    {
+        var windowService = CreateWindowService();
+        var back = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
+        back.StaysOpenWhenInputClearsWindows = true;
+        var front = CreateRootWindowWithCloseButton(windowService, new Vector2(300, 0));
+        var controller = CreateController([], [], [back, front], [], LargeScreenSize);
+
+        for (var frame = 0; frame < 40; frame++)
+        {
+            controller.Update(new KeyboardState(Keys.Escape), MouseAt(0, 0, ButtonState.Released));
+        }
+
+        Assert.IsFalse(front.IsVisible);
+        Assert.IsFalse(back.IsVisible);
+    }
+
+    [TestMethod]
+    public void HandleEscape_SingleTap_ClosesATopmostWindowThatStaysOpenThroughInput()
+    {
+        var windowService = CreateWindowService();
+        var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
+        window.StaysOpenWhenInputClearsWindows = true;
+        var controller = CreateController([], [], [window], [], LargeScreenSize);
+
+        controller.Update(new KeyboardState(Keys.Escape), MouseAt(0, 0, ButtonState.Released));
+
+        Assert.IsFalse(window.IsVisible);
+    }
+
     private static (Window Popup, Window Child) CreatePopupWithFocusableChild(ElementPoolService windowService, Vector2 relativePosition)
     {
         var popup = windowService.CreateElement<Window>(null, new ElementOptions

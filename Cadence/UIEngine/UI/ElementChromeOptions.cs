@@ -37,6 +37,9 @@ public sealed class ElementChromeOptions
 
     public bool? CanUserMinimize { get; init; }
 
+    /// <summary>Whether the window stays open when an input clears closable windows out of its way; defaults to false -- see Window.StaysOpenWhenInputClearsWindows.</summary>
+    public bool? StaysOpenWhenInputClearsWindows { get; init; }
+
     /// <summary>Not yet implemented -- reserved for click-and-drag window moving.</summary>
     public bool? CanUserMove { get; init; }
 
