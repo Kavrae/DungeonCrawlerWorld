@@ -61,13 +61,14 @@ public sealed class NpcDecisionServices
         Items = context.Items;
         Actions = EntityActions.For(componentManager, context.Actions, context.Definitions);
         Map = context.MapQuery;
+        OccupiedCells = context.OccupiedCells;
         SightBlockers = context.SightBlockers;
         Player = context.PlayerQuery;
         Targeting = context.TargetResolution;
         Effects = context.EffectServices;
         EntityKeys = context.EntityKeys;
         Intents = IntentWriter.For(componentManager);
-        Looting = new NpcLooting(componentManager, context.Items, context.PlayerQuery, context.EntityKeys, context.MapQuery, Tiers);
+        Looting = new NpcLooting(componentManager, context.Items, context.PlayerQuery, context.EntityKeys, context.OccupiedCells, Tiers);
     }
 
     public DirectComponentPool<TransformComponent> Transforms { get; }
@@ -100,6 +101,8 @@ public sealed class NpcDecisionServices
 
     public IMapQuery Map { get; }
 
+    public IOccupiedCellQuery OccupiedCells { get; }
+
     public Engine.Tiles.ISightBlockers SightBlockers { get; }
 
     public IPlayerQuery Player { get; }
@@ -128,9 +131,6 @@ public sealed class NpcDecisionServices
 
     /// <summary>Scratch for an entity's action ids, when it holds actions of its own.</summary>
     public List<Guid> ActionIds { get; } = [];
-
-    /// <summary>Scratch for an entity's adjacent tiles.</summary>
-    public List<Vector3Int> AdjacentTiles { get; } = [];
 
     /// <summary>Scratch for the entities a perception scan has counted, so a creature larger than a tile counts once.</summary>
     public HashSet<int> CountedEntityIds { get; } = [];

@@ -32,6 +32,6 @@ public sealed class ProcessingTierModule : IGameModule
         var context = registration.Context;
         var transforms = registration.ComponentManager.GetDirectPool<TransformComponent>();
 
-        registration.SystemManager.Register(new ProcessingTierSystem(transforms, context.MapQuery, context.MovedEntities, context.ProcessingTierResolver, context.PlayerQuery));
+        registration.SystemManager.Register(new ProcessingTierSystem(transforms, context.MapQuery, context.OccupiedCells, context.MovedEntities, context.ProcessingTierResolver, context.PlayerQuery));
     }
 }

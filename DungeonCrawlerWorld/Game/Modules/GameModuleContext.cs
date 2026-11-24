@@ -67,6 +67,7 @@ public sealed class GameModuleContext
         var eventBus = services.EventBus;
 
         MapQuery = world;
+        OccupiedCells = world;
         PlayerQuery = world;
         SightBlockers = world;
         EntityMoveSync = new WorldEventSync(world);
@@ -115,6 +116,9 @@ public sealed class GameModuleContext
     private readonly Lazy<TargetResolution> _targetResolution;
 
     public IMapQuery MapQuery { get; }
+
+    /// <summary>Reads the occupied cells of a rectangle on one MapLayer.</summary>
+    public IOccupiedCellQuery OccupiedCells { get; }
 
     /// <summary>What blocks sight on the map (World.BlocksSight), for a line-of-sight question outside targeting.</summary>
     public Engine.Tiles.ISightBlockers SightBlockers { get; }

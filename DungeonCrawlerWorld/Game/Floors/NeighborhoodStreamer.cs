@@ -548,7 +548,7 @@ public sealed class NeighborhoodStreamer : ISystem
     }
 
     /// <summary>Registers, in a just-loaded neighborhood, the cells of every multi-tile entity next door whose footprint reaches across the border -- cells that were dropped with the neighborhood's stores.</summary>
-    /// <remarks>Scans the loaded neighbors' cells within FootprintReachTiles of the border, on every layer, for occupants whose footprint overlaps the neighborhood.</remarks>
+    /// <remarks>Scans the loaded neighbors' cells within FootprintReachTiles of the border, on every layer, for occupants whose footprint overlaps the neighborhood: the strips above, left, right and below it.</remarks>
     private void RestoreStraddlingFootprints(int cellX, int cellY)
     {
         var area = Neighborhoods.AreaOf(cellX, cellY, _world.Map.Bounds.Depth);
@@ -556,23 +556,10 @@ public sealed class NeighborhoodStreamer : ISystem
 
         for (var z = 0; z < area.Depth; z++)
         {
-            for (var y = area.MinY - FootprintReachTiles; y < area.MaxY + FootprintReachTiles; y++)
-            {
-                var isInsideRows = y >= area.MinY && y < area.MaxY;
-                for (var x = area.MinX - FootprintReachTiles; x < area.MaxX + FootprintReachTiles; x++)
-                {
-                    if (isInsideRows && x == area.MinX)
-                    {
-                        x = area.MaxX - 1;
-                        continue;
-                    }
-
-                    foreach (var entityId in _world.GetOccupantEntityIdSpanAt(new Vector3Int(x, y, z)))
-                    {
-                        _straddlingEntityIds.Add(entityId);
-                    }
-                }
-            }
+            CollectOccupantsIn(area.MinX - FootprintReachTiles, area.MinY - FootprintReachTiles, area.MaxX + FootprintReachTiles, area.MinY, z);
+            CollectOccupantsIn(area.MinX - FootprintReachTiles, area.MinY, area.MinX, area.MaxY, z);
+            CollectOccupantsIn(area.MaxX, area.MinY, area.MaxX + FootprintReachTiles, area.MaxY, z);
+            CollectOccupantsIn(area.MinX - FootprintReachTiles, area.MaxY, area.MaxX + FootprintReachTiles, area.MaxY + FootprintReachTiles, z);
         }
 
         foreach (var entityId in _straddlingEntityIds)
@@ -582,6 +569,17 @@ public sealed class NeighborhoodStreamer : ISystem
                 transform.Position.Y < area.MaxY && transform.Position.Y + transform.Size.Y > area.MinY)
             {
                 _world.RestoreFootprintWithin(entityId, transform.Position, transform.Size, area);
+            }
+        }
+    }
+
+    private void CollectOccupantsIn(int minX, int minY, int maxXExclusive, int maxYExclusive, int mapLayer)
+    {
+        foreach (var cell in _world.GetOccupiedCellsIn(minX, minY, maxXExclusive, maxYExclusive, mapLayer))
+        {
+            foreach (var entityId in cell.Occupants)
+            {
+                _straddlingEntityIds.Add(entityId);
             }
         }
     }

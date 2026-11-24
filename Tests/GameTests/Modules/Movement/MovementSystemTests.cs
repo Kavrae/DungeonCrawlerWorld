@@ -42,7 +42,6 @@ public sealed class MovementSystemTests
         public int GetEntityIdAt(Vector3Int position) => -1;
         public ReadOnlySpan<int> GetOccupantEntityIdSpanAt(Vector3Int position) => [];
         public bool IsBlocking(int entityId) => true;
-        public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) => entityIds.Fill(-1);
     }
 
     /// <summary>Records the last SyncMove call instead of touching any real World -- pairs with FakeMapQuery so a test can run with no Game.World.World anywhere in the object graph while still verifying the mandatory map-sync path was invoked.</summary>

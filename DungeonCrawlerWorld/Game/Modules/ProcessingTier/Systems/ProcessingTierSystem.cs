@@ -39,8 +39,8 @@ namespace Game.Modules.ProcessingTier.Systems;
 /// the neighborhoods whose tier changed through ProcessingTierResolver.Membership, never by scanning
 /// every entity slot. Local is the only player-relative tier (and only on the player's own
 /// layer), and a player step changes
-/// Local membership only along the edges. Those edges are walked through the map's own position
-/// index (blocking occupant, non-blocking occupants) rather than by visiting every
+/// Local membership only along the edges. Those edges are read as rectangles of occupied cells
+/// (IOccupiedCellQuery), every occupant Blocking or not, rather than by visiting every
 /// entity.</item>
 /// </list>
 /// </para>
@@ -72,6 +72,7 @@ public sealed class ProcessingTierSystem : ISystem
 
     private readonly DirectComponentPool<TransformComponent> _transforms;
     private readonly IMapQuery _mapQuery;
+    private readonly IOccupiedCellQuery _occupiedCells;
     private readonly FrameEventBuffer<EntityMovedEvent> _movedEntities;
     private readonly ProcessingTierResolver _resolver;
     private readonly IPlayerQuery _playerQuery;
@@ -84,6 +85,7 @@ public sealed class ProcessingTierSystem : ISystem
     public ProcessingTierSystem(
         DirectComponentPool<TransformComponent> transforms,
         IMapQuery mapQuery,
+        IOccupiedCellQuery occupiedCells,
         FrameEventBuffer<EntityMovedEvent> movedEntities,
         ProcessingTierResolver resolver,
         IPlayerQuery playerQuery,
@@ -93,6 +95,7 @@ public sealed class ProcessingTierSystem : ISystem
 
         _transforms = transforms;
         _mapQuery = mapQuery;
+        _occupiedCells = occupiedCells;
         _movedEntities = movedEntities;
         _resolver = resolver;
         _playerQuery = playerQuery;
@@ -320,51 +323,33 @@ public sealed class ProcessingTierSystem : ISystem
         }
     }
 
-    /// <summary>Retiers every entity found on tiles in the inclusive rectangle, clamped to the map.</summary>
+    /// <summary>Retiers every entity occupying a tile in the inclusive rectangle, Blocking or not, found Y ascending and then X ascending.</summary>
+    /// <remarks>
+    /// Every occupant is collected before any is retiered: a tier change raises events whose handlers can build a creature
+    /// or change who occupies a tile, and nothing may change occupants while the scan is open. A multi-tile entity is
+    /// found on every tile it covers; it is collected once per run of tiles where it is the last occupant found, so it may
+    /// still be retiered more than once -- harmless, since Retier is idempotent and computes from the entity's own origin
+    /// Position. Terrain isn't an entity and has no tier.
+    /// </remarks>
     private void RetierRectangle(int minX, int minY, int maxX, int maxY, int z)
     {
-        var bounds = _mapQuery.Bounds;
-        minX = Math.Max(minX, bounds.MinX);
-        minY = Math.Max(minY, bounds.MinY);
-        maxX = Math.Min(maxX, bounds.MaxX - 1);
-        maxY = Math.Min(maxY, bounds.MaxY - 1);
-
-        for (var x = minX; x <= maxX; x++)
+        _occupantIdsScratch.Clear();
+        var lastCollectedId = -1;
+        foreach (var cell in _occupiedCells.GetOccupiedCellsIn(minX, minY, maxX + 1, maxY + 1, z))
         {
-            for (var y = minY; y <= maxY; y++)
+            foreach (var occupantId in cell.Occupants)
             {
-                RetierTile(new Vector3Int(x, y, z));
+                if (occupantId != lastCollectedId)
+                {
+                    _occupantIdsScratch.Add(occupantId);
+                    lastCollectedId = occupantId;
+                }
             }
         }
-    }
 
-    /// <summary>
-    /// Retiers every entity the map indexes at this tile: the Blocking occupant and every
-    /// non-Blocking occupant. Terrain isn't an entity and has no tier. A multi-tile entity is found on every tile it
-    /// covers and so may be retiered more than once -- harmless, since Retier is idempotent and
-    /// computes from the entity's own origin Position regardless of which tile found it.
-    /// </summary>
-    private void RetierTile(Vector3Int tile)
-    {
-        var blocking = _mapQuery.GetEntityIdAt(tile);
-        if (blocking >= 0)
+        foreach (var occupantId in _occupantIdsScratch)
         {
-            _resolver.Retier(blocking);
-        }
-
-        var occupants = _mapQuery.GetOccupantEntityIdSpanAt(tile);
-        if (occupants.IsEmpty)
-        {
-            return;
-        }
-
-        // Copied first: a tier change raises events, and a handler may change who occupies the tile.
-        _occupantIdsScratch.Clear();
-        _occupantIdsScratch.AddRange(occupants);
-
-        foreach (var occupant in _occupantIdsScratch)
-        {
-            _resolver.Retier(occupant);
+            _resolver.Retier(occupantId);
         }
     }
 }

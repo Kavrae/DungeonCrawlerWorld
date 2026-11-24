@@ -31,8 +31,12 @@ public interface IMapViewQuery
     /// <summary>Every occupant of the tile, Blocking included. Valid until the tile's occupants next change.</summary>
     ReadOnlySpan<int> GetOccupants(Vector3Int position);
 
-    /// <summary>Bit N set when MapLayer N holds an occupant at (x, y).</summary>
-    byte GetOccupiedLayerMask(int x, int y);
+    /// <summary>The occupied cells of a rectangle on mapLayer, Y ascending and then X ascending; cells off the map are skipped.</summary>
+    /// <remarks>Nothing may change occupants while the scan is open.</remarks>
+    OccupiedCellScan GetOccupiedCellsIn(int minX, int minY, int maxXExclusive, int maxYExclusive, int mapLayer);
+
+    /// <summary>The columns of a rectangle where any MapLayer in layerMask holds an occupant, Y ascending and then X ascending; cells off the map are skipped.</summary>
+    OccupiedColumnScan GetOccupiedColumnsIn(int minX, int minY, int maxXExclusive, int maxYExclusive, byte layerMask);
 
     /// <summary>The terrain under MapLayer layer at (x, y) -- name, description and look -- if that layer has a floor and anything is there.</summary>
     bool TryGetTerrain(int x, int y, int layer, out TerrainView terrain);

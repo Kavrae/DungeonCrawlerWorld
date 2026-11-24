@@ -43,19 +43,19 @@ namespace Game.World;
 /// by every gen2 GC. Emptied list slots are recycled with their backing arrays, since a wandering
 /// population takes cells through empty-then-repopulate constantly.
 ///
-/// The per-column layer mask exists for MapWindow.DrawLayerBadges, which asks "is any layer
-/// above/below this one occupied?" for every visible tile every frame -- measured at 17.4ms of a
-/// 1000ms/sec budget as per-layer occupant lookups, replaced by one byte read and two bit tests.
+/// The per-column layer mask is what the occupied-cell and occupied-column scans (OccupiedCellScan,
+/// OccupiedColumnScan) read a row of at a time, so an empty column costs one byte; the map draw order's
+/// layer badges ask it which layers above and below the one shown are occupied.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class Map
 {
-    /// <summary>Maximum map depth GetOccupiedLayerMask's own byte-per-column encoding can represent -- one bit per MapLayer. MapLayer has three values today, so this is deliberately generous headroom rather than a live constraint; the constructor enforces it so a genuinely deeper map fails loudly here instead of silently losing its upper layers' badges.</summary>
+    /// <summary>Maximum map depth the per-column layer mask's byte encoding can represent -- one bit per MapLayer. MapLayer has three values today, so this is deliberately generous headroom rather than a live constraint; the constructor enforces it so a genuinely deeper map fails loudly here instead of silently losing its upper layers' badges.</summary>
     private const int MaximumMaskableLayers = 8;
 
     private const int NoOccupant = -1;
 
-    private const int CellMask = Neighborhoods.SizeTiles - 1;
+    internal const int CellMask = Neighborhoods.SizeTiles - 1;
 
     /// <summary>The tiles the map covers: a bounded map's declared rectangle, or the smallest rectangle holding every loaded neighborhood of an unbounded one.</summary>
     /// <remarks>A rectangle, so it can hold unloaded neighborhoods too; Contains is the authoritative on-the-map test.</remarks>
@@ -273,7 +273,7 @@ public sealed class Map
 
     /// <summary>The neighborhood holding (x, y), or null where it is unloaded.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private MapNeighborhood? NeighborhoodAt(int x, int y)
+    internal MapNeighborhood? NeighborhoodAt(int x, int y)
     {
         var column = Neighborhoods.CellOf(x) - _lookupGridOriginCellX;
         var row = Neighborhoods.CellOf(y) - _lookupGridOriginCellY;
@@ -356,6 +356,13 @@ public sealed class Map
             return ReadOnlySpan<int>.Empty;
         }
 
+        return OccupantsInCell(neighborhood, cellIndex);
+    }
+
+    /// <summary>The occupants of a cell known to hold at least one.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static ReadOnlySpan<int> OccupantsInCell(MapNeighborhood neighborhood, int cellIndex)
+    {
         ref var slot = ref neighborhood.OccupantSlotByCell[cellIndex];
         if (slot >= 0)
         {
@@ -364,6 +371,20 @@ public sealed class Map
 
         return System.Runtime.InteropServices.CollectionsMarshal.AsSpan(neighborhood.OccupantLists[OccupantListIndexOf(slot)]);
     }
+
+    /// <summary>A scan of the occupied cells in the rectangle, Y ascending and then X ascending.</summary>
+    /// <remarks>Cells off the map are skipped, and a layer off the map or an empty rectangle scans nothing. Nothing may change occupants while the scan is open.</remarks>
+    public OccupiedCellScan GetOccupiedCellsIn(int minX, int minY, int maxXExclusive, int maxYExclusive, int mapLayer) =>
+        (uint)mapLayer < (uint)_depth && minX < maxXExclusive && minY < maxYExclusive
+            ? new OccupiedCellScan(this, minX, minY, maxXExclusive, maxYExclusive, mapLayer)
+            : default;
+
+    /// <summary>A scan of the columns in the rectangle where any MapLayer in layerMask is occupied, Y ascending and then X ascending.</summary>
+    /// <remarks>Cells off the map are skipped, and an empty layerMask or rectangle scans nothing.</remarks>
+    public OccupiedColumnScan GetOccupiedColumnsIn(int minX, int minY, int maxXExclusive, int maxYExclusive, byte layerMask) =>
+        layerMask != 0 && minX < maxXExclusive && minY < maxYExclusive
+            ? new OccupiedColumnScan(this, minX, minY, maxXExclusive, maxYExclusive, layerMask, cellLayer: 0)
+            : default;
 
     /// <summary>True if any entity occupies position.</summary>
     /// <param name="position">The position to test.</param>
@@ -521,23 +542,6 @@ public sealed class Map
         }
     }
 
-    /// <summary>
-    /// A bitmask of which MapLayers currently hold at least one occupant at (x, y) -- bit N is
-    /// layer N. The O(1) answer to "is any other layer of this column occupied," without a
-    /// per-layer occupant lookup; see this class's remarks for why this exists.
-    /// </summary>
-    /// <param name="x">The x-coordinate of the column.</param>
-    /// <param name="y">The y-coordinate of the column.</param>
-    public byte GetOccupiedLayerMask(int x, int y)
-    {
-        var neighborhood = NeighborhoodAt(x, y);
-        if (neighborhood is null)
-        {
-            return 0;
-        }
-
-        return neighborhood.OccupiedLayerMaskByColumn[ColumnIndex(neighborhood, x, y)];
-    }
 
     private static byte LayerBit(int layer) => (byte)(1 << layer);
 

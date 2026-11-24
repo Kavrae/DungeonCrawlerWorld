@@ -79,12 +79,4 @@ public interface IMapQuery
     /// <remarks>Defaults to true for test doubles, which have no streaming.</remarks>
     bool IsNeighborhoodLoaded(int cellX, int cellY) => true;
 
-    /// <summary>Gets the IDs of all entities within a bounding box.</summary>
-    /// <param name="box">The bounding box to query.</param>
-    /// <param name="entityIds">A span to fill with the entity IDs.</param>
-    void GetEntityIdsInBox(CubeInt box, Span<int> entityIds);
-
-    /// <summary>Whether any entity -- Blocking or non-Blocking -- currently occupies position.</summary>
-    /// <remarks>GetOccupantEntityIdsAt's own contract already includes the Blocking occupant, if any (see its own doc comment) -- so checking GetEntityIdAt too would just repeat that same answer, not add coverage for a case GetOccupantEntityIdsAt could miss.</remarks>
-    bool IsPositionOccupied(Vector3Int position) => GetOccupantEntityIdsAt(position).Count > 0;
 }

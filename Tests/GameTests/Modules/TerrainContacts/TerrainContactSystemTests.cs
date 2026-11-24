@@ -48,8 +48,6 @@ public sealed class TerrainContactSystemTests
         public TerrainCell GetTerrainAt(Vector3Int position) =>
             _terrainByPosition.TryGetValue((position.X, position.Y, position.Z), out var cell) ? cell : default;
 
-        public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) => entityIds.Fill(-1);
-
         public Dictionary<(int X, int Y, int Z), List<int>> Occupants { get; } = [];
 
         public IReadOnlyList<int> GetOccupantEntityIdsAt(Vector3Int position) =>

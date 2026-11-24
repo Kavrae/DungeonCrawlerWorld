@@ -521,6 +521,38 @@ public sealed class NeighborhoodStreamerTests
     }
 
     [TestMethod]
+    public void Regenerate_RestoresTheFootprintOfACreatureStraddlingTheBorderFromTheEast()
+    {
+        var session = Build();
+        var transforms = session.Ecs.ComponentManager.GetDirectPool<TransformComponent>();
+        var straddlerEntityId = -1;
+        for (var row = 1; row < Rows - 3 && straddlerEntityId < 0; row++)
+        {
+            var position = new Vector3Int(Neighborhoods.SizeTiles - 1, row, (int)MapLayer.Ground);
+            var entityId = session.Resolver.CreateEntityAt(session.Ecs.EntityManager, new Vector3Int(Neighborhoods.SizeTiles, row, (int)MapLayer.Ground));
+            session.Ecs.ComponentManager.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Ground), new Vector2Byte(3, 3)));
+            TestTransforms.PlaceOnMap(session.World, session.Ecs.ComponentManager, entityId, position);
+            if (session.World.IsOnMap(transforms.GetReadonly(entityId).Position))
+            {
+                straddlerEntityId = entityId;
+            }
+            else
+            {
+                session.Ecs.EntityManager.DestroyEntity(entityId);
+            }
+        }
+
+        var farSideCell = new Vector3Int(Neighborhoods.SizeTiles - 1, transforms.GetReadonly(straddlerEntityId).Position.Y + 1, (int)MapLayer.Ground);
+        Assert.AreEqual(straddlerEntityId, session.World.GetEntityIdAt(farSideCell), "Precondition: placed across the border.");
+
+        session.Streamer.TryRequestRegenerate(0, 0);
+        RunUntilIdle(session);
+
+        Assert.AreEqual(straddlerEntityId, session.World.GetEntityIdAt(farSideCell));
+        CollectionAssert.Contains(session.World.GetOccupantEntityIdsAt(farSideCell).ToArray(), straddlerEntityId);
+    }
+
+    [TestMethod]
     public void Regenerate_KeepsAnItemPile_WithItsStacksExactlyAsTheyWere_AndItsCurrency()
     {
         var session = Build();

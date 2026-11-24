@@ -12,11 +12,6 @@ public sealed class LootNearby() : NpcBehavior(BuiltInBehaviorIds.LootNearby, "L
 {
     public override BehaviorEvaluation Evaluate(ref NpcDecisionContext context, NpcBehaviorGrant grant)
     {
-        if (!context.HasOtherOccupantNear())
-        {
-            return BehaviorEvaluation.DoesNotApply;
-        }
-
         var found = context.Services.Looting.TryFind(context.EntityId, context.Transform, context.Now, out var target, out var everyCorpseReserved);
         context.Findings.RetryCorpsesLater = everyCorpseReserved;
         if (!found)

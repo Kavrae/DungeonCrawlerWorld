@@ -84,14 +84,16 @@ public readonly record struct MapOverhang(int WallX, int WallY, int AnchorX, int
 /// </para>
 /// <para>
 /// <b>Layer badges last.</b> They describe a tile, and a later row's tall sprite would paint over them, so they are
-/// collected during the walk -- only for tiles with something on another layer, with no extra mask reads -- and
-/// appended after every occupant.
+/// planned after every occupant, from a second scan of the grid over the other layers.
+/// </para>
+/// <para>
+/// <b>Only occupied tiles are visited.</b> The walk reads the map's occupied cells (IMapViewQuery.GetOccupiedCellsIn),
+/// whose order is the walk's own, so an empty or off-map tile costs nothing but its bit in a column mask.
 /// </para>
 /// </remarks>
 public sealed class MapDrawOrder
 {
     private readonly List<MapDrawItem> _items = [];
-    private readonly List<MapDrawItem> _layerBadges = [];
     private readonly List<MapDrawItem> _phasingOccupants = [];
 
     /// <summary>The last Plan's items, in draw order. Reused by the next Plan.</summary>
@@ -103,12 +105,19 @@ public sealed class MapDrawOrder
     public void Plan(IMapViewQuery map, Point scroll, int tileColumns, int tileRows, int mapLayer, int layerCount, IReadOnlyList<MapOverhang> overhangs)
     {
         _items.Clear();
-        _layerBadges.Clear();
 
         var allLayersMask = (1 << layerCount) - 1;
         var higherLayerMask = allLayersMask & ~((1 << (mapLayer + 1)) - 1);
         var lowerLayerMask = (1 << mapLayer) - 1;
         var nextOverhang = 0;
+        var gridMaxXExclusive = scroll.X + tileColumns;
+        var occupiedCells = map.GetOccupiedCellsIn(
+            scroll.X - SpriteReach.MaximumColumnsBeside,
+            scroll.Y,
+            gridMaxXExclusive + SpriteReach.MaximumColumnsBeside,
+            scroll.Y + tileRows + SpriteReach.MaximumRowsAbove,
+            mapLayer);
+        var hasOccupiedCell = occupiedCells.MoveNext();
 
         for (var rowIndex = 0; rowIndex < tileRows + SpriteReach.MaximumRowsAbove; rowIndex++)
         {
@@ -124,36 +133,31 @@ public sealed class MapDrawOrder
                 nextOverhang++;
             }
 
-            for (var columnIndex = -SpriteReach.MaximumColumnsBeside; columnIndex < tileColumns + SpriteReach.MaximumColumnsBeside; columnIndex++)
+            var isInGridRow = rowIndex < tileRows;
+            while (hasOccupiedCell && occupiedCells.Current.Position.Y == rowY)
             {
-                var mapX = scroll.X + columnIndex;
-                var mapY = scroll.Y + rowIndex;
-                if (!map.IsOnMap(new Vector3Int(mapX, mapY, 0)))
-                {
-                    continue;
-                }
-
-                var isInGrid = columnIndex >= 0 && columnIndex < tileColumns && rowIndex < tileRows;
-                PlanTile(map, mapX, mapY, mapLayer, isInGrid);
-
-                if (isInGrid)
-                {
-                    PlanLayerBadge(map, mapX, mapY, higherLayerMask, lowerLayerMask);
-                }
+                var cell = occupiedCells.Current;
+                var mapX = cell.Position.X;
+                PlanTile(map, cell.Position, cell.Occupants, isInGrid: isInGridRow && mapX >= scroll.X && mapX < gridMaxXExclusive);
+                hasOccupiedCell = occupiedCells.MoveNext();
             }
         }
 
-        _items.AddRange(_layerBadges);
+        foreach (var column in map.GetOccupiedColumnsIn(scroll.X, scroll.Y, gridMaxXExclusive, scroll.Y + tileRows, (byte)(higherLayerMask | lowerLayerMask)))
+        {
+            _items.Add(new MapDrawItem(MapDrawItemKind.LayerBadge, -1, column.X, column.Y, new Vector2Byte(1, 1), (column.LayerMask & higherLayerMask) != 0, (column.LayerMask & lowerLayerMask) != 0));
+        }
     }
 
     /// <summary>The tile's floor-level occupants (corpses, Tiny), then its Blocking occupant, then its Phasing ones -- each only from its anchor tile.</summary>
-    private void PlanTile(IMapViewQuery map, int mapX, int mapY, int mapLayer, bool isInGrid)
+    private void PlanTile(IMapViewQuery map, Vector3Int tile, ReadOnlySpan<int> occupants, bool isInGrid)
     {
-        var tile = new Vector3Int(mapX, mapY, mapLayer);
+        var mapX = tile.X;
+        var mapY = tile.Y;
         var blockingEntityId = map.GetBlockingEntityId(tile);
         _phasingOccupants.Clear();
 
-        foreach (var entityId in map.GetOccupants(tile))
+        foreach (var entityId in occupants)
         {
             if (entityId == blockingEntityId || !map.TryGetOccupant(entityId, out var occupant))
             {
@@ -198,22 +202,6 @@ public sealed class MapDrawOrder
         }
 
         _items.AddRange(_phasingOccupants);
-    }
-
-    private void PlanLayerBadge(IMapViewQuery map, int mapX, int mapY, int higherLayerMask, int lowerLayerMask)
-    {
-        var occupiedLayers = map.GetOccupiedLayerMask(mapX, mapY);
-        if (occupiedLayers == 0)
-        {
-            return;
-        }
-
-        var hasHigherLayer = (occupiedLayers & higherLayerMask) != 0;
-        var hasLowerLayer = (occupiedLayers & lowerLayerMask) != 0;
-        if (hasHigherLayer || hasLowerLayer)
-        {
-            _layerBadges.Add(new MapDrawItem(MapDrawItemKind.LayerBadge, -1, mapX, mapY, new Vector2Byte(1, 1), hasHigherLayer, hasLowerLayer));
-        }
     }
 
     private static bool IsBottomLeftAnchor(OccupantView occupant, int mapX, int mapY) =>

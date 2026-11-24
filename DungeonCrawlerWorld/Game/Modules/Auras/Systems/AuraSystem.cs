@@ -375,7 +375,7 @@ public sealed class AuraSystem : ISystem
     /// up in this same scan is harmless: its own power is left out of its total (see
     /// PowerReaching).
     /// </summary>
-    /// <remarks>Walks IMapQuery.GetOccupantEntityIdSpanAt per cell rather than the Blocking-only GetEntityIdsInBox, so Tiny/Phasing occupants are exposed too.</remarks>
+    /// <remarks>Walks IMapQuery.GetOccupantEntityIdSpanAt per cell, every occupant Blocking or not, so Tiny/Phasing occupants are exposed too.</remarks>
     /// <param name="center">Where the source is.</param>
     /// <param name="reach">The source's reach (AuraField.ReachOf): the cells walked are those within this Manhattan distance of center.</param>
     /// <param name="exceptWithinReachOf">Where the source was, to skip the cells its reach already covered from there -- ruled out by arithmetic, with no map read. Null walks the whole reach.</param>

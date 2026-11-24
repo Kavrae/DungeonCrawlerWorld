@@ -23,10 +23,11 @@ public sealed class ProcessingTierSystemTests
     private const int OtherEntityId = 0;
     private const int SecondEntityId = 2;
 
-    /// <summary>A position index shaped like World's -- one Blocking occupant per tile -- over a map large enough for Borough/Beyond geometry, reaching into negative coordinates. Nothing here allocates per tile, so the size is free.</summary>
-    private sealed class FakeMapQuery : IMapQuery
+    /// <summary>A position index shaped like World's -- one Blocking occupant per tile -- over a map large enough for Borough/Beyond geometry, reaching into negative coordinates. Its occupied cells are a real Map that loads a neighborhood only when something is placed in it.</summary>
+    private sealed class FakeMapQuery : IMapQuery, IOccupiedCellQuery
     {
         private readonly Dictionary<Vector3Int, int> _blocking = [];
+        private readonly Map _occupiedCells = Map.Unbounded(3);
 
         public MapBounds Bounds { get; } = new(-3072, -3072, 6000, 6000, 3);
 
@@ -38,11 +39,29 @@ public sealed class ProcessingTierSystemTests
 
         public bool IsBlocking(int entityId) => true;
 
-        public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) => entityIds.Fill(-1);
+        public void SetBlocking(Vector3Int position, int entityId)
+        {
+            _blocking[position] = entityId;
+            var cellX = Neighborhoods.CellOf(position.X);
+            var cellY = Neighborhoods.CellOf(position.Y);
+            if (!_occupiedCells.IsNeighborhoodLoaded(cellX, cellY))
+            {
+                _occupiedCells.LoadNeighborhood(cellX, cellY);
+            }
 
-        public void SetBlocking(Vector3Int position, int entityId) => _blocking[position] = entityId;
+            _occupiedCells.AddOccupantEntityId(position, entityId);
+        }
 
-        public void ClearBlocking(Vector3Int position) => _blocking.Remove(position);
+        public void ClearBlocking(Vector3Int position)
+        {
+            if (_blocking.Remove(position, out var entityId))
+            {
+                _occupiedCells.RemoveOccupantEntityId(position, entityId);
+            }
+        }
+
+        public OccupiedCellScan GetOccupiedCellsIn(int minX, int minY, int maxXExclusive, int maxYExclusive, int mapLayer) =>
+            _occupiedCells.GetOccupiedCellsIn(minX, minY, maxXExclusive, maxYExclusive, mapLayer);
 
         public HashSet<(int CellX, int CellY)> UnloadedNeighborhoods { get; } = [];
 
@@ -62,7 +81,7 @@ public sealed class ProcessingTierSystemTests
         public Fixture(IPlayerQuery? playerQuery = null, int transitionsPerFrame = ProcessingTierSystem.DefaultTransitionsPerFrame)
         {
             Resolver = new ProcessingTierResolver(Tiers, Transforms, Events);
-            System = new ProcessingTierSystem(Transforms, Map, MovedEntities, Resolver, playerQuery ?? new TestPlayerQuery(PlayerEntityId), transitionsPerFrame);
+            System = new ProcessingTierSystem(Transforms, Map, Map, MovedEntities, Resolver, playerQuery ?? new TestPlayerQuery(PlayerEntityId), transitionsPerFrame);
         }
 
         /// <summary>Places a Blocking entity in the transform pool and the fake index, with no tier -- as if created before any reference existed. One Blocking entity per tile, as on the real map -- two on one tile would have the second silently evict the first from the index.</summary>
@@ -111,7 +130,8 @@ public sealed class ProcessingTierSystemTests
         var resolver = new ProcessingTierResolver(tiers, transforms, new ProcessingTierEvents());
         transforms.Add(OtherEntityId, new TransformComponent(new Vector3Int(2, 2, 0), new Vector2Byte(1, 1)));
 
-        var system = new ProcessingTierSystem(transforms, new FakeMapQuery(), new FrameEventBuffer<EntityMovedEvent>(), resolver, playerQuery: TestPlayerQuery.NoPlayer);
+        var mapQuery = new FakeMapQuery();
+        var system = new ProcessingTierSystem(transforms, mapQuery, mapQuery, new FrameEventBuffer<EntityMovedEvent>(), resolver, playerQuery: TestPlayerQuery.NoPlayer);
         system.Update(default, 0);
 
         Assert.IsFalse(tiers.Has(OtherEntityId));

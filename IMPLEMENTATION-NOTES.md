@@ -1952,6 +1952,59 @@ applies effects already had it (`BuiltInModulesTests` passed unchanged). Quiet m
 build before the Ghost immunity: `AuraSystem` -3.4% (0.270 -> 0.261), `EcsContext.Update` -7.1% (1.168 -> 1.085),
 same world (`EA01C26D6323B7D0`). The Ghost immunity's +10.6% on `AuraSystem` is gone and then some.
 
+### Occupied-cell scans (2026-11-24)
+
+`PLAN-occupied-cell-scan.md`. A rectangle of occupants on one MapLayer is read with
+`IOccupiedCellQuery.GetOccupiedCellsIn` (`World`, over `Map`; `GameModuleContext.OccupiedCells`), a `foreach` over an
+`OccupiedCellScan` that allocates nothing. It reads the column masks the map already keeps
+(`MapNeighborhood.OccupiedLayerMaskByColumn`, a byte a column, bit N set exactly when MapLayer N's cell has an occupant):
+one neighborhood lookup per row segment, a byte test per tile, and an occupant span built only for a cell whose bit is
+set. No data was added and no write changed.
+
+Its rules:
+- **Order is fixed: Y ascending, then X ascending.** Every caller gets this one order, so a tie is decided the same way
+  on every run.
+- **It reads the cells the per-tile loop would**: negative coordinates, a row crossing a neighborhood border, an
+  unloaded neighborhood (skipped), a neighborhood a bounded map cuts short, a layer off the map (empty).
+  `OccupiedCellScanTests` holds it equal to the per-tile loop across all of them.
+- **It reads only.** It writes no cache, so a worker could use it. A cell's `Occupants` span follows
+  `GetOccupantEntityIdSpanAt`'s rule, and nothing may change occupants while a scan is open: a caller whose work can
+  (`ProcessingTierSystem`, where a tier change can build a creature) collects the occupants first and acts after.
+- It is its own interface, so `IMapQuery`'s test doubles don't have to fake it. A test double that needs it backs its
+  occupants with a small real `Map`, loading only the neighborhoods the test uses.
+
+Where it is used, each timed in Release against the per-tile loop it replaced:
+- **NPC perception** (`NpcDecisionContext`'s hostile adjacency, hostiles in sight and allies; `NpcLooting.TryFind`,
+  which `LootNearby` asks with no "anyone near" gate first: an empty rectangle costs a mask read a row either way). Hostile adjacency is one rectangle a tile beyond the footprint, leaving out occupied cells
+  inside it, so a Tiny or Phasing hostile sharing the footprint isn't adjacent. `NpcDecisionSystem` 0.538 -> 0.496
+  ms/frame (-7.8%, 7 runs a side, spread 3.2%), `EcsContext.Update` -4%, same world.
+- **The streamer's border scan** (`NeighborhoodStreamer.RestoreStraddlingFootprints`): four strips a layer. 135 -> 62
+  µs a load.
+- **Tier updates** (`ProcessingTierSystem.RetierRectangle`). Per reference move: a straight step 5.5 -> 3.6 µs, a
+  diagonal 10-12 -> 4.5, a MapLayer change 706-752 -> 133-154, a neighborhood crossing 5.8 -> 3.0. Retiering now goes Y
+  then X rather than X then Y, which changes the order creatures crossing a tier edge on one step are retiered in;
+  `PlayerWalkTierDeterminismTests` holds every tier settled after each step of a scripted walk and two walks equal.
+- **The map's draw order** (`MapDrawOrder.Plan`, every draw): the row walk reads the occupied cells of the grid and
+  its overscan on the layer shown (`IMapViewQuery.GetOccupiedCellsIn`), in its own order, and the layer badges come from
+  a second scan of the grid over the other layers (`GetOccupiedColumnsIn`, an `OccupiedColumnScan`: columns where any
+  layer of a mask is occupied, which `OccupiedCellScan` is built on). Release, seed 1, one populated neighborhood:
+  60x34 tiles 25 -> 5 µs, 240x136 420 -> 82 µs, the same items.
+- `Map.OccupantsInCell` is `AggressiveInlining`: split out of `GetOccupantEntityIdSpanAt` without it, every occupant
+  read paid a call (`ProcessingTierSystem` +12%).
+
+**Not used for aura exposure walks** (`AuraSystem.StartExposuresNear`/`ReEvaluateExposuresNear`). After a one-step
+move the per-tile walk rules out nearly every tile by arithmetic and reads only the thin band where the old and new
+diamonds differ; a scan reads every column mask of its rectangle and pays setup per row. Both a scan per diamond row
+and one over the bounding square were about twice as slow at reach 8 and slower at reach 1 and 3. The scan pays where
+every tile of a rectangle is read.
+
+**Timing a short probe:** with tiered compilation on, identical builds swung up to 7x between runs as methods were
+recompiled mid-run. Run a probe of a few seconds with `DOTNET_TieredCompilation=0` (as GameShell does), with the old and
+new code alternating in one process.
+
+A separate bitset (64 tiles a word) pays over the byte masks only on scans around 64 tiles wide or more; none is that
+wide today.
+
 ## Presentation
 
 ### Floating Text

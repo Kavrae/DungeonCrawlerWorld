@@ -2,7 +2,6 @@ using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Entities;
 using Engine.ECS.Systems;
-using Engine.Math;
 using Game.Modules.Core.Components;
 using Game.Modules.Currency;
 using Game.Modules.Currency.Components;
@@ -33,7 +32,7 @@ public sealed class NpcLooting(
     ItemCatalog itemCatalog,
     IPlayerQuery playerQuery,
     EntityKeys entityKeys,
-    IMapQuery mapQuery,
+    IOccupiedCellQuery occupiedCells,
     ProcessingTierQuery tierQuery)
 {
     public const int RetryFrames = 30 * GameFrameRate.FramesPerSecond;
@@ -50,40 +49,55 @@ public sealed class NpcLooting(
     /// <param name="everyCorpseReserved">Whether a corpse was found and every one found is reserved for someone else -- what RetryLater is for.</param>
     public bool TryFind(int looterEntityId, TransformComponent looterTransform, long now, out EntityKey target, out bool everyCorpseReserved)
     {
-        var waitsToRetryCorpses = _retries.TryGetReadonly(looterEntityId, out var retry) && retry.RetryAfterFrame > now;
-        var looterEntityKey = entityKeys.GetKey(looterEntityId);
+        var corpseRulesRead = false;
+        var waitsToRetryCorpses = false;
+        var looterEntityKey = EntityKey.None;
         var foundReservedCorpse = false;
         var position = looterTransform.Position;
         var size = looterTransform.Size;
 
-        for (var y = position.Y - 1; y <= position.Y + size.Y; y++)
+        foreach (var cell in occupiedCells.GetOccupiedCellsIn(position.X - 1, position.Y - 1, position.X + size.X + 1, position.Y + size.Y + 1, position.Z))
         {
-            for (var x = position.X - 1; x <= position.X + size.X; x++)
+            foreach (var occupantEntityId in cell.Occupants)
             {
-                foreach (var occupantEntityId in mapQuery.GetOccupantEntityIdSpanAt(new Vector3Int(x, y, position.Z)))
+                if (occupantEntityId == looterEntityId || !tierQuery.IsSimulated(occupantEntityId))
                 {
-                    if (IsPileCandidate(occupantEntityId, looterEntityId))
-                    {
-                        target = entityKeys.GetKey(occupantEntityId);
-                        everyCorpseReserved = false;
-                        return true;
-                    }
+                    continue;
+                }
 
-                    if (waitsToRetryCorpses || !IsCorpseCandidate(occupantEntityId))
-                    {
-                        continue;
-                    }
-
-                    if (!_lootRights.CanLoot(occupantEntityId, looterEntityKey, now))
-                    {
-                        foundReservedCorpse = true;
-                        continue;
-                    }
-
+                if (IsPileCandidate(occupantEntityId, looterEntityId))
+                {
                     target = entityKeys.GetKey(occupantEntityId);
                     everyCorpseReserved = false;
                     return true;
                 }
+
+                if (!IsCorpseCandidate(occupantEntityId))
+                {
+                    continue;
+                }
+
+                if (!corpseRulesRead)
+                {
+                    corpseRulesRead = true;
+                    waitsToRetryCorpses = _retries.TryGetReadonly(looterEntityId, out var retry) && retry.RetryAfterFrame > now;
+                    looterEntityKey = entityKeys.GetKey(looterEntityId);
+                }
+
+                if (waitsToRetryCorpses)
+                {
+                    continue;
+                }
+
+                if (!_lootRights.CanLoot(occupantEntityId, looterEntityKey, now))
+                {
+                    foundReservedCorpse = true;
+                    continue;
+                }
+
+                target = entityKeys.GetKey(occupantEntityId);
+                everyCorpseReserved = false;
+                return true;
             }
         }
 
@@ -95,7 +109,7 @@ public sealed class NpcLooting(
     /// <summary>Loots target into looterEntityId if it is still a candidate TryFind would name for it; false, taking nothing, when it no longer is.</summary>
     public bool TryLoot(int looterEntityId, EntityKey target, long now)
     {
-        if (!entityKeys.TryGetEntityId(target, out var targetEntityId))
+        if (!entityKeys.TryGetEntityId(target, out var targetEntityId) || !tierQuery.IsSimulated(targetEntityId))
         {
             return false;
         }
@@ -119,15 +133,14 @@ public sealed class NpcLooting(
     public void RetryLater(int looterEntityId, long now) =>
         componentManager.Merge(looterEntityId, new CorpseLootRetryComponent(FrameDeadline.After(now, RetryFrames)));
 
-    /// <remarks>The tier first: a neighbouring tile can hold an unbuilt skeleton, whose other pools must not be read.</remarks>
+    /// <remarks>Only for a simulated entity: a neighbouring tile can hold an unbuilt skeleton, whose other pools must not be read.</remarks>
     private bool IsCorpseCandidate(int entityId) =>
-        tierQuery.IsSimulated(entityId) &&
         _deadEntities.Has(entityId) &&
         !_looted.Has(entityId) &&
         HoldsLoot(entityId);
 
+    /// <remarks>Only for a simulated entity, as IsCorpseCandidate.</remarks>
     private bool IsPileCandidate(int entityId, int looterEntityId) =>
-        tierQuery.IsSimulated(entityId) &&
         _piles.Has(entityId) &&
         (HoldsCurrency(entityId) || InventoryActions.CanLootAny(componentManager, itemCatalog, entityId, looterEntityId, playerQuery));
 

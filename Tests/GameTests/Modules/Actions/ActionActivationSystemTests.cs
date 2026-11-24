@@ -63,8 +63,6 @@ public sealed class ActionActivationSystemTests
 
         public ReadOnlySpan<int> GetOccupantEntityIdSpanAt(Vector3Int position) =>
             GetEntityIdAt(position) is var entityId && entityId != -1 ? new[] { entityId } : [];
-
-        public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) { }
     }
 
     /// <summary>Never rolls a crit -- NextDouble always returns 1.0, comfortably above any crit chance -- so damage-amount assertions here stay deterministic.</summary>

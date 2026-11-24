@@ -49,8 +49,6 @@ public sealed class DelayedActionSystemTests
 
         public ReadOnlySpan<int> GetOccupantEntityIdSpanAt(Vector3Int position) =>
             GetEntityIdAt(position) is var entityId && entityId != -1 ? new[] { entityId } : [];
-
-        public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) { }
     }
 
     private static EngineTime Frame(long frame) => new(default, default, false, frame);

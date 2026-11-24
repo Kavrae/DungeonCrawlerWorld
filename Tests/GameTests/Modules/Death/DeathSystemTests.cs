@@ -39,8 +39,6 @@ public sealed class DeathSystemTests
         public bool IsOnMap(Vector3Int position) => true;
         public int GetEntityIdAt(Vector3Int position) => -1;
         public ReadOnlySpan<int> GetOccupantEntityIdSpanAt(Vector3Int position) => [];
-        public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) { }
-
         public void SetBlocking(int entityId) => _blockingEntityIds.Add(entityId);
 
         public bool IsBlocking(int entityId) => _blockingEntityIds.Contains(entityId);

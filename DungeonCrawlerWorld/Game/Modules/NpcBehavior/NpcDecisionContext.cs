@@ -33,7 +33,6 @@ public ref struct NpcDecisionContext : IDecisionContext
 
     private readonly NpcDecisionServices _services;
     private readonly bool _isActing;
-    private byte _hasOtherOccupantNear;
     private byte _hasHostileAdjacent;
     private float _healthFraction;
     private int _hostilesInSight;
@@ -120,24 +119,12 @@ public ref struct NpcDecisionContext : IDecisionContext
         return _healthFraction;
     }
 
-    /// <summary>Whether anything else stands on its footprint or a tile beside it, on its layer: where a melee target or loot can be.</summary>
-    /// <remarks>One pass over that rectangle, asked first by every behavior that needs a neighbor, so the common "nobody near" decision reads nothing more.</remarks>
-    public bool HasOtherOccupantNear()
-    {
-        if (_hasOtherOccupantNear == 0)
-        {
-            _hasOtherOccupantNear = ScanForOtherOccupant() ? (byte)2 : (byte)1;
-        }
-
-        return _hasOtherOccupantNear == 2;
-    }
-
     /// <summary>Whether something hostile to it stands on a tile its Adjacent shape reaches.</summary>
     public bool HasHostileAdjacent()
     {
         if (_hasHostileAdjacent == 0)
         {
-            _hasHostileAdjacent = HasOtherOccupantNear() && ScanForHostileAdjacent() ? (byte)2 : (byte)1;
+            _hasHostileAdjacent = ScanForHostileAdjacent() ? (byte)2 : (byte)1;
         }
 
         return _hasHostileAdjacent == 2;
@@ -227,28 +214,7 @@ public ref struct NpcDecisionContext : IDecisionContext
         }
     }
 
-    private readonly bool ScanForOtherOccupant()
-    {
-        var position = Transform.Position;
-        var size = Transform.Size;
-        for (var y = position.Y - 1; y <= position.Y + size.Y; y++)
-        {
-            for (var x = position.X - 1; x <= position.X + size.X; x++)
-            {
-                foreach (var occupantEntityId in _services.Map.GetOccupantEntityIdSpanAt(new Vector3Int(x, y, position.Z)))
-                {
-                    if (occupantEntityId != EntityId)
-                    {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        return false;
-    }
-
-    /// <remarks>Every occupant of each tile, Blocking or not: a non-Blocking hostile beside it can still be hit.</remarks>
+    /// <remarks>Every occupant of each tile around the footprint, Blocking or not: a non-Blocking hostile beside it can still be hit, and one sharing its footprint isn't beside it.</remarks>
     private readonly bool ScanForHostileAdjacent()
     {
         if (!_services.TryGetRaceId(EntityId, out var raceId))
@@ -256,13 +222,21 @@ public ref struct NpcDecisionContext : IDecisionContext
             return false;
         }
 
-        var tiles = _services.AdjacentTiles;
-        TargetShapeResolver.Resolve(TargetShape.Adjacent, TargetAnchor.Caster, Transform.Position, Transform.Size, Transform.Position, default, _services.Map.Bounds, tiles);
-        foreach (var tile in tiles)
+        var position = Transform.Position;
+        var size = Transform.Size;
+        var footprintMaxXExclusive = position.X + size.X;
+        var footprintMaxYExclusive = position.Y + size.Y;
+        foreach (var cell in _services.OccupiedCells.GetOccupiedCellsIn(position.X - 1, position.Y - 1, footprintMaxXExclusive + 1, footprintMaxYExclusive + 1, position.Z))
         {
-            foreach (var occupantEntityId in _services.Map.GetOccupantEntityIdSpanAt(tile))
+            var tile = cell.Position;
+            if (tile.X >= position.X && tile.X < footprintMaxXExclusive && tile.Y >= position.Y && tile.Y < footprintMaxYExclusive)
             {
-                if (occupantEntityId != EntityId && _services.IsHostileTo(occupantEntityId, raceId))
+                continue;
+            }
+
+            foreach (var occupantEntityId in cell.Occupants)
+            {
+                if (_services.IsHostileTo(occupantEntityId, raceId))
                 {
                     return true;
                 }
@@ -286,26 +260,23 @@ public ref struct NpcDecisionContext : IDecisionContext
         var counted = _services.CountedEntityIds;
         counted.Clear();
         var nearestDistance = int.MaxValue;
-        for (var y = position.Y - HostileSightRadius; y < position.Y + size.Y + HostileSightRadius; y++)
+        foreach (var cell in _services.OccupiedCells.GetOccupiedCellsIn(position.X - HostileSightRadius, position.Y - HostileSightRadius, position.X + size.X + HostileSightRadius, position.Y + size.Y + HostileSightRadius, position.Z))
         {
-            for (var x = position.X - HostileSightRadius; x < position.X + size.X + HostileSightRadius; x++)
+            var tile = cell.Position;
+            foreach (var occupantEntityId in cell.Occupants)
             {
-                var tile = new Vector3Int(x, y, position.Z);
-                foreach (var occupantEntityId in _services.Map.GetOccupantEntityIdSpanAt(tile))
+                if (occupantEntityId == EntityId || counted.Contains(occupantEntityId) || !_services.IsHostileTo(occupantEntityId, raceId) ||
+                    !LineOfSight.IsVisibleFromFootprint(position, size, tile, _services.SightBlockers))
                 {
-                    if (occupantEntityId == EntityId || counted.Contains(occupantEntityId) || !_services.IsHostileTo(occupantEntityId, raceId) ||
-                        !LineOfSight.IsVisibleFromFootprint(position, size, tile, _services.SightBlockers))
-                    {
-                        continue;
-                    }
+                    continue;
+                }
 
-                    counted.Add(occupantEntityId);
-                    var distance = DistanceFromFootprint(tile);
-                    if (distance < nearestDistance)
-                    {
-                        nearestDistance = distance;
-                        nearest = _services.EntityKeys.GetKey(occupantEntityId);
-                    }
+                counted.Add(occupantEntityId);
+                var distance = DistanceFromFootprint(tile);
+                if (distance < nearestDistance)
+                {
+                    nearestDistance = distance;
+                    nearest = _services.EntityKeys.GetKey(occupantEntityId);
                 }
             }
         }
@@ -324,16 +295,13 @@ public ref struct NpcDecisionContext : IDecisionContext
         var size = Transform.Size;
         var counted = _services.CountedEntityIds;
         counted.Clear();
-        for (var y = position.Y - radius; y < position.Y + size.Y + radius; y++)
+        foreach (var cell in _services.OccupiedCells.GetOccupiedCellsIn(position.X - radius, position.Y - radius, position.X + size.X + radius, position.Y + size.Y + radius, position.Z))
         {
-            for (var x = position.X - radius; x < position.X + size.X + radius; x++)
+            foreach (var occupantEntityId in cell.Occupants)
             {
-                foreach (var occupantEntityId in _services.Map.GetOccupantEntityIdSpanAt(new Vector3Int(x, y, position.Z)))
+                if (occupantEntityId != EntityId && _services.IsAllyOf(occupantEntityId, raceId))
                 {
-                    if (occupantEntityId != EntityId && _services.IsAllyOf(occupantEntityId, raceId))
-                    {
-                        counted.Add(occupantEntityId);
-                    }
+                    counted.Add(occupantEntityId);
                 }
             }
         }

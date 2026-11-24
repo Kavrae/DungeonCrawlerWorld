@@ -39,9 +39,7 @@ public sealed class AuraSystemTests
     /// <summary>
     /// Minimal IMapQuery test double with a real per-cell occupant dictionary -- backs
     /// AuraSystem's rare "a source moved" re-check path (StartExposuresNear/
-    /// ReEvaluateExposuresNear), now a GetOccupantEntityIdsAt-per-cell walk rather than a
-    /// GetEntityIdsInBox scan, now that per-mover detection is an O(1) AuraGrid lookup, not a
-    /// live scan. Keeps the Blocking slot (SetOccupant/GetEntityIdAt/GetEntityIdsInBox) and the
+    /// ReEvaluateExposuresNear), a per-cell occupant walk. Keeps the Blocking slot (SetOccupant/GetEntityIdAt) and the
     /// non-Blocking index (SetNonBlockingOccupant) as genuinely separate stores, mirroring
     /// Map's own split, so a test can prove GetOccupantEntityIdsAt -- and only that -- sees a
     /// non-Blocking occupant.
@@ -113,20 +111,6 @@ public sealed class AuraSystemTests
         private void RebuildAllOccupantsAt((int X, int Y, int Z) key) =>
             _allOccupantsByPosition[key] = [.. GetOccupantEntityIdsAt(new Vector3Int(key.X, key.Y, key.Z))];
 
-        public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) => Fill(box, entityIds, GetEntityIdAt);
-
-        private static void Fill(CubeInt box, Span<int> entityIds, Func<Vector3Int, int> lookup)
-        {
-            var index = 0;
-            for (var y = box.Position.Y; y < box.Position.Y + box.Size.Y; y++)
-            {
-                for (var x = box.Position.X; x < box.Position.X + box.Size.X; x++)
-                {
-                    entityIds[index] = lookup(new Vector3Int(x, y, box.Position.Z));
-                    index++;
-                }
-            }
-        }
     }
 
     /// <summary>
@@ -905,13 +889,9 @@ public sealed class AuraSystemTests
     }
 
     /// <summary>
-    /// Regression test for the fix: StartExposuresNear/ReEvaluateExposuresNear used to scan
-    /// IMapQuery.GetEntityIdsInBox, which only ever reports the Blocking occupant of a cell --
-    /// a Tiny/Phasing (non-Blocking) occupant sharing that cell was silently invisible to
-    /// auras. ObserverEntityId here is registered ONLY via SetNonBlockingOccupant (FakeMapQuery's
-    /// non-Blocking index), never via SetOccupant/GetEntityIdAt, so this fails against the old
-    /// GetEntityIdsInBox-based scan and passes only once the scan goes through
-    /// GetOccupantEntityIdsAt instead.
+    /// StartExposuresNear/ReEvaluateExposuresNear reach a Tiny/Phasing (non-Blocking) occupant: ObserverEntityId
+    /// here is registered only via SetNonBlockingOccupant (FakeMapQuery's non-Blocking index), never via
+    /// SetOccupant/GetEntityIdAt, so a walk reading only the Blocking occupant would miss it.
     /// </summary>
     [TestMethod]
     public void SourceAddedViaToggle_StationaryNonBlockingOccupantAlreadyInRange_ExposedImmediately()

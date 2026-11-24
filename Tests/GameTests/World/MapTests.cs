@@ -9,6 +9,16 @@ namespace Tests.GameTests.World;
 [TestClass]
 public sealed class MapTests
 {
+    private static int OccupiedLayersAt(Map map, int x, int y)
+    {
+        foreach (var column in map.GetOccupiedColumnsIn(x, y, x + 1, y + 1, byte.MaxValue))
+        {
+            return column.LayerMask;
+        }
+
+        return 0;
+    }
+
     [TestMethod]
     public void GetEntityId_NewMap_EveryCellStartsEmpty()
     {
@@ -126,9 +136,9 @@ public sealed class MapTests
             Assert.AreEqual((ushort)(400 + i), map.GetTerrain(cells[i].X, cells[i].Y, TerrainLayer.Ground).TypeId);
         }
 
-        Assert.AreEqual(0b10, map.GetOccupiedLayerMask(1024, 1024));
-        Assert.AreEqual(0b01, map.GetOccupiedLayerMask(1029, 0));
-        Assert.AreEqual(0, map.GetOccupiedLayerMask(1025, 1024));
+        Assert.AreEqual(0b10, OccupiedLayersAt(map, 1024, 1024));
+        Assert.AreEqual(0b01, OccupiedLayersAt(map, 1029, 0));
+        Assert.AreEqual(0, OccupiedLayersAt(map, 1025, 1024));
     }
 
     /// <summary>Each coordinate is bounds-checked on its own, so an off-map X doesn't alias into a cell on the row above.</summary>
@@ -179,8 +189,8 @@ public sealed class MapTests
             Assert.AreEqual((ushort)(400 + i), map.GetTerrain(cells[i].X, cells[i].Y, TerrainLayer.Ground).TypeId);
         }
 
-        Assert.AreEqual(0b10, map.GetOccupiedLayerMask(-1, -1));
-        Assert.AreEqual(0, map.GetOccupiedLayerMask(1023, 1023));
+        Assert.AreEqual(0b10, OccupiedLayersAt(map, -1, -1));
+        Assert.AreEqual(0, OccupiedLayersAt(map, 1023, 1023));
     }
 
     [TestMethod]
@@ -219,7 +229,7 @@ public sealed class MapTests
         Assert.AreEqual(-1, map.GetBlockingEntityId(cell));
         Assert.IsEmpty(map.GetOccupantEntityIdsAt(cell));
         Assert.IsTrue(map.GetTerrain(cell.X, cell.Y, TerrainLayer.Ground).IsEmpty);
-        Assert.AreEqual(0, map.GetOccupiedLayerMask(cell.X, cell.Y));
+        Assert.AreEqual(0, OccupiedLayersAt(map, cell.X, cell.Y));
         Assert.IsFalse(map.ClearBlockingIfOccupiedBy(cell, 7));
         map.RemoveOccupantEntityId(cell, 7);
     }

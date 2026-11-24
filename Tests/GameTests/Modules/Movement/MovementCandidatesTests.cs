@@ -25,7 +25,6 @@ public sealed class MovementCandidatesTests
         public int GetEntityIdAt(Vector3Int position) => _occupants.TryGetValue(position, out var id) ? id : -1;
         public ReadOnlySpan<int> GetOccupantEntityIdSpanAt(Vector3Int position) => [];
         public bool IsBlocking(int entityId) => true;
-        public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) => entityIds.Fill(-1);
 
         public void SetOccupant(Vector3Int position, int entityId) => _occupants[position] = entityId;
 

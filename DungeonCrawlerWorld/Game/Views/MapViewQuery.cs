@@ -10,6 +10,7 @@ using Game.Modules.Containers;
 using Game.Modules.Containers.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
+using Game.World;
 using Game.Modules.Currency.Components;
 using Game.Modules.Death;
 using Game.Modules.Death.Components;
@@ -97,7 +98,11 @@ public sealed class MapViewQuery : IMapViewQuery
 
     public ReadOnlySpan<int> GetOccupants(Vector3Int position) => _world.Map.GetOccupantEntityIdSpanAt(position);
 
-    public byte GetOccupiedLayerMask(int x, int y) => _world.Map.GetOccupiedLayerMask(x, y);
+    public OccupiedCellScan GetOccupiedCellsIn(int minX, int minY, int maxXExclusive, int maxYExclusive, int mapLayer) =>
+        _world.Map.GetOccupiedCellsIn(minX, minY, maxXExclusive, maxYExclusive, mapLayer);
+
+    public OccupiedColumnScan GetOccupiedColumnsIn(int minX, int minY, int maxXExclusive, int maxYExclusive, byte layerMask) =>
+        _world.Map.GetOccupiedColumnsIn(minX, minY, maxXExclusive, maxYExclusive, layerMask);
 
     public TerrainRegistry Terrain => _terrain;
 

@@ -58,7 +58,7 @@ public sealed class WorldTests
         world.PlaceEntityOnMap(1, new Vector3Int(3, 3, 1), ref transform);
 
         Assert.AreEqual(new Vector3Int(), transform.Position);
-        Assert.IsFalse(world.IsPositionOccupied(new Vector3Int(3, 3, 1)));
+        Assert.IsFalse(world.Map.HasOccupantAt(new Vector3Int(3, 3, 1)));
     }
 
     [TestMethod]

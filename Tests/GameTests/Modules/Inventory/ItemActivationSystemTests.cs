@@ -84,8 +84,6 @@ public sealed class ItemActivationSystemTests
 
         public ReadOnlySpan<int> GetOccupantEntityIdSpanAt(Vector3Int position) =>
             GetEntityIdAt(position) is var entityId && entityId != -1 ? new[] { entityId } : [];
-
-        public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) { }
     }
 
     /// <param name="withProcessingTiers">Also registers ProcessingTierComponent and gives the system its ProcessingTierQuery, as InventoryModule does.</param>

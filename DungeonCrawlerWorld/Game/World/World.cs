@@ -17,7 +17,7 @@ public sealed class World(
     MultiComponentPool<ForceBlockingComponent> forceBlockingComponents,
     EventBus eventBus,
     EntityKeys entityKeys,
-    TerrainRegistry terrain) : IMapQuery, IPlayerQuery, ISightBlockers
+    TerrainRegistry terrain) : IMapQuery, IOccupiedCellQuery, IPlayerQuery, ISightBlockers
 {
     public Map Map { get; set; } = map;
 
@@ -476,9 +476,9 @@ public sealed class World(
     /// <inheritdoc cref="IMapQuery"/>
     public ReadOnlySpan<int> GetOccupantEntityIdSpanAt(Vector3Int position) => Map.GetOccupantEntityIdSpanAt(position);
 
-    /// <inheritdoc cref="IMapQuery"/>
-    /// <remarks>Explicitly implemented rather than left as IMapQuery's own default -- a default interface method is only callable through an IMapQuery-typed reference, not a concrete World one, and MapWindow (this method's first caller) holds World directly.</remarks>
-    public bool IsPositionOccupied(Vector3Int position) => Map.HasOccupantAt(position);
+    /// <inheritdoc cref="IOccupiedCellQuery.GetOccupiedCellsIn"/>
+    public OccupiedCellScan GetOccupiedCellsIn(int minX, int minY, int maxXExclusive, int maxYExclusive, int mapLayer) =>
+        Map.GetOccupiedCellsIn(minX, minY, maxXExclusive, maxYExclusive, mapLayer);
 
     /// <inheritdoc cref="IMapQuery"/>
     public TerrainCell GetTerrainAt(Vector3Int position) =>
@@ -490,26 +490,4 @@ public sealed class World(
 
     /// <summary>The seed the look of the structure at position is picked from (CellSeeds); 0 off the map.</summary>
     public uint GetStructureSeedAt(Vector3Int position) => IsOnMap(position) ? Map.GetStructureSeed(position) : 0;
-
-    /// <summary>
-    /// Row-major (X fastest-varying) batched occupant scan -- box.Size.Z is ignored, every
-    /// cell is read at box.Position.Z. One batched call instead of one interface call per
-    /// cell, for anything scanning a falloff radius (aura range) instead of a fixed 3x3
-    /// neighborhood.
-    /// </summary>
-    /// <inheritdoc cref="IMapQuery"/>
-    public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds)
-    {
-        var z = box.Position.Z;
-        var index = 0;
-        for (var y = box.Position.Y; y < box.Position.Y + box.Size.Y; y++)
-        {
-            for (var x = box.Position.X; x < box.Position.X + box.Size.X; x++)
-            {
-                var position = new Vector3Int(x, y, z);
-                entityIds[index] = IsOnMap(position) ? Map.GetBlockingEntityId(position) : -1;
-                index++;
-            }
-        }
-    }
 }

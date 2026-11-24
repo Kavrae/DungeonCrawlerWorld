@@ -72,8 +72,6 @@ public sealed class ActivationEffectResolverTests
         public MapBounds Bounds { get; } = new(0, 0, 100, 100, 1);
         public bool IsOnMap(Vector3Int position) => true;
         public bool IsBlocking(int entityId) => true;
-        public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) { }
-
         public void SetBlockingOccupant(Vector3Int position, int entityId)
         {
             _blockingByPosition[position] = entityId;

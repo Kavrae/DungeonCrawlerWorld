@@ -962,9 +962,9 @@ sampler's bias, the probes): that section.
     if large or many moving sources make them heavy.
 - **NpcDecisionSystem, further:** 0.44 ms/frame in Release (2026-11-12; the stand-in it replaced read 0.31 on the same
   machine), ~560 decisions a frame through the arbiter, EngageMelee the dearest behavior (~1 µs a decision in Debug);
-  `PLAN-npc-behavior-composition.md` has the A/B. The shared nearby-occupant pass reads nine tiles a wanderer through the
-  occupant index. A one-bit-per-cell occupancy map (`NeighborhoodBits`, ~128 KB a plane per neighborhood) or one
-  neighborhood lookup per 3x3 block would cut it again.
+  `PLAN-npc-behavior-composition.md` has the A/B. Its occupant scans now read the map's per-column occupancy masks
+  (IMPLEMENTATION-NOTES "Occupied-cell scans": 0.538 -> 0.496 ms/frame, 2026-11-24), so a separate bit-per-cell map
+  would only repeat them. What remains is the arbiter's own work per decision; profile it before choosing a change.
 - **MovementSystem, further:** ~257 steps a frame, each still ~650 ns of scattered reads (the destination re-check,
   blocking state, transform, lock, map indexes). The remaining lever is that `NpcDecisionSystem` decides a step
   and `MovementSystem` takes it in the same frame with hundreds of entities between, so each entity's data is fetched
