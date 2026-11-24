@@ -44,6 +44,12 @@ public sealed class DropdownController(ElementPoolService elementPoolService, Ui
 
     private bool _indentsUnderHeadings;
 
+    /// <summary>What the open context menu's options act on, or null.</summary>
+    private Element? _target;
+
+    /// <summary>_target's PoolReturnCount when it became the target -- a different count is the instance's later use.</summary>
+    private int _targetPoolReturnCount;
+
     public bool IsOpen => _openMenus.Count > 0 && _root.IsVisible;
 
     /// <summary>The root popup itself.</summary>
@@ -88,10 +94,11 @@ public sealed class DropdownController(ElementPoolService elementPoolService, Ui
         return menu;
     }
 
-    /// <summary>Opens options with the dropdown's top-left at point (flipped and clamped to stay on screen) -- a context menu -- indenting the options under each heading when indentsUnderHeadings.</summary>
-    public void OpenAt(Vector2 point, IReadOnlyList<DropdownOption> options, bool indentsUnderHeadings = false)
+    /// <summary>Opens options with the dropdown's top-left at point (flipped and clamped to stay on screen) -- a context menu -- for target, the element its options act on (null for none), indenting the options under each heading when indentsUnderHeadings.</summary>
+    public void OpenAt(Vector2 point, IReadOnlyList<DropdownOption> options, Element? target = null, bool indentsUnderHeadings = false)
     {
         Owner = null;
+        SetTarget(target);
         _placementAnchor = new Rectangle((int)point.X, (int)point.Y, 0, 0);
         _placedBelowAnchor = false;
         _minimumWidth = 0f;
@@ -106,12 +113,35 @@ public sealed class DropdownController(ElementPoolService elementPoolService, Ui
         ArgumentNullException.ThrowIfNull(owner);
 
         Owner = owner;
+        SetTarget(null);
         _placementAnchor = owner.Rectangle;
         _placedBelowAnchor = true;
         _minimumWidth = owner.Rectangle.Width;
         _maximumHeight = maximumHeight;
         _indentsUnderHeadings = false;
         PlaceRoot(options, markedIndex);
+    }
+
+    /// <summary>Whether the open menu was opened for element, and element hasn't been closed since: what a target draws its highlight from.</summary>
+    public bool IsOpenFor(Element element) => ReferenceEquals(Target, element);
+
+    /// <summary>The element the open menu was opened for, while it hasn't been closed since; null when no menu with a live target is open.</summary>
+    public Element? Target =>
+        IsOpen && _target is not null && _target.PoolReturnCount == _targetPoolReturnCount ? _target : null;
+
+    /// <summary>Makes target what the open menu acts on in place of the element it was opened for: the same thing shown by a new element (a grid that rebuilt its cells). Nothing when no menu with a target is open.</summary>
+    public void Retarget(Element target)
+    {
+        if (IsOpen && _target is not null)
+        {
+            SetTarget(target);
+        }
+    }
+
+    private void SetTarget(Element? target)
+    {
+        _target = target;
+        _targetPoolReturnCount = target?.PoolReturnCount ?? 0;
     }
 
     /// <summary>Replaces the options of the list opened under owner on the next Update, keeping its place, scroll and highlight; nothing when no list of owner's is open.</summary>
@@ -235,6 +265,7 @@ public sealed class DropdownController(ElementPoolService elementPoolService, Ui
         _root.Hide();
         _openMenus.Clear();
         Owner = null;
+        SetTarget(null);
         _layers.CloseLightDismiss(this);
     }
 

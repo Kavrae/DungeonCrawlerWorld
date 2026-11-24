@@ -58,8 +58,12 @@ public sealed class HotbarContent(
     Vector2 screenSize,
     SimulationClock simulationClock,
     EntityActions? actions = null,
-    EffectTextNames? effectTextNames = null) : IElementContent
+    EffectTextNames? effectTextNames = null,
+    ContextMenuController? contextMenus = null) : IElementContent
 {
+    /// <summary>The menu a slot's right-click opens, read to highlight the slot it is open for; none for a test that opens no menu.</summary>
+    private readonly ContextMenuController? _contextMenus = contextMenus;
+
     /// <summary>What a cost line names; raw names for a test that gives none.</summary>
     private readonly EffectTextNames _effectTextNames = effectTextNames ?? EffectTextNames.None;
 
@@ -553,16 +557,45 @@ public sealed class HotbarContent(
         return textCaches;
     }
 
-    /// <summary>Draws slot within bounds, in its element's local coordinates -- the binding's icon and numbers, the border, the armed and selected glows, the key label, and the invitation to drop while a bindable drag is held.</summary>
-    internal void DrawSlot(SpriteEffectBatch spriteBatch, HotkeySlot slot, Rectangle bounds)
+    /// <summary>Draws slot within bounds, in its element's local coordinates -- the binding's icon and numbers, the border, the armed and selected glows, the key label, the highlight while its context menu is open, and the invitation to drop while a bindable drag is held.</summary>
+    internal void DrawSlot(SpriteEffectBatch spriteBatch, HotbarSlotElement slotElement, Rectangle bounds)
     {
-        DrawSlot(spriteBatch, world.PlayerEntityId, slot, bounds);
+        DrawSlot(spriteBatch, world.PlayerEntityId, slotElement.Slot, bounds);
+
+        if (IsContextMenuAbout(slotElement))
+        {
+            GridSquareRenderer.DrawStateOverlay(spriteBatch, bounds, GridSquareState.ContextMenuTarget);
+        }
 
         if (IsAcceptingDrag)
         {
             GlowRenderer.Draw(spriteBatch, bounds, WindowPalette.AttentionGlow);
         }
     }
+
+    /// <summary>Whether the open context menu was opened for slotElement, or for anything showing the stack its slot is bound to: an inventory cell of it, another slot bound to it.</summary>
+    internal bool IsContextMenuAbout(HotbarSlotElement slotElement)
+    {
+        if (_contextMenus is null)
+        {
+            return false;
+        }
+
+        if (_contextMenus.IsOpenFor(slotElement))
+        {
+            return true;
+        }
+
+        var playerEntityId = world.PlayerEntityId;
+        return hotkeyBindingView.TryGetBoundItem(playerEntityId, slotElement.Slot, out var stackInstanceId)
+            && ContextMenuItemStacks.IsAbout(_contextMenus, playerEntityId, stackInstanceId);
+    }
+
+    /// <summary>Whether slot is bound to entityId's stack stackInstanceId: only ever the player's.</summary>
+    internal bool SlotShowsStack(HotkeySlot slot, int entityId, uint stackInstanceId) =>
+        entityId == world.PlayerEntityId
+        && hotkeyBindingView.TryGetBoundItem(entityId, slot, out var boundStackInstanceId)
+        && boundStackInstanceId == stackInstanceId;
 
     private void DrawSlot(SpriteEffectBatch spriteBatch, int playerEntityId, HotkeySlot slot, Rectangle bounds)
     {

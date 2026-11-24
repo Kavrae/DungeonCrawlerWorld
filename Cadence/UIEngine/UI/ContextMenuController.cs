@@ -17,8 +17,18 @@ public sealed class ContextMenuController(DropdownController dropdowns)
     /// <summary>The live popup itself.</summary>
     internal Element Menu => Dropdowns.Menu;
 
-    /// <summary>Opens options at the cursor, indenting the options under each heading when indentsUnderHeadings.</summary>
-    public void Open(Vector2 cursorPosition, IReadOnlyList<DropdownOption> options, bool indentsUnderHeadings = false) => Dropdowns.OpenAt(cursorPosition, options, indentsUnderHeadings);
+    /// <summary>Opens options at the cursor for target, the element they act on (null for none), indenting the options under each heading when indentsUnderHeadings.</summary>
+    /// <remarks>IsOpenFor(target) is true until the menu closes, however it closes: the target draws its highlight from it.</remarks>
+    public void Open(Vector2 cursorPosition, IReadOnlyList<DropdownOption> options, Element? target = null, bool indentsUnderHeadings = false) => Dropdowns.OpenAt(cursorPosition, options, target, indentsUnderHeadings);
+
+    /// <summary>Whether the open menu was opened for element, and element hasn't been closed since.</summary>
+    public bool IsOpenFor(Element element) => Dropdowns.IsOpenFor(element);
+
+    /// <summary>The element the open menu was opened for, while it hasn't been closed since; null otherwise.</summary>
+    public Element? Target => Dropdowns.Target;
+
+    /// <summary>Makes target what the open menu acts on in place of the element it was opened for: the same thing shown by a new element (a grid that rebuilt its cells). Nothing when no menu with a target is open.</summary>
+    public void Retarget(Element target) => Dropdowns.Retarget(target);
 
     public void Close() => Dropdowns.Close();
 }

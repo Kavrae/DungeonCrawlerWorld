@@ -49,7 +49,7 @@ public enum CellCompareState
 /// </summary>
 /// <summary>Not sealed -- ShopItemStackCell subclasses this for the shop-mode grid (sprite+name+price layout instead of icon+quantity-badge), reusing Configure/the base fill+hover/selected/eligible-glow drawing via its own DrawContent override. See that class's own doc comment.</summary>
 public class InventoryItemStackCell(ElementServices services, SpriteSheetService spriteSheetService)
-    : Element(services), IContentDragSource
+    : Element(services), IContentDragSource, IShowsItemStacks
 {
     private static readonly Color GroupBorderColor = Color.Black;
     private const float GroupBorderThickness = 2f;
@@ -117,6 +117,20 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
     /// <summary>Drives GridSquareRenderer's own gold inner+outer selected glow (see DrawStateOverlay, the same treatment HotbarContent's own ArmedSlot glow uses) -- true when this cell's StackInstanceId matches MapViewState.SelectedItemStackInstanceId, the item currently shown in the Item Details window. Set every frame by InventoryGridContent, not a rebuild-driven Configure parameter, since selection changes independently of any grid rebuild.</summary>
     public bool IsSelected { get; set; }
 
+    /// <summary>Whether the open context menu is about a stack this cell shows -- opened for this cell, another showing the same stack, or a hotbar slot bound to it -- as InventoryGridContent last read it from the menu; drawn over selection and hover.</summary>
+    public bool IsContextMenuTarget { get; set; }
+
+    /// <summary>A Merged Stack's member stacks (empty for a cell showing one stack), set by its grid after Configure.</summary>
+    private readonly List<uint> _memberStackInstanceIds = [];
+
+    /// <summary>The stacks a Merged Stack cell stands for; empty for a cell showing one stack (StackInstanceId).</summary>
+    public IReadOnlyList<uint> MemberStackInstanceIds => _memberStackInstanceIds;
+
+    public void AddMemberStack(uint stackInstanceId) => _memberStackInstanceIds.Add(stackInstanceId);
+
+    public bool ShowsStack(int entityId, uint stackInstanceId) =>
+        entityId == EntityId && (StackInstanceId == stackInstanceId || _memberStackInstanceIds.Contains(stackInstanceId));
+
     /// <summary>Item Details Comparison's own per-frame state, set alongside IsSelected, independent of shop mode -- Eligible glows green (this item shares the anchor's Activator type, so clicking it would add it), Ineligible grey-tints the icon the same way IsDisabled already does, None (comparison not armed) draws neither. Comparison and shop-trade eligibility (ShopTradeEligible below) are computed and rendered independently -- a shop-ineligible item that's still comparison-eligible shows both cues at once (greyed icon, green comparison glow).</summary>
     public CellCompareState CompareState { get; set; }
 
@@ -174,6 +188,7 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
         EntityId = entityId;
         ItemDefinitionId = itemDefinitionId;
         StackInstanceId = stackInstanceId;
+        _memberStackInstanceIds.Clear();
         IsDivergent = isDivergent;
         MergedStackBadgeVisible = mergedStackBadgeVisible;
         _sprite = spriteSheetService.Sprites.FirstOrNull(spriteName);
@@ -232,6 +247,13 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
         DrawGroupBorder(spriteBatch);
     }
 
+    /// <summary>The one state overlay the cell shows: a context menu's target over the selected item over the hovered one.</summary>
+    private GridSquareState StateOverlay =>
+        IsContextMenuTarget ? GridSquareState.ContextMenuTarget
+        : IsSelected ? GridSquareState.Selected
+        : IsPointerOver ? GridSquareState.Hovered
+        : GridSquareState.Normal;
+
     /// <summary>
     /// Shared grid-square base + state overlay + compare-eligible glow + sprite-or-glyph icon draw
     /// every cell in this family starts with -- ShopItemStackCell/TradeItemStackCell's own
@@ -244,7 +266,7 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
     protected bool DrawBaseAndIcon(SpriteEffectBatch spriteBatch, Rectangle bounds, Vector2 iconSize)
     {
         GridSquareRenderer.DrawBase(spriteBatch, bounds);
-        GridSquareRenderer.DrawStateOverlay(spriteBatch, bounds, IsSelected ? GridSquareState.Selected : IsPointerOver ? GridSquareState.Hovered : GridSquareState.Normal);
+        GridSquareRenderer.DrawStateOverlay(spriteBatch, bounds, StateOverlay);
 
         if (CompareState == CellCompareState.Eligible)
         {

@@ -2288,6 +2288,22 @@ comparison of two Wands of Fireball is about 886 px. Side-by-side comparison pan
     once and taken out of the layer and returned to the pool when the next menu opens -- never inside the click that
     closed it, which may still be running in one of its rows. Opening one rebuilds only it, never the menu whose row
     was chosen, so nothing waits a frame.
+- **The target a menu is open for.** A context menu may name the element its options act on
+  (`ContextMenuController.Open(..., target)`, `DropdownController.OpenAt`), and `IsOpenFor(element)` is true until the
+  menu closes, however it closes (an option, Escape, light dismiss, another list opening), or the element is closed
+  (its `PoolReturnCount` moved, so a pooled instance's next use is never the target). The target draws its highlight
+  from that -- never a flag set on open and cleared on close: an inventory cell reads it each update
+  (`InventoryGridContent.UpdateSelection` -> `InventoryItemStackCell.IsContextMenuTarget`), a hotbar slot as it draws
+  (`HotbarContent.DrawSlot`). The look is `GridSquareState.ContextMenuTarget` (`WindowPalette.ContextMenuTargetGlow`,
+  sky blue, inside and out), shown over selection (gold) and hover (white). A grid that rebuilds its cells while the
+  menu is open moves it to the new cell showing the same stack (`ContextMenuController.Retarget`), or highlights none
+  when the stack is gone.
+- **Everything showing the same stack highlights with it.** An element that shows item stacks is `IShowsItemStacks`
+  (`ShowsStack(entity, stack)`): an inventory cell its stack, or a Merged Stack every member
+  (`InventoryItemStackCell.MemberStackInstanceIds`), and a hotbar slot the player's stack it is bound to. A cell or slot
+  highlights when the menu was opened for it or its target shows a stack it shows (`ContextMenuItemStacks.IsAbout`,
+  through `ContextMenuController.Target`): a cell's menu lights the hotbar slots bound to its stack and that stack's
+  cell in every other grid (another tab), a slot's menu lights every cell of its stack.
 
 ### Inspection V2 / Player selection menu
 

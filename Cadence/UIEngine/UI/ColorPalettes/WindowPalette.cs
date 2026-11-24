@@ -82,6 +82,9 @@ public static class WindowPalette
     /// <summary>Generic "draw attention to this" gold glow -- an unread notification badge/folder, an armed slot, a drag-drop target slot inviting a drop. Deliberately its own field, not FocusAccentColor (also Gold) -- that one specifically means "this window is focused," a different signal that shouldn't move just because this one does, even though both happen to be Gold today.</summary>
     public static Color AttentionGlow = Color.Gold;
 
+    /// <summary>What an open context menu acts on (an item cell, a hotbar slot): distinct from the gold of selection and the white of hover.</summary>
+    public static Color ContextMenuTargetGlow = Color.DeepSkyBlue;
+
     /// <summary>Generic label text drawn on ControlBackground -- GridControl's count label, sort button, and toggle labels.</summary>
     public static Color ControlLabelTextColor = Color.White;
 

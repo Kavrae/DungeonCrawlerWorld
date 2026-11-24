@@ -4165,15 +4165,12 @@ from the UIEngine work, `IContentDropHandler`). The outcome may be "no change"; 
 
 ### Low Priority
 
-#### Highlight the item a context menu is open for
+#### Highlight the tile the map's context menu is open for
 
-While a right-click menu is open for a stack in an inventory grid (the player's, a loot window's, a shop's, a trade
-column's), that cell is highlighted, so it's clear which item the options act on -- the menu opens at the cursor, which
-can sit between cells or drift off the cell before an option is chosen. The highlight ends when the menu closes, however
-it closes (an option chosen, Escape, a press outside: light dismiss). Read it from the menu's own open state
-(`ContextMenuController`/`DropdownController`) rather than a flag each grid sets and clears, and draw it as the grid's
-existing selection or hover treatment does, distinct from both. The hotbar's slot menu and the map's tile menu (the
-tile under it: a ground ring, `MapGroundMark`) could follow the same rule.
+Inventory cells and hotbar slots are highlighted while their right-click menu is open (IMPLEMENTATION-NOTES "Context
+menu", "The target a menu is open for"). The map's tile menu could follow: the tile it was opened on marked with a
+ground ring (`MapGroundMark`) until the menu closes. A tile isn't an element, so it needs the menu's target widened
+beyond `Element` (or the map remembering the tile and asking `IsOpenFor(mapWindow)`).
 
 #### Map glyphs overflow their tiles when zoomed out
 

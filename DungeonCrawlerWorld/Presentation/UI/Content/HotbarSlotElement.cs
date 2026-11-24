@@ -13,7 +13,7 @@ namespace Presentation.UI.Content;
 /// told a tap from a drag); dragging picks up what the slot holds; a drop lands on HotbarSlotDropTarget.
 /// </remarks>
 public sealed class HotbarSlotElement(ElementServices services)
-    : Element(services), IContentDragSource, IContentDropTarget
+    : Element(services), IContentDragSource, IContentDropTarget, IShowsItemStacks
 {
     private HotbarContent _hotbar = null!;
     private HotbarSlotDropTarget _dropTarget = null!;
@@ -33,7 +33,9 @@ public sealed class HotbarSlotElement(ElementServices services)
         _dropTarget = new HotbarSlotDropTarget(hotbar, slot);
     }
 
-    public override void DrawContent(GameTime gameTime) => _hotbar.DrawSlot(Render.Batch, Slot, LocalContentRectangle);
+    public bool ShowsStack(int entityId, uint stackInstanceId) => _hotbar.SlotShowsStack(Slot, entityId, stackInstanceId);
+
+    public override void DrawContent(GameTime gameTime) => _hotbar.DrawSlot(Render.Batch, this, LocalContentRectangle);
 
     protected override bool OnContentClickAction(Point mousePosition)
     {

@@ -62,7 +62,7 @@ public sealed class HotbarController
         }
 
         options.Add(new DropdownOption("Unbind", null, true, () => Unbind(slot)));
-        _contextMenuController.Open(new Vector2(position.X, position.Y), options);
+        _contextMenuController.Open(new Vector2(position.X, position.Y), options, _hotbarContent.FindSlotElement(slot));
     }
 
     /// <summary>Clears slot, and the armed slot if it was this one -- whatever was armed from it stays armed, confirmed by a map click.</summary>

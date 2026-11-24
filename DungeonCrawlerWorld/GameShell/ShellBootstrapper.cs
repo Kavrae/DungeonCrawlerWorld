@@ -89,7 +89,7 @@ public static class ShellBootstrapper
         tooltipController.Initialize(uiEngine.ElementPoolService, uiLayers);
 
         var mapWindow = BuildBaseWindows(uiEngine, uiLayers);
-        var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(uiEngine, gameSession, screenSize, mapViewState, uiLayers, tooltipController, pointerState, worldSession.AdminTools.ComponentPropertyEdits);
+        var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(uiEngine, gameSession, screenSize, mapViewState, uiLayers, tooltipController, contextMenuController, pointerState, worldSession.AdminTools.ComponentPropertyEdits);
         mapWindow.OnInspectionOpened = () => inspectionWindow.SetDisplayMode(ElementDisplayMode.Fixed);
         var (notificationCenter, healthController) = BuildDynamicHudWindows(uiEngine, world, ecsContext.EventBus, contextMenuController, uiLayers);
         var itemWindows = new ItemWindowCoordinator(uiEngine.ElementPoolService, shellServices, world, mapWindow, actionTargetingController, views.InventoryView, catalogs.ItemCatalog, catalogs.LootboxCatalog, commands.LootCommands, commands.LootboxCommands, worldSession.ReservedEntityIds);
@@ -187,7 +187,7 @@ public static class ShellBootstrapper
 
     /// <summary>StaticHUD tier: the player health bar, action lock, status effects, InspectionWindow, the hotbar, and the quest trigger -- see UiInputController's own doc comment for what each of the four tiers means. questTriggerWindow is returned for Build, which wires its Clicked event once the DynamicHUD tier (needed by OpenQuestComposer) also exists. hotbarContent and inspectionWindow are returned too, for BuildHotbarController and Build's own OnInspectionOpened wiring respectively.</summary>
     private static (TextWindow QuestTriggerWindow, HotbarContent HotbarContent, InspectionWindow InspectionWindow) BuildStaticHudWindows(
-        UiEngineContext uiEngine, GameSession gameSession, Vector2 screenSize, MapViewState mapViewState, UiLayerStack layers, TooltipController tooltipController, PointerState pointerState, Engine.ECS.Properties.ComponentPropertyEdits componentPropertyEdits)
+        UiEngineContext uiEngine, GameSession gameSession, Vector2 screenSize, MapViewState mapViewState, UiLayerStack layers, TooltipController tooltipController, ContextMenuController contextMenuController, PointerState pointerState, Engine.ECS.Properties.ComponentPropertyEdits componentPropertyEdits)
     {
         var world = gameSession.World;
         var ecsContext = gameSession.EcsContext;
@@ -286,7 +286,7 @@ public static class ShellBootstrapper
         // player's currently-unlocked Expansion slot count, so it's constructed first and its own
         // Size read to size/position this window -- see HotbarContent.RefreshLayoutIfChanged for
         // how it keeps itself bottom-anchored/horizontally-centered as that Size changes later.
-        var hotbarContent = new HotbarContent(world, mapViewState, gameSession.Views.HotkeyBindingView, gameSession.Views.InventoryView, gameSession.Views.ActionStateView, gameSession.Commands.HotkeyBindingCommands, catalogs.ItemCatalog, uiEngine.FontService, uiEngine.SpriteSheetService, screenSize, simulationClock, gameSession.Views.EntityActions, EffectTextNames.Of(catalogs));
+        var hotbarContent = new HotbarContent(world, mapViewState, gameSession.Views.HotkeyBindingView, gameSession.Views.InventoryView, gameSession.Views.ActionStateView, gameSession.Commands.HotkeyBindingCommands, catalogs.ItemCatalog, uiEngine.FontService, uiEngine.SpriteSheetService, screenSize, simulationClock, gameSession.Views.EntityActions, EffectTextNames.Of(catalogs), contextMenuController);
         var hotbarSize = hotbarContent.Size;
         var hotbarWindow = uiEngine.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {

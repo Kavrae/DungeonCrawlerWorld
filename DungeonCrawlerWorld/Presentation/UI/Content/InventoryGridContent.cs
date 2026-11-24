@@ -374,7 +374,32 @@ public sealed class InventoryGridContent(
         foreach (var cell in _cells)
         {
             cell.IsSelected = cell.StackInstanceId is not null && cell.StackInstanceId == mapViewState.SelectedItemStackInstanceId;
+            cell.IsContextMenuTarget = IsContextMenuAbout(cell);
         }
+    }
+
+    /// <summary>Whether the open context menu was opened for cell, or for anything showing a stack cell shows: another grid's cell of it, a hotbar slot bound to it.</summary>
+    private bool IsContextMenuAbout(InventoryItemStackCell cell)
+    {
+        if (contextMenuController.IsOpenFor(cell))
+        {
+            return true;
+        }
+
+        if (cell.StackInstanceId is { } stackInstanceId)
+        {
+            return ContextMenuItemStacks.IsAbout(contextMenuController, cell.EntityId, stackInstanceId);
+        }
+
+        foreach (var memberStackInstanceId in cell.MemberStackInstanceIds)
+        {
+            if (ContextMenuItemStacks.IsAbout(contextMenuController, cell.EntityId, memberStackInstanceId))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -1064,8 +1089,28 @@ public sealed class InventoryGridContent(
         }
     }
 
+    /// <summary>What the cell the open context menu was opened for shows, or null when it was opened for none of this grid's cells.</summary>
+    private (int EntityId, Guid ItemDefinitionId, uint? StackInstanceId, bool MergedStack)? FindContextMenuTarget()
+    {
+        foreach (var cell in _cells)
+        {
+            if (contextMenuController.IsOpenFor(cell))
+            {
+                return ContextMenuTargetOf(cell);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>What a cell shows, as far as which menu it was opened for: a rebuilt cell showing the same is the same target.</summary>
+    private static (int EntityId, Guid ItemDefinitionId, uint? StackInstanceId, bool MergedStack) ContextMenuTargetOf(InventoryItemStackCell cell) =>
+        (cell.EntityId, cell.ItemDefinitionId, cell.StackInstanceId, cell.MergedStackBadgeVisible);
+
+    /// <remarks>A context menu open for one of the old cells moves to the new cell showing the same stack, so its highlight stays; with none, it highlights nothing.</remarks>
     private void RebuildCellsForCurrentContentSize()
     {
+        var contextMenuTarget = FindContextMenuTarget();
         elementPoolService.CloseAllChildren(_hostWindow);
         _cells.Clear();
         _cellItems.Clear();
@@ -1129,6 +1174,16 @@ public sealed class InventoryGridContent(
 
             cell.Configure(entityId, entry.Definition.Id, entry.StackInstanceId, entry.Definition.SpriteName, entry.Definition.Glyph, entry.Definition.GlyphColor, entry.Quantity, entry.IsDivergent, entry.MergedStackBadgeVisible, entry.Definition.CanTrade, ItemHotkeyBindingQueries.CanBind(entry.Definition), cellSize);
             cell.IsToggledOn = entry.StackInstanceId is not null && ToggleText.IsLit(entry.Definition);
+            if (entry.StackInstanceId is null)
+            {
+                AddMergedStackMembers(cell, entry.Definition.Id);
+            }
+
+            if (contextMenuTarget == ContextMenuTargetOf(cell))
+            {
+                contextMenuController.Retarget(cell);
+                contextMenuTarget = null;
+            }
 
             if (cell is ShopItemStackCell shopCell)
             {
@@ -1159,7 +1214,7 @@ public sealed class InventoryGridContent(
                 cell.OnRightClicked = position => contextMenuController.Open(new Vector2(position.X, position.Y),
                 [
                     new DropdownOption("Remove from trade", null, Enabled: cell.StackInstanceId is not null, () => RemoveFromTrade(cell, isTradeShopSide)),
-                ]);
+                ], cell);
             }
             else
             {
@@ -1168,7 +1223,7 @@ public sealed class InventoryGridContent(
                     var options = BuildItemContextMenu(cell);
                     if (options.Count > 0)
                     {
-                        contextMenuController.Open(new Vector2(position.X, position.Y), options);
+                        contextMenuController.Open(new Vector2(position.X, position.Y), options, cell);
                     }
                 };
             }
@@ -1329,6 +1384,18 @@ public sealed class InventoryGridContent(
         }
 
         _cellItemRanges.Add((start, _cellItems.Count - start));
+    }
+
+    /// <summary>Gives a Merged Stack cell of itemDefinitionId the stacks it stands for: every visible one of that item that doesn't keep a cell of its own.</summary>
+    private void AddMergedStackMembers(InventoryItemStackCell cell, Guid itemDefinitionId)
+    {
+        foreach (var (stack, definition) in _reusableVisibleEntries)
+        {
+            if (definition.Id == itemDefinitionId && !KeepsItsOwnCell((stack, definition)))
+            {
+                cell.AddMemberStack(stack.StackInstanceId);
+            }
+        }
     }
 
     /// <summary>Whether a stack keeps a cell of its own rather than joining a Merged Stack: a lit toggle item, or units cooling down until their own cooldown ends (ItemCooldownSystem merges them back then).</summary>
