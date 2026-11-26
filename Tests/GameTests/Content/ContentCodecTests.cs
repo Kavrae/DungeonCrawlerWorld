@@ -123,6 +123,18 @@ public sealed class ContentCodecTests
     }
 
     [TestMethod]
+    public void AnActionsCoreFlag_IsWrittenLastWhenSet_AndOmittedOtherwise()
+    {
+        var powerAttack = Build.Value.Context.Actions.Get(BuiltInActionIds.PowerAttack);
+        var fireball = Build.Value.Context.Actions.Get(BuiltInActionIds.Fireball);
+
+        Assert.IsTrue(powerAttack.Core);
+        Assert.EndsWith(",\"core\":true}", ActionLine(powerAttack));
+        Assert.IsFalse(fireball.Core);
+        Assert.DoesNotContain("\"core\"", ActionLine(fireball));
+    }
+
+    [TestMethod]
     public void AnUnknownDiscriminator_FailsOnlyItsRecord()
     {
         var actions = Build.Value.Context.Actions.Definitions.Take(2).ToList();

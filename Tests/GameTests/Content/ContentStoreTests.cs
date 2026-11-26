@@ -64,6 +64,7 @@ public sealed class ContentStoreTests
         var reordered = new ActionDefinition(action.Id, action.Name, action.SpriteName, action.Glyph, action.GlyphColor, ReversedTags(action.DeclaredTags), action.Effects, action.Activator, action.Description, action.Summary, action.Toggle)
         {
             ActivationEffects = action.ActivationEffects,
+            Core = action.Core,
         };
 
         var id = actions.DerivedIdOf(action);

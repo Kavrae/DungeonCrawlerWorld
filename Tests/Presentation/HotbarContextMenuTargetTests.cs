@@ -9,6 +9,7 @@ using Game.Views;
 using Microsoft.Xna.Framework;
 using Presentation.UI;
 using Presentation.UI.Content;
+using Presentation.UI.Menus;
 using Tests.UIEngine;
 using UIEngine.Rendering;
 using UIEngine.UI;
@@ -43,7 +44,7 @@ public sealed class HotbarContextMenuTargetTests
         var fontService = TestFonts.Shared;
         var pool = TestElementPoolServiceFactory.Create(fontService);
         var contextMenus = TestElementPoolServiceFactory.CreateContextMenuController(pool, new UiLayerStack());
-        var hotbar = new HotbarContent(world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, new ActionCatalog(), itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), itemCatalog, fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: new SimulationClock(), contextMenus: contextMenus);
+        var hotbar = new HotbarContent(world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, new ActionCatalog(), itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), itemCatalog, fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: new SimulationClock(), menuCommands: new MenuCommandCatalog(), contextMenus: contextMenus);
         return new Fixture(hotbar, contextMenus, pool, boundStack, otherStack);
     }
 

@@ -14,6 +14,7 @@ using Presentation.Input;
 using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Content;
+using Presentation.UI.Menus;
 using Tests.UIEngine;
 using UIEngine.Rendering;
 using UIEngine.UI;
@@ -71,7 +72,7 @@ public sealed class HotbarContentTests
 
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, new ItemCatalog()), TestActionStateViews.Over(componentManager), new HotkeyBindingCommands(componentManager, new ItemCatalog(), new EventBus()), new ItemCatalog(),
-            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), ScreenSize, simulationClock: new SimulationClock());
+            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), ScreenSize, simulationClock: new SimulationClock(), menuCommands: new MenuCommandCatalog());
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {

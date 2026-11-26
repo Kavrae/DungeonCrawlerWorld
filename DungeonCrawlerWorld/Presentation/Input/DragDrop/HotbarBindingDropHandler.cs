@@ -42,13 +42,13 @@ public sealed class HotbarBindingDropHandler(HotbarContent hotbarContent, IPlaye
 
         if (!IsFromNonPlayerInventory(drag) && IsSlotOfThisHotbar(dropTarget, out var destinationSlot))
         {
-            hotbarContent.ResolveDroppedBinding(drag.OriginSlot, destinationSlot, drag.ActionId, drag.ItemStackInstanceId);
+            hotbarContent.ResolveDroppedBinding(drag.OriginSlot, destinationSlot, drag.ActionId, drag.ItemStackInstanceId, drag.MenuCommandId);
             return true;
         }
 
         if (drag.OriginSlot is { } originSlot)
         {
-            hotbarContent.ResolveDroppedBinding(originSlot, destinationSlot: null, drag.ActionId, drag.ItemStackInstanceId);
+            hotbarContent.ResolveDroppedBinding(originSlot, destinationSlot: null, drag.ActionId, drag.ItemStackInstanceId, drag.MenuCommandId);
         }
 
         return false;

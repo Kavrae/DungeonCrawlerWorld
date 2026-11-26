@@ -13,6 +13,7 @@ using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
+using Presentation.Input;
 using Presentation.Input.DragDrop;
 using Presentation.UI.Chrome;
 using Presentation.UI.Inventory;
@@ -60,7 +61,8 @@ public sealed class InventoryGridContent(
     // (buy pricing, same direction the real shop grid uses), false for the player-side column
     // (sell pricing, same direction the real player grid uses). See IsThisGridTheShop's own use
     // below for every place this substitutes for the ordinary entity-id check.
-    bool? tradeGridIsShopSide = null) : IElementContent, IContentDropTarget, IItemShopPricingSource
+    bool? tradeGridIsShopSide = null,
+    GridViewSetting? viewSetting = null) : IElementContent, IContentDropTarget, IItemShopPricingSource
 {
     private readonly ItemCatalog _itemCatalog = inventoryServices.ItemCatalog;
     private readonly InventoryView _inventoryView = inventoryServices.InventoryView;
@@ -108,6 +110,7 @@ public sealed class InventoryGridContent(
 
     private Window _hostWindow = null!;
 
+    private readonly BoundHotkeyLabels _keyLabels = new(inventoryServices.HotkeyBindingView);
     private InventoryItemStackCell? _hoveredCell;
     private int _hoveredFrames;
 
@@ -257,6 +260,7 @@ public sealed class InventoryGridContent(
         }
 
         _isShopMode = mapViewState.OpenShopEntityId is not null;
+        _showsCards = ComputeShowsCards();
         RebuildCells();
         _versionWatcher.HasChanged(_inventoryView.GetVersion(entityId));
     }
@@ -264,8 +268,19 @@ public sealed class InventoryGridContent(
     /// <summary>Whichever cell type/size is currently active -- ShopItemStackCell at 4x width while a shop is open (see MapViewState.OpenShopEntityId), plain InventoryItemStackCell at CellSize otherwise. Read by both this grid's own layout (RebuildCells/ComputeColumnCount) and, transiently, by whatever triggered the mode change.</summary>
     private bool _isShopMode;
 
+    /// <summary>Whether this grid draws Card cells (ShopItemStackCell) rather than Icon ones -- ComputeShowsCards, read each update.</summary>
+    private bool _showsCards;
+
+    /// <summary>
+    /// The view this grid shows: while a shop is open, the shop's (GridViewSettings.Shop) for the shop's grid and the
+    /// player's beside it alike, since a trade compares one side with the other; otherwise its own window kind's
+    /// (viewSetting; Icon with none -- the loot window). A trade column is never a card.
+    /// </summary>
+    private bool ComputeShowsCards() =>
+        tradeGridIsShopSide is null && (_isShopMode ? inventoryServices.GridViews.Shop.ShowsCards : viewSetting?.ShowsCards == true);
+
     /// <summary>TradeItemStackCell stays a plain CellSize square -- unlike ShopItemStackCell, it has no name to make room for (see TradeItemStackCell's own doc comment), so it doesn't need the extra width.</summary>
-    private Vector2 ActiveCellSize => tradeGridIsShopSide is not null ? CellSize : _isShopMode ? new Vector2(CellSize.X * ShopCellWidthMultiplier, CellSize.Y) : CellSize;
+    private Vector2 ActiveCellSize => _showsCards ? new Vector2(CellSize.X * ShopCellWidthMultiplier, CellSize.Y) : CellSize;
 
     /// <summary>True when this grid represents the shop's own side of a buy/sell (BuyMultiplier pricing), false for the paying side (SellMultiplier pricing) -- ordinarily entityId == shopEntityId, but tradeGridIsShopSide overrides this for the trade window's own two columns, neither of which is ever the real shop entity. See tradeGridIsShopSide's own doc comment (constructor parameter list).</summary>
     private bool IsThisGridTheShop(int shopEntityId) => tradeGridIsShopSide ?? entityId == shopEntityId;
@@ -326,6 +341,12 @@ public sealed class InventoryGridContent(
         if (shopModeNow != _isShopMode)
         {
             _isShopMode = shopModeNow;
+            _showsCards = ComputeShowsCards();
+            RebuildCells();
+        }
+        else if (ComputeShowsCards() != _showsCards)
+        {
+            _showsCards = !_showsCards;
             RebuildCells();
         }
         else if (_versionWatcher.HasChanged(_inventoryView.GetVersion(entityId)))
@@ -368,13 +389,20 @@ public sealed class InventoryGridContent(
         return true;
     }
 
-    /// <summary>Direct per-cell field set every frame, no rebuild, since selection (driven by the Item Details window, opened/changed/closed independently of this grid) can change without this grid ever rebuilding.</summary>
+    /// <summary>Direct per-cell field set every frame, no rebuild, since selection (driven by the Item Details window, opened/changed/closed independently of this grid) and hotbar bindings can change without this grid ever rebuilding. Only the player's own grid shows bound keys.</summary>
     private void UpdateSelection()
     {
+        var showsBoundKeys = entityId == world.PlayerEntityId;
+        if (showsBoundKeys)
+        {
+            _keyLabels.Refresh(entityId);
+        }
+
         foreach (var cell in _cells)
         {
             cell.IsSelected = cell.StackInstanceId is not null && cell.StackInstanceId == mapViewState.SelectedItemStackInstanceId;
             cell.IsContextMenuTarget = IsContextMenuAbout(cell);
+            cell.KeyLabel = showsBoundKeys && cell.StackInstanceId is { } stackInstanceId ? _keyLabels.ForItemStack(stackInstanceId) : null;
         }
     }
 
@@ -1168,7 +1196,7 @@ public sealed class InventoryGridContent(
 
             InventoryItemStackCell cell = tradeGridIsShopSide is not null
                 ? elementPoolService.CreateElement<TradeItemStackCell>(_hostWindow, options)
-                : _isShopMode
+                : _showsCards
                     ? elementPoolService.CreateElement<ShopItemStackCell>(_hostWindow, options)
                     : elementPoolService.CreateElement<InventoryItemStackCell>(_hostWindow, options);
 
@@ -1188,8 +1216,15 @@ public sealed class InventoryGridContent(
             if (cell is ShopItemStackCell shopCell)
             {
                 shopCell.SetItemName(entry.Definition.Name);
-                shopCell.SetPrice(ComputeShopTotalPrice(entry.Definition, entry.Quantity), entry.Quantity);
-                shopCell.SetStockStatus(ComputeShopStockStatus(entry.Definition), tradeGridIsShopSide ?? mapViewState.OpenShopEntityId == entityId);
+                if (_isShopMode || tradeGridIsShopSide is not null)
+                {
+                    shopCell.SetPrice(ComputeShopTotalPrice(entry.Definition, entry.Quantity), entry.Quantity);
+                    shopCell.SetStockStatus(ComputeShopStockStatus(entry.Definition), tradeGridIsShopSide ?? mapViewState.OpenShopEntityId == entityId);
+                }
+                else
+                {
+                    shopCell.SetQuantityWithoutPrice(entry.Quantity);
+                }
             }
 
             cell.Clicked += OnCellClicked;

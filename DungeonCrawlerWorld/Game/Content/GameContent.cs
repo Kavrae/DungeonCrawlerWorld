@@ -372,6 +372,7 @@ public sealed class GameContent
         var spriteName = record.TryGetProperty(SpriteNameKey, out var spriteElement) && spriteElement.ValueKind == JsonValueKind.String ? spriteElement.GetString() : null;
         var canTrade = !record.TryGetProperty(CanTradeKey, out var tradeElement) || tradeElement.ValueKind != JsonValueKind.False;
         var hasContents = record.TryGetProperty(ContentsKey, out _);
+        var isCore = record.TryGetProperty(ActionContentCodecs.CoreKey, out var coreElement) && coreElement.ValueKind == JsonValueKind.True;
 
         var tags = new List<GameplayTag>();
         if (record.TryGetProperty(TagsKey, out var tagsElement) && tagsElement.ValueKind == JsonValueKind.Array)
@@ -385,7 +386,7 @@ public sealed class GameContent
             }
         }
 
-        return new DefinitionSummary(id, name, spriteName, GameplayTagSet.Create(tags.ToArray()), canTrade, hasContents);
+        return new DefinitionSummary(id, name, spriteName, GameplayTagSet.Create(tags.ToArray()), canTrade, hasContents, isCore);
     }
 
     private bool TryLoad<T>(ContentIndex<DefinitionSummary> index, LoadedTable<T> loaded, IContentReferences references, Guid id, out T value)
@@ -660,9 +661,9 @@ public sealed class GameContent
     }
 }
 
-/// <summary>What a whole-catalog question needs of one action or item, read from its line without decoding it: its Guid, name, sprite, declared tags, whether it trades and whether it holds contents.</summary>
-/// <remarks>Tags are the declared ones (an activator's implied tags aren't in the line). An action trades and holds nothing.</remarks>
-public sealed record DefinitionSummary(Guid Id, string Name, string? SpriteName, GameplayTagSet DeclaredTags, bool CanTrade, bool HasContents);
+/// <summary>What a whole-catalog question needs of one action or item, read from its line without decoding it: its Guid, name, sprite, declared tags, whether it trades, whether it holds contents and whether it is a Core action.</summary>
+/// <remarks>Tags are the declared ones (an activator's implied tags aren't in the line). An action trades and holds nothing; an item is never Core.</remarks>
+public sealed record DefinitionSummary(Guid Id, string Name, string? SpriteName, GameplayTagSet DeclaredTags, bool CanTrade, bool HasContents, bool IsCore);
 
 /// <summary>One table's count in one layer: the records the layer wins, how many are decoded so far, and how many of its lines failed and were left out.</summary>
 public readonly record struct ContentTableCounts(int Records, int Loaded, int LeftOut);

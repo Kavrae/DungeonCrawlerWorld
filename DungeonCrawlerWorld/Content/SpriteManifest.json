@@ -261,18 +261,6 @@
     ]
   },
   {
-    "Name": "Spell-Modate",
-    "Cells": [
-      {
-        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Esoteric.png",
-        "Column": 0,
-        "Row": 10,
-        "CellWidth": 16,
-        "CellHeight": 16
-      }
-    ]
-  },
-  {
     "Name": "Scroll",
     "Cells": [
       {
@@ -756,5 +744,17 @@
       }
     ],
     "Linking": "Cardinal"
+  },
+  {
+    "Name": "Spell-Moderate",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Esoteric.png",
+        "Column": 0,
+        "Row": 10,
+        "CellWidth": 16,
+        "CellHeight": 16
+      }
+    ]
   }
 ]

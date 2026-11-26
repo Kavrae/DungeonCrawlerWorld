@@ -19,7 +19,7 @@ public sealed class ContentTableCompactionTests
     public void CreateDirectory() => _directory = Directory.CreateTempSubdirectory().FullName;
 
     [TestCleanup]
-    public void DeleteDirectory() => Directory.Delete(_directory, recursive: true);
+    public void DeleteDirectory() => TestDirectory.TryDelete(_directory);
 
     private static string Line(Guid id, string name) => $"{{\"id\":\"{ContentGuid.Format(id)}\",\"n\":\"{name}\"}}";
 

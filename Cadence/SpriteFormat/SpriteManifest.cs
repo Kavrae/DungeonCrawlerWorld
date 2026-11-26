@@ -70,12 +70,45 @@ public sealed class SpriteManifest
         File.Exists(path) ? Deserialize(File.ReadAllText(path)) : [];
 
     /// <summary>Writes entries to path as the manifest file, indented, in the order given.</summary>
-    /// <remarks>Written to a temporary file beside it and then swapped in, so a crash part-way through never leaves a half-written manifest.</remarks>
+    /// <remarks>
+    /// Written to a temporary file beside it and then swapped in, so a crash part-way through never leaves a half-written manifest.
+    /// Windows refuses to replace a file while any other handle is open on it, and a virus scanner or the search indexer opens one
+    /// it has just seen written, so the swap is tried again for a short while before the refusal is passed on; the temporary file is
+    /// deleted when it never goes in.
+    /// </remarks>
     public static void Write(string path, IReadOnlyList<SpriteManifestEntry> entries)
     {
         var temporaryPath = path + ".writing";
         File.WriteAllText(temporaryPath, Serialize(entries));
-        File.Move(temporaryPath, path, overwrite: true);
+        try
+        {
+            ReplaceWithRetries(temporaryPath, path);
+        }
+        catch
+        {
+            File.Delete(temporaryPath);
+            throw;
+        }
+    }
+
+    private const int ReplaceAttempts = 10;
+
+    private const int ReplaceRetryDelayMilliseconds = 50;
+
+    private static void ReplaceWithRetries(string temporaryPath, string path)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                File.Move(temporaryPath, path, overwrite: true);
+                return;
+            }
+            catch (Exception exception) when (exception is UnauthorizedAccessException or IOException && attempt < ReplaceAttempts)
+            {
+                Thread.Sleep(ReplaceRetryDelayMilliseconds);
+            }
+        }
     }
 
     public static string Serialize(IReadOnlyList<SpriteManifestEntry> entries) => JsonSerializer.Serialize(entries, WriteOptions);

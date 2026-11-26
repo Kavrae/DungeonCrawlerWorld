@@ -136,6 +136,25 @@ public sealed class PressableContentTests
     }
 
     [TestMethod]
+    public void ClickingAnIconButtonAwayFromItsKeyLabel_KeepsTheKeyLabelOverTheIcon()
+    {
+        var harness = new ControlTestHarness();
+        var button = harness.Pool.CreateElement<Button>(null, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(100, 100), Size = new Vector2(60, 60), DisplayMode = ElementDisplayMode.Fixed },
+        });
+        var icon = button.SetIcon(null, "I");
+        var keyLabel = button.ShowKeyLabel("I");
+        button.Initialize();
+        harness.Layers.Add(UiLayer.DynamicHud, button);
+        harness.Frame();
+
+        harness.Click(new Point(button.Rectangle.Right - 5, button.Rectangle.Bottom - 5));
+
+        CollectionAssert.AreEqual(new Element[] { icon, keyLabel }, button.ChildElements.ToArray());
+    }
+
+    [TestMethod]
     public void ClickingAToggle_OnItsLabel_FlipsIt()
     {
         var harness = new ControlTestHarness();

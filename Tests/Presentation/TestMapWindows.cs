@@ -19,6 +19,7 @@ using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.FloatingText;
 using Presentation.UI.Inventory;
+using Presentation.UI.Menus;
 using Tests.UIEngine;
 using UIEngine.Input;
 using UIEngine.Rendering;
@@ -91,7 +92,7 @@ internal static class TestMapWindows
             new InventoryView(componentManager, resolvedItemCatalog),
             TestActionStateViews.Over(componentManager, resolvedActionCatalog, resolvedItemCatalog),
             TestActionStateViews.Targeting(componentManager, world, resolvedActionCatalog, resolvedItemCatalog, world.EntityKeys),
-            playerCommands, simulationClock: new SimulationClock(), dropPlacement: dropPlacement ?? new TestPlayerItemDrops());
+            playerCommands, simulationClock: new SimulationClock(), dropPlacement: dropPlacement ?? new TestPlayerItemDrops(), menuCommands: new MenuCommandCatalog());
         var playerMovement = new PlayerMovementController(playerCommands);
 
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());

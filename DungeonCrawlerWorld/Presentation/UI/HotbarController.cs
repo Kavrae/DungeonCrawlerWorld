@@ -45,15 +45,18 @@ public sealed class HotbarController
     /// <summary>A click on a slot -- a press and release on it that never became a drag -- is the same as pressing its key: it arms the slot, or confirms an armed one.</summary>
     public void OnSlotClicked(HotkeySlot slot) => _actionTargeting.HandleHotkeySlotPress(slot);
 
-    /// <summary>A bound slot's menu: what a press of the slot does (ActivationMenuLabels: Arm; on the armed slot Drink, Cast or Activate; Turn on/Turn off for a toggle), then, for an item, Drop (one unit), then Unbind.</summary>
+    /// <summary>A bound slot's menu: what a press of the slot does (ActivationMenuLabels: Arm; on the armed slot Drink, Cast or Activate; Turn on/Turn off for a toggle; a menu command's own label, MenuCommand.MenuOptionLabel), then, for an item, Drop (one unit), then Unbind.</summary>
     /// <remarks>An option the slot can't take right now (blocked, locked) is shown disabled, not left out.</remarks>
     public void OnSlotRightClicked(HotkeySlot slot, Point position)
     {
         var isUsable = _hotbarContent.IsSlotActive(slot);
         var isToggle = _hotbarContent.TryGetSlotToggle(slot, out var isOn);
+        var pressLabel = _hotbarContent.TryGetSlotMenuCommand(slot, out var command)
+            ? command.MenuOptionLabel
+            : ActivationMenuLabels.For(isToggle, isOn, isArmedHere: _mapViewState.ArmedSlot == slot, _mapViewState.TargetingMode, _hotbarContent.GetSlotTags(slot));
         List<DropdownOption> options =
         [
-            new DropdownOption(ActivationMenuLabels.For(isToggle, isOn, isArmedHere: _mapViewState.ArmedSlot == slot, _mapViewState.TargetingMode, _hotbarContent.GetSlotTags(slot)), null, isUsable, () => _actionTargeting.HandleHotkeySlotPress(slot)),
+            new DropdownOption(pressLabel, null, isUsable, () => _actionTargeting.HandleHotkeySlotPress(slot)),
         ];
 
         if (_actionTargeting.TryGetSlotDrop(slot, out var drop))
@@ -68,8 +71,7 @@ public sealed class HotbarController
     /// <summary>Clears slot, and the armed slot if it was this one -- whatever was armed from it stays armed, confirmed by a map click.</summary>
     private void Unbind(HotkeySlot slot)
     {
-        _hotbarContent.UnbindActionSlot(slot);
-        _hotbarContent.UnbindItemSlot(slot);
+        _hotbarContent.ClearSlot(slot);
         if (_mapViewState.ArmedSlot == slot)
         {
             _mapViewState.ArmedSlot = null;

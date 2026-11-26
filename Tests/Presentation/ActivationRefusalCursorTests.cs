@@ -16,6 +16,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.UI;
 using Presentation.UI.Content;
+using Presentation.UI.Menus;
 using Tests.UIEngine;
 using UIEngine.Input;
 using UIEngine.Rendering;
@@ -69,7 +70,7 @@ public sealed class ActivationRefusalCursorTests
         var windowService = TestElementPoolServiceFactory.Create(fontService);
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, actionCatalog, itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), itemCatalog,
-            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), ScreenSize, simulationClock: new SimulationClock());
+            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), ScreenSize, simulationClock: new SimulationClock(), menuCommands: new MenuCommandCatalog());
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
@@ -136,7 +137,7 @@ public sealed class ActivationRefusalCursorTests
         var itemCatalog = new ItemCatalog();
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, actionCatalog, itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), itemCatalog,
-            TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), ScreenSize, simulationClock: new SimulationClock());
+            TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), ScreenSize, simulationClock: new SimulationClock(), menuCommands: new MenuCommandCatalog());
 
         Assert.IsTrue(hotbar.TryGetSlotSummary(HotkeySlot.Slot1, out _, out _, out var usableBlocker));
         Assert.AreEqual(ActivationBlocker.None, usableBlocker);

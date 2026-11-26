@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Engine.Content;
 using Engine.Json;
+using Engine.Utilities;
 
 namespace Engine.Persistence;
 
@@ -75,7 +76,7 @@ public static class ContentTableCompaction
 
         var replacement = path + ".tmp";
         File.WriteAllBytes(replacement, compacted.ToArray());
-        File.Move(replacement, path, overwrite: true);
+        FileReplacement.Replace(replacement, path);
         return dropped;
     }
 

@@ -101,6 +101,15 @@ public sealed class ContentCatalogLoader : IActionDefinitionSource, IItemDefinit
         }
     }
 
+    /// <summary>Decodes and registers every Core action the content holds, so a crawler asking for one never decodes it on the spot. Main thread, after LoadSaveLayers.</summary>
+    /// <remarks>Every crawler has them whatever it is built from, so no blueprint's UsesActions names them and no plan prefetches them. They are few.</remarks>
+    public void LoadCoreActions()
+    {
+        var coreActionIds = _actions.CoreActionIds.ToList();
+        _content().Prefetch(coreActionIds, []);
+        Register(coreActionIds, []);
+    }
+
     /// <summary>Decodes actionIds and itemIds now, registering nothing. Safe from any thread.</summary>
     public void Prefetch(IEnumerable<Guid> actionIds, IEnumerable<Guid> itemIds) => _content().Prefetch(actionIds, itemIds);
 

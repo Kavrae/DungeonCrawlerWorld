@@ -1,10 +1,8 @@
 using Engine.Diagnostics;
 using Engine.Math;
 using Engine.Tiles;
-using FontStashSharp;
 using Game.Views;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;

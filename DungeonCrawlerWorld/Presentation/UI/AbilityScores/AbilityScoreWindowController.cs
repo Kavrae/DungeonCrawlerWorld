@@ -10,14 +10,9 @@ using UIEngine.UI.ColorPalettes;
 namespace Presentation.UI.AbilityScores;
 
 /// <summary>
-/// Owns the Ability Score button and the AbilityScoreWindow it opens/closes -- the sibling
-/// InventoryWindowController used to share a Folder with, before Folders were proven out
-/// (NotificationCenter's own summary folder) and removed from both (see
-/// InventoryWindowController's own doc comment). Depends on InventoryWindowController purely to
-/// read its PlayerInventoryWindow accessor -- this window cascades beside a live Inventory window
-/// when one's open, same as before the split -- and to keep sharing the same "inventory disabled"
-/// gate, which blocks Ability Score access too (a character's stats have always lived behind the
-/// same lock as their items).
+/// Owns the AbilityScoreWindow: opened and closed by the Ability Scores menu command (BuiltInMenuCommands). Depends on
+/// InventoryWindowController to cascade beside a live Inventory window, and shares its "inventory disabled" gate (a
+/// character's stats live behind the same lock as their items).
 /// </summary>
 public sealed class AbilityScoreWindowController(
     ElementPoolService elementPoolService,
@@ -31,41 +26,20 @@ public sealed class AbilityScoreWindowController(
     /// <summary>How much wider than the Inventory window this one opens: a third wider, so each column has room to read a source's name.</summary>
     private const float WidthRelativeToInventoryWindow = 4f / 3f;
 
-    private Button _button = null!;
     private WindowLifecycle<AbilityScoreWindow> _slot = null!;
     private UiLayerStack _layers = null!;
 
-    /// <summary>Lets a global keyboard hotkey (O -- a KeyPressInputHandler registered in ShellBootstrapper) reuse the same open/close behavior the button's own Clicked handler already has, without exposing _windowLifecycle itself.</summary>
+    /// <summary>Opens the Ability Scores window, or closes it if it is open -- the Ability Scores menu command.</summary>
     public void ToggleAbilityScoreWindow() => _slot.Toggle();
 
     public void Initialize(UiLayerStack layers)
     {
         _layers = layers;
         _slot = new WindowLifecycle<AbilityScoreWindow>(CreateAbilityScoreWindow, IsInventoryDisabled, layers, () => { });
-
-        _button = elementPoolService.CreateElement<Button>(null, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = AbilityScoreChrome.ButtonPosition, Size = AbilityScoreChrome.ButtonSize, DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
-        });
-        _button.SetIcon("AbilityScore", "S");
-        _button.ShowKeyLabel("O");
-        _button.Initialize();
-        _button.TooltipText = "Ability Scores";
-        _button.Clicked += _ => _slot.Toggle();
-        layers.Add(UiLayer.DynamicHud, _button);
-
-        // Same reasoning as InventoryWindowController's own button -- opening Ability Score
-        // while another menu window is already open is a normal part of the menu-mode workflow,
-        // not something it should block (see UiLayerStack.MarkMenuModeExempt's own doc comment).
-        layers.MarkMenuModeExempt(_button);
     }
 
-    /// <summary>Mirrors InventoryWindowController.Update's own reasoning -- Enabled false both grays the icon and excludes it from hit-testing.</summary>
-    public void Update() =>
-        _button.Enabled = !IsInventoryDisabled();
-
-    private bool IsInventoryDisabled() => inventoryView.IsInventoryDisabled(world.PlayerEntityId);
+    /// <summary>Whether the player's inventory is disabled, which closes off their ability scores too: the window won't open, and the Ability Scores menu command greys.</summary>
+    public bool IsInventoryDisabled() => inventoryView.IsInventoryDisabled(world.PlayerEntityId);
 
     /// <summary>
     /// Anchored to the live Inventory window's own Rectangle when it's open, so this follows
@@ -75,7 +49,7 @@ public sealed class AbilityScoreWindowController(
     /// </summary>
     private AbilityScoreWindow CreateAbilityScoreWindow()
     {
-        var inventoryWindowWidth = mapWindow.CurrentSize.X * InventoryChrome.WindowWidthFraction;
+        var inventoryWindowWidth = InventoryChrome.WindowWidth;
         var childSize = new Vector2(inventoryWindowWidth * WidthRelativeToInventoryWindow, InventoryChrome.WindowHeight);
 
         var relativePosition = inventory.PlayerInventoryWindow is { } playerWindow

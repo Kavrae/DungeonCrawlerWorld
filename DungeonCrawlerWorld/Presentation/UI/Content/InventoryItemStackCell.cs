@@ -55,7 +55,7 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
     private const float GroupBorderThickness = 2f;
 
     /// <summary>Item Details Comparison's own "eligible to add" glow -- distinct from WindowPalette.AttentionGlow (Gold, the grid-square selected/armed color); also the same color a comparison column's own advantage-highlighted lines use (ItemDetailsWindow.BetterColor), so "green" reads consistently as "good" everywhere this feature touches. Also reused as-is by ShopItemStackCell's own eligible-glow (shop trade eligibility, not comparison, but the same "green means you can" visual language).</summary>
-    protected static readonly Color CompareEligibleGlowColor = Color.LightGreen;
+    public static readonly Color CompareEligibleGlowColor = Color.LightGreen;
 
     /// <summary>protected, not private -- ShopItemStackCell's own DrawContent override reads these directly (its sprite/name/price layout replaces the icon+quantity-badge one below entirely, so it can't reuse this class's own DrawContent body, only its Configure-computed data).</summary>
     private SpriteView? _sprite;
@@ -70,6 +70,7 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
     protected FontStashTextMeasurer _iconGlyphFontMeasurer = null!;
     protected SpriteFontBase _quantityFont = null!;
     protected SpriteFontBase _badgeFont = null!;
+    private SpriteFontBase _keyLabelFont = null!;
 
     private const string MergedStackBadgeText = "+";
 
@@ -88,6 +89,9 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
 
     /// <summary>The exact stack this cell represents -- what UiInputController's content-drag path reads to bind a hotbar slot to one specific physical stack, not just "some stack of this item id" (see ItemHotkeyBindingComponent's own doc comment). Null for a merged group cell (see this class's own doc comment) -- there is no single stack to bind.</summary>
     public uint? StackInstanceId { get; private set; }
+
+    /// <summary>The key of the hotbar slot bound to this cell's stack, drawn over the icon as the slot draws it; null when no slot with a key holds it. Set every frame by InventoryGridContent, the player's grid only.</summary>
+    public string? KeyLabel { get; set; }
 
     /// <summary>True when this cell shows one single divergent stack on its own (not merged into a group) -- see this class's own doc comment.</summary>
     public bool IsDivergent { get; private set; }
@@ -188,6 +192,7 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
         EntityId = entityId;
         ItemDefinitionId = itemDefinitionId;
         StackInstanceId = stackInstanceId;
+        KeyLabel = null;
         _memberStackInstanceIds.Clear();
         IsDivergent = isDivergent;
         MergedStackBadgeVisible = mergedStackBadgeVisible;
@@ -206,6 +211,7 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
         _iconGlyphFontMeasurer = FontService.GetTextMeasurer(FontService.GetFont((int)(cellSize.Y * GameFontChrome.InventoryStackIconGlyphFontFraction)));
         _quantityFont = FontService.GetFont((int)(cellSize.Y * GameFontChrome.InventoryStackQuantityFontFraction));
         _badgeFont = FontService.GetFont((int)(cellSize.Y * GameFontChrome.InventoryStackBadgeFontFraction));
+        _keyLabelFont = FontService.GetFont((int)(cellSize.Y * GameFontChrome.HotbarOverlayFontFraction));
         _mergedStackBadgeWidth = _badgeFont.MeasureString(MergedStackBadgeText).X;
     }
 
@@ -238,6 +244,8 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
             ItemIconRenderer.DrawQuantityBadge(spriteBatch, _quantityFont, quantityText, _quantityBadgeTextSize.SizeOf(_quantityFont, quantityText), Vector2.Zero, ContentSize);
         }
 
+        DrawKeyLabel(spriteBatch, bounds);
+
         if (MergedStackBadgeVisible)
         {
             var badgePosition = new Vector2(ContentSize.X - _mergedStackBadgeWidth, 0);
@@ -245,6 +253,15 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
         }
 
         DrawGroupBorder(spriteBatch);
+    }
+
+    /// <summary>KeyLabel, if any, at the top-left of iconBounds -- the icon's square, as a hotbar slot draws its key.</summary>
+    protected void DrawKeyLabel(SpriteEffectBatch spriteBatch, Rectangle iconBounds)
+    {
+        if (KeyLabel is { } keyLabel)
+        {
+            HotkeyKeyLabel.Draw(spriteBatch, _keyLabelFont, keyLabel, iconBounds);
+        }
     }
 
     /// <summary>The one state overlay the cell shows: a context menu's target over the selected item over the hovered one.</summary>

@@ -12,6 +12,7 @@ using Game.Tags;
 using Game.Views;
 using Microsoft.Xna.Framework.Input;
 using Presentation.UI;
+using Presentation.UI.Menus;
 using UIEngine.UI;
 
 namespace Tests.Presentation;
@@ -85,7 +86,7 @@ public sealed class ActionTargetingControllerDodgeTests
             new InventoryView(componentManager, itemCatalog),
             TestActionStateViews.Over(componentManager, actionCatalog, itemCatalog),
             TestActionStateViews.Targeting(componentManager, world, actionCatalog, itemCatalog),
-            playerCommands, simulationClock: new SimulationClock(), dropPlacement: new TestPlayerItemDrops());
+            playerCommands, simulationClock: new SimulationClock(), dropPlacement: new TestPlayerItemDrops(), menuCommands: new MenuCommandCatalog());
 
         return (actionTargeting, mapViewState, componentManager, new PlayerMovementController(playerCommands), clock, eventBus);
     }

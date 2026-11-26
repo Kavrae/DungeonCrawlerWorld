@@ -1,4 +1,6 @@
 using Game.Modules.Inventory;
+using Presentation.UI.Content;
+using Presentation.UI.Details;
 using UIEngine.UI;
 using UIEngine.UI.Content;
 
@@ -10,7 +12,7 @@ namespace Presentation.UI.Inventory;
 /// the anchor -- and starts compare mode. While it lasts, hovering a comparable item (IsComparable, the rule the grids
 /// grey the rest out by) opens the comparison popup on it (a second ItemDetailsWindowController, kept just below the
 /// anchor), coloured against the anchor and the anchor against it; anything else only shows its name, under the refusal
-/// cursor (ItemComparisonInputHandler). When the popup closes the anchor goes back to plain. Stop Comparison, a right press, Escape or the
+/// cursor (ComparisonInputHandler). When the popup closes the anchor goes back to plain. Stop Comparison, a right press, Escape or the
 /// anchor closing ends compare mode and closes both windows.
 /// </remarks>
 public sealed class ItemComparisonController(
@@ -18,7 +20,7 @@ public sealed class ItemComparisonController(
     ItemDetailsWindowController itemDetails,
     ItemDetailsWindowController comparisonPopup,
     CursorTextContent cursorTextContent,
-    Func<int, Window?> windowHoldingItemsOf) : IItemDetailsPopup
+    Func<int, Window?> windowHoldingItemsOf) : IItemDetailsPopup, IComparisonMode
 {
     /// <summary>Shown at the cursor for as long as compare mode lasts.</summary>
     private const string CompareModeMessage = "Hover an item to compare";
@@ -31,6 +33,12 @@ public sealed class ItemComparisonController(
     /// <summary>Whether compare mode can compare target with the anchor: one stack (not a merged cell) with the same kind of activator (MapViewState.CompareRequiredActivatorType) -- the rule the grids grey the rest out by.</summary>
     public bool IsComparable(in ItemHoverTarget target) =>
         target.StackInstanceId is not null && mapViewState.CompareRequiredActivatorType is { } requiredType && target.Definition.Activator?.GetType() == requiredType;
+
+    /// <summary>Settable late-bound: called as compare mode starts, before anything is shown -- ends the other compare mode.</summary>
+    public Action? OnComparisonStarting { get; set; }
+
+    /// <summary>Over an item cell compare mode greyed out (InventoryGridContent sets CompareState by IsComparable's rule).</summary>
+    public bool IsRefusedAt(Element? hoveredElement) => IsComparing && hoveredElement is InventoryItemStackCell { CompareState: CellCompareState.Ineligible };
 
     public bool IsShowing(in ItemHoverTarget target) =>
         IsComparing ? itemDetails.IsShowing(target) || comparisonPopup.IsShowing(target) : itemDetails.IsShowing(target);
@@ -75,6 +83,7 @@ public sealed class ItemComparisonController(
             return;
         }
 
+        OnComparisonStarting?.Invoke();
         IsComparing = true;
         mapViewState.CompareRequiredActivatorType = activator.GetType();
         cursorTextContent.ShowPersistent(this, CompareModeMessage);

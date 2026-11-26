@@ -13,6 +13,7 @@ using Microsoft.Xna.Framework.Input;
 using Presentation.Input;
 using Presentation.MapRendering;
 using Presentation.UI.Inventory;
+using Presentation.UI.Menus;
 using System.Runtime.InteropServices;
 using UIEngine.UI;
 
@@ -38,7 +39,8 @@ public sealed class ActionTargetingController(
     TargetingView targetingView,
     PlayerCommands playerCommands,
     SimulationClock simulationClock,
-    IItemDropPlacement dropPlacement)
+    IItemDropPlacement dropPlacement,
+    MenuCommandCatalog menuCommands)
 {
 
     /// <summary>What TargetingView resolves into, copied out at once into _targetableTiles or _hoveredFootprint; reused so a resolve allocates nothing.</summary>
@@ -257,7 +259,7 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        RefreshTargetableTiles(targetingView.EffectiveSpec(world.PlayerEntityId, activator), playerTransform.Position, playerTransform.Size);
+        RefreshTargetableTiles(ArmedSpec(activator), playerTransform.Position, playerTransform.Size);
 
         if (mousePosition is not { } mouse || !camera.TryGetHoveredMapPosition(mouse, contentAbsolutePosition, out var hoveredColumnRow))
         {
@@ -287,6 +289,13 @@ public sealed class ActionTargetingController(
     /// <summary>Brings HoveredFootprint up to date for selection, resolving again only when something a keyed resolve depends on changed (HoveredFootprintKey).</summary>
     private void RefreshHoveredFootprint(IActionActivator activator, TargetSelection selection, Vector3Int casterPosition, Vector2Byte casterSize)
     {
+        if (IsArmedToggleActionPlacement())
+        {
+            _hoveredFootprintKey = null;
+            _hoveredFootprint.SetTo([selection.AimedTile]);
+            return;
+        }
+
         HoveredFootprintKey? key = activator.Targeting.Path == TargetPath.Placed && !selection.HasMarkedEntity
             ? new HoveredFootprintKey(activator.Targeting, selection, casterPosition, casterSize, targetingView.SightVersion)
             : null;
@@ -318,8 +327,8 @@ public sealed class ActionTargetingController(
         TryConfirmActivationAtTile(clickedTile);
     }
 
-    /// <summary>Activates the armed action or item as a map click on targetTile (see TrySelectActivationTarget); with nothing to land on it stays armed, exactly like clicking empty space doesn't clear an inspector selection either.</summary>
-    private void TryConfirmActivationAtTile(Vector3Int targetTile) => TryActivateArmed(targetTile, isMapClick: true, fallsBackFromUntargetableTile: true);
+    /// <summary>Activates the armed action or item as a map click on targetTile (see TrySelectActivationTarget); with nothing to land on it stays armed, exactly like clicking empty space doesn't clear an inspector selection either. Internal: TryConfirmActivation is this for the tile under the pointer.</summary>
+    internal void TryConfirmActivationAtTile(Vector3Int targetTile) => TryActivateArmed(targetTile, isMapClick: true, fallsBackFromUntargetableTile: true);
 
     /// <summary>
     /// Cancels an armed action/item (right-click tap or Escape), or, if nothing is armed, drops
@@ -348,17 +357,6 @@ public sealed class ActionTargetingController(
     }
 
     /// <summary>
-    /// One hotkey slot per HotkeySlotLayout.Entries entry -- an unbound slot's press is silently
-    /// a no-op (see HandleHotkeySlotPress), which is exactly what a slot with neither an
-    /// ActionHotkeyBindingComponent nor an ItemHotkeyBindingComponent instance already produces,
-    /// so no separate "is this slot enabled" check is needed here. A Shift-page Expansion slot
-    /// (RequiresShift) only fires while Shift is actually held -- e.g. plain "1" and Shift+"1" are
-    /// two different slots (Slot1 and Slot11) sharing the same physical key, distinguished only by
-    /// current Shift state, not by two separate keys. Public: MapWindow.OnHotkeysAction calls this
-    /// directly (alongside, and after, PlayerMovementController.HandleInput -- see that class's
-    /// own doc comment for the ordering).
-    /// </summary>
-    /// <summary>
     /// While Dodge is armed, a freshly-pressed WASD key confirms Dodge toward that direction, aimed at the tile on that
     /// side of the player's footprint (DodgeFootprint.SideTile), instead of moving normally -- adds the key to claimedKeys so PlayerMovementController.
     /// HandleInput skips it this frame (see that class's own doc comment on the claimed-keys
@@ -385,6 +383,13 @@ public sealed class ActionTargetingController(
         }
     }
 
+    /// <summary>
+    /// Presses the slot of every HotkeySlotLayout.Entries key pressed this frame, the bar's and the menu sidebar's alike --
+    /// an unbound slot's press is silently a no-op (see HandleHotkeySlotPress), so no separate "is this slot enabled"
+    /// check is needed here. A Shift-page Expansion slot (RequiresShift) only fires while Shift is actually held -- e.g.
+    /// plain "1" and Shift+"1" are two different slots (Slot1 and Slot11) sharing the same physical key. HotbarKeyInputHandler
+    /// calls this every frame, wherever focus is.
+    /// </summary>
     public void HandleHotbarHotkeys(KeyboardState keyboardState, KeyboardState previousKeyboardState)
     {
         var shiftHeld = keyboardState.IsKeyDown(Keys.LeftShift) || keyboardState.IsKeyDown(Keys.RightShift);
@@ -399,17 +404,24 @@ public sealed class ActionTargetingController(
     }
 
     /// <summary>
-    /// Looks up which of {action, item} (if either) is bound to the pressed slot and dispatches
-    /// to its own handler -- the two are mutually exclusive per slot (see IHotkeySlotBinding's
-    /// own doc comment), so checking action first and falling through to item is safe. Internal
+    /// Looks up which of {action, item, menu command} (if any) is bound to the pressed slot and dispatches
+    /// to its own handler -- the three are mutually exclusive per slot (see IHotkeySlotBinding's
+    /// own doc comment), so checking them in turn is safe; a menu command runs at once (MenuCommandCatalog.TryRun). Internal
     /// (not private): HandleHotbarHotkeys below is the keyboard entry point, but
     /// HotbarController.OnSlotTapped calls this exact same method for a mouse click on a hotbar
     /// slot, so a click behaves identically to pressing that slot's key.
     /// </summary>
+    /// <remarks>What a press does while the game is paused is what the slot holds, never which bar it sits on: a menu command runs, an action or item arms, and anything that would activate is refused (RefusesActivationWhilePaused).</remarks>
     internal void HandleHotkeySlotPress(HotkeySlot slot)
     {
         if (IsSlotLocked(slot))
         {
+            return;
+        }
+
+        if (hotkeyBindingView.TryGetBoundMenuCommand(world.PlayerEntityId, slot, out var menuCommandId))
+        {
+            menuCommands.TryRun(menuCommandId);
             return;
         }
 
@@ -429,6 +441,35 @@ public sealed class ActionTargetingController(
         {
             HandleItemSlotPress(slot, stackInstanceId);
         }
+    }
+
+    /// <summary>Writes an activation a press buffered (one made while its action or item was not ready yet) once it is ready -- every frame, whatever has focus, so a press made with the map unfocused is never stranded in the buffer. Nothing while the game is paused.</summary>
+    /// <remarks>The map's own movement keys flush the same buffer with the direction held (PlayerMovementController); a second flush in a frame finds nothing to do.</remarks>
+    public void FlushBufferedActivation()
+    {
+        if (!mapViewState.IsGamePaused)
+        {
+            playerCommands.Flush(default);
+        }
+    }
+
+    /// <summary>What the cursor says when something armed is confirmed, or a toggle switched, while the game is paused.</summary>
+    public const string DeniedWhilePausedText = "Denied while Paused";
+
+    /// <summary>Raised when an activation is refused because the game is paused -- what PausedActivationCursorText shows at the cursor.</summary>
+    public event Action? ActivationDeniedWhilePaused;
+
+    /// <summary>Whether an activation must be refused because the game is paused, saying so at the cursor when it is.</summary>
+    /// <remarks>Arming is allowed while paused, so the player can line up what to do next; only what would queue an activation is refused. Dropping items isn't an activation: an armed drop and a drag onto the map both land while paused.</remarks>
+    private bool RefusesActivationWhilePaused()
+    {
+        if (!mapViewState.IsGamePaused)
+        {
+            return false;
+        }
+
+        ActivationDeniedWhilePaused?.Invoke();
+        return true;
     }
 
     /// <summary>
@@ -455,22 +496,8 @@ public sealed class ActionTargetingController(
     /// </summary>
     private void HandleActionSlotPress(HotkeySlot slot, Guid actionId)
     {
-        if (actionStateView.GetActionBlocker(world.PlayerEntityId, actionId) != ActivationBlocker.None)
+        if (actionStateView.GetActionBlocker(world.PlayerEntityId, actionId) != ActivationBlocker.None || TryQueueToggleActionAtOnce(actionId))
         {
-            return;
-        }
-
-        // A toggle action applies to the player, so a press queues it at once on the player's own tile, in the player's
-        // mode, and no window closes -- except turning it on in Ground mode, which anchors what it places on the tile and
-        // so is armed first like any other action (ToggleArming).
-        if (actionStateView.TryGetEffectiveAction(world.PlayerEntityId, actionId, out var pressedAction) && pressedAction.Toggle is not null &&
-            !ToggleArming.ArmsFirst(actionStateView.IsActionToggledOn(world.PlayerEntityId, actionId), mapViewState.TargetingMode))
-        {
-            if (transformView.TryGetTransform(world.PlayerEntityId, out var playerTransform))
-            {
-                playerCommands.QueueAction(actionId, targetingView.Select(world.PlayerEntityId, pressedAction.Activator, mapViewState.TargetingMode, playerTransform.Position, simulationClock.CurrentFrame));
-            }
-
             return;
         }
 
@@ -505,7 +532,7 @@ public sealed class ActionTargetingController(
 
         if (item.Toggle is not null && item.Activator is { } toggleActivator && !ToggleArming.ArmsFirst(ToggleText.IsLit(item), mapViewState.TargetingMode))
         {
-            QueueToggleItem(stackInstanceId, toggleActivator, slot);
+            QueueToggleItem(stackInstanceId, toggleActivator, slot, ToggleText.IsLit(item));
             return;
         }
 
@@ -518,8 +545,43 @@ public sealed class ActionTargetingController(
         ArmItem(slot, stackInstanceId);
     }
 
+    /// <summary>Queues a toggle action at once on the player's own tile, in the player's mode, closing every closable window when it turns on -- true when actionId is such a toggle, whether or not the pause refused it.</summary>
+    /// <remarks>A toggle applies to the player, so there is no target to pick; turning one on in Ground mode anchors what it places on the tile, and so is armed first like any other action (ToggleArming), which this leaves to its caller.</remarks>
+    private bool TryQueueToggleActionAtOnce(Guid actionId)
+    {
+        if (!actionStateView.TryGetEffectiveAction(world.PlayerEntityId, actionId, out var action) || action.Toggle is null)
+        {
+            return false;
+        }
+
+        var isToggledOn = actionStateView.IsActionToggledOn(world.PlayerEntityId, actionId);
+        if (ToggleArming.ArmsFirst(isToggledOn, mapViewState.TargetingMode))
+        {
+            return false;
+        }
+
+        if (!RefusesActivationWhilePaused() && transformView.TryGetTransform(world.PlayerEntityId, out var playerTransform))
+        {
+            CloseWindowsIfTurningOn(isToggledOn);
+            playerCommands.QueueAction(actionId, targetingView.Select(world.PlayerEntityId, action.Activator, mapViewState.TargetingMode, playerTransform.Position, simulationClock.CurrentFrame));
+        }
+
+        return true;
+    }
+
+    /// <summary>Arms an action with no hotkey slot -- the Actions window's double-click and its menu's activation option. Exactly the first press of an unarmed hotbar slot holding it: inert while blocked, a toggle queued at once unless it arms first (TryQueueToggleActionAtOnce), anything else armed and confirmed only by a map click.</summary>
+    public void ArmActionFromWindow(Guid actionId)
+    {
+        if (actionStateView.GetActionBlocker(world.PlayerEntityId, actionId) != ActivationBlocker.None || TryQueueToggleActionAtOnce(actionId))
+        {
+            return;
+        }
+
+        ArmAction(null, actionId);
+    }
+
     /// <summary>Closes every closable window before arming -- the player is committing to targeting on the map, which a window left open (Inventory, Ability Scores, a future Magic Menu, ...) would otherwise block. See UiLayerStack.CloseAllClosableWindows's own doc comment for why this is a separate sweep from Escape-hold's.</summary>
-    private void ArmAction(HotkeySlot slot, Guid actionId)
+    private void ArmAction(HotkeySlot? slot, Guid actionId)
     {
         uiLayers.CloseAllClosableWindows(ClosableWindowSweep.ForInput);
 
@@ -577,20 +639,30 @@ public sealed class ActionTargetingController(
 
         if (item.Toggle is not null && item.Activator is { } toggleActivator && !ToggleArming.ArmsFirst(ToggleText.IsLit(item), mapViewState.TargetingMode))
         {
-            QueueToggleItem(stackInstanceId, toggleActivator, activatedFromSlot: null);
+            QueueToggleItem(stackInstanceId, toggleActivator, activatedFromSlot: null, ToggleText.IsLit(item));
             return;
         }
 
         ArmItem(null, stackInstanceId);
     }
 
-    /// <summary>Queues a toggle item's activation on the player's own tile, in the player's targeting mode, with nothing armed and no window closed -- exactly as a toggle action is queued (HandleActionSlotPress).</summary>
-    /// <remarks>A toggle applies to its holder, so there is no target to pick and nothing on the map to make room for. Whatever was armed stays armed.</remarks>
-    private void QueueToggleItem(uint stackInstanceId, IActionActivator activator, HotkeySlot? activatedFromSlot)
+    /// <summary>Queues a toggle item's activation on the player's own tile, in the player's targeting mode, with nothing armed -- exactly as a toggle action is queued (TryQueueToggleActionAtOnce), closing every closable window when it turns on.</summary>
+    /// <remarks>A toggle applies to its holder, so there is no target to pick. Whatever was armed stays armed.</remarks>
+    private void QueueToggleItem(uint stackInstanceId, IActionActivator activator, HotkeySlot? activatedFromSlot, bool isToggledOn)
     {
-        if (transformView.TryGetTransform(world.PlayerEntityId, out var transform))
+        if (!RefusesActivationWhilePaused() && transformView.TryGetTransform(world.PlayerEntityId, out var transform))
         {
+            CloseWindowsIfTurningOn(isToggledOn);
             playerCommands.QueueItemActivation(stackInstanceId, targetingView.Select(world.PlayerEntityId, activator, mapViewState.TargetingMode, transform.Position, simulationClock.CurrentFrame), activatedFromSlot);
+        }
+    }
+
+    /// <summary>Closes every closable window when a toggle is turning on: switching one on is committing to play, as arming is (ArmAction). Turning one off leaves the windows open.</summary>
+    private void CloseWindowsIfTurningOn(bool isToggledOn)
+    {
+        if (!isToggledOn)
+        {
+            uiLayers.CloseAllClosableWindows(ClosableWindowSweep.ForInput);
         }
     }
 
@@ -712,8 +784,18 @@ public sealed class ActionTargetingController(
         return false;
     }
 
+    /// <summary>The armed activator's targeting as aimed now: the player's effective spec (TargetingView.EffectiveSpec), except that a toggle action being turned on in Ground mode is aimed as a drop is (TargetingSpec.FootprintOrAdjacent) -- the tile it places what it places on.</summary>
+    private TargetingSpec ArmedSpec(IActionActivator activator) =>
+        IsArmedToggleActionPlacement() ? TargetingSpec.FootprintOrAdjacent : targetingView.EffectiveSpec(world.PlayerEntityId, activator);
+
+    /// <summary>Whether the armed thing is a toggle action being turned on in Ground mode: it puts what it places (an aura anchored) on a tile the player picks, the player's own or one beside it, as a toggle item turned on in Ground mode is dropped (TryGetArmedToggleDrop).</summary>
+    private bool IsArmedToggleActionPlacement() =>
+        mapViewState.ArmedActionId is { } actionId && mapViewState.TargetingMode == TargetingMode.Ground &&
+        actionStateView.TryGetEffectiveAction(world.PlayerEntityId, actionId, out var action) && action.Toggle is not null &&
+        !actionStateView.IsActionToggledOn(world.PlayerEntityId, actionId);
+
     /// <summary>
-    /// The armed activator's targeting as it applies to the player now (TargetingView.EffectiveSpec:
+    /// The armed activator's targeting as it applies to the player now (ArmedSpec: TargetingView.EffectiveSpec,
     /// a scroll's Range/AreaSize scaled by the player's Intelligence in Game, the same scaling the
     /// activation is resolved with). The single chokepoint every arm-highlight path reads through
     /// (ArmItem calls this too, after setting ArmedItemStackInstanceId, rather than taking a
@@ -723,7 +805,7 @@ public sealed class ActionTargetingController(
     {
         if (TryGetArmedActivator(out var activator))
         {
-            targeting = targetingView.EffectiveSpec(world.PlayerEntityId, activator);
+            targeting = ArmedSpec(activator);
             return true;
         }
 
@@ -787,7 +869,7 @@ public sealed class ActionTargetingController(
     private void TryActivateArmedFromHotkey() => TryActivateArmed(mapViewState.HoveredTile, isMapClick: false, fallsBackFromUntargetableTile: true);
 
     /// <summary>Queues and disarms whatever is armed, aimed by TrySelectActivationTarget; nothing to land on, or a confirm that would be refused, leaves it armed with nothing paid.</summary>
-    /// <remarks>An armed drop is put down on cursorTile itself (IItemDropPlacement.TryDropAt), by the same rule a drag onto that tile follows -- into a container there, or onto the ground -- and stays armed if it can't go there.</remarks>
+    /// <remarks>An armed drop is put down on cursorTile itself (IItemDropPlacement.TryDropAt), by the same rule a drag onto that tile follows -- into a container there, or onto the ground -- and stays armed if it can't go there. A drop lands while the game is paused, as a drag does; an activation doesn't.</remarks>
     private void TryActivateArmed(Vector3Int? cursorTile, bool isMapClick, bool fallsBackFromUntargetableTile)
     {
         if (mapViewState.ArmedDrop is { } drop)
@@ -797,6 +879,11 @@ public sealed class ActionTargetingController(
                 Disarm();
             }
 
+            return;
+        }
+
+        if (RefusesActivationWhilePaused())
+        {
             return;
         }
 
@@ -848,16 +935,20 @@ public sealed class ActionTargetingController(
 
         var playerPosition = playerTransform.Position;
         var now = simulationClock.CurrentFrame;
-        var targeting = targetingView.EffectiveSpec(playerEntityId, activator);
+        var targeting = ArmedSpec(activator);
+
+        // The mode is the player's as it is now, whenever it was armed -- a switch while armed changes what the confirm does,
+        // as it changes the highlight -- unless the targeting offers only Ground.
+        var mode = targeting.Modes == TargetingModes.GroundOnly ? TargetingMode.Ground : mapViewState.TargetingMode;
 
         if (TargetShapeResolver.IsAimIndependent(targeting.Shape, targeting.Anchor))
         {
             aimedTile = playerPosition;
-            selection = targetingView.Select(playerEntityId, activator, TargetingMode.Ground, playerPosition, now);
+            selection = targetingView.Select(playerEntityId, activator, mode, playerPosition, now);
             return true;
         }
 
-        var isSelfTargeting = IsArmedSelfTargeting();
+        var isSelfTargeting = IsArmedSelfTargeting() && !IsArmedToggleActionPlacement();
         if (isSelfTargeting && !isMapClick)
         {
             aimedTile = playerPosition;
@@ -867,7 +958,6 @@ public sealed class ActionTargetingController(
 
         RefreshTargetableTiles(targeting, playerPosition, playerTransform.Size);
         var cursorTileInReach = cursorTile is { } tile && _aimableTiles.Contains(tile) ? cursorTile : null;
-        var mode = targeting.Modes == TargetingModes.GroundOnly ? TargetingMode.Ground : mapViewState.TargetingMode;
 
         if (mode == TargetingMode.Ground)
         {

@@ -138,6 +138,9 @@ public sealed class UiInputController
 
     private Element? _focusedElement;
 
+    /// <summary>_focusedElement's PoolReturnCount when it gained focus -- a different count means it went back to its pool since, and may now be another widget.</summary>
+    private int _focusedElementPoolReturnCount;
+
     /// <summary>
     /// The container (a parent's ChildElements, or the DynamicHUD tier) the currently focused
     /// element belonged to at the moment it gained focus -- see GetSiblingContainer and
@@ -370,6 +373,7 @@ public sealed class UiInputController
         CurrentMousePosition = new Point(mouseState.X, mouseState.Y);
 
         _frameCounter++;
+        ReleaseFocusIfPooled();
 
         var dropdownTookKey = RouteNavigationKeysToOpenDropdown(keyboardState);
         if (!dropdownTookKey)
@@ -1428,21 +1432,32 @@ public sealed class UiInputController
         return ElementInteraction.NotHit;
     }
 
-    /// <summary>
-    /// Raises element within its own parent's children (no-op if it has no parent -- see
-    /// Element.RaiseToFront), then raises whichever top-level ancestor contains it within its
-    /// own tier (baseElements/staticHudElements/dynamicHudElements/userElements), so the whole
-    /// subtree ends up drawn/hit-tested on top of its siblings at every level. Also marks that
-    /// root ancestor as the active window (see SetActiveWindow) -- this runs on every click that
-    /// hits anything at all, regardless of whether SetFocus goes on to change keyboard focus.
-    /// </summary>
+    /// <summary>Raises the nearest window holding element within its parent's children, and element's root within its layer; marks that root the active window.</summary>
+    /// <remarks>
+    /// Only a window is raised, never what was hit inside it: a control's content is composed in order (a button's icon
+    /// under its key label), so raising a hit child would draw it over what was meant to cover it. Runs on every click
+    /// that hits anything at all, whether or not SetFocus goes on to change keyboard focus.
+    /// </remarks>
     private void RaiseToFront(Element element)
     {
-        element.RaiseToFront();
+        NearestWindowOf(element)?.RaiseToFront();
 
         var rootAncestor = element.RootElement;
         _layers.RaiseToFront(rootAncestor);
         SetActiveWindow(rootAncestor);
+    }
+
+    private static Window? NearestWindowOf(Element element)
+    {
+        for (Element? candidate = element; candidate is not null; candidate = candidate.ParentElement)
+        {
+            if (candidate is Window window)
+            {
+                return window;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -1504,7 +1519,7 @@ public sealed class UiInputController
     {
         var target = newElement?.NextFocusableDescendant(null) ?? newElement ?? _defaultFocusElement;
 
-        if (_focusedElement == target)
+        if (_focusedElement == target && !IsFocusedElementPooledSince())
         {
             return;
         }
@@ -1529,6 +1544,7 @@ public sealed class UiInputController
         _focusedElement?.SetFocused(false);
 
         _focusedElement = target;
+        _focusedElementPoolReturnCount = target?.PoolReturnCount ?? 0;
         _focusedElementSiblings = target is not null
             ? GetSiblingContainer(target)
             : null;
@@ -1563,6 +1579,35 @@ public sealed class UiInputController
     }
 
     private void OnFocusedElementRequestedFocus(Element requestedElement) => SetFocus(requestedElement);
+
+    /// <summary>Whether the focused element has gone back to its pool since it gained focus.</summary>
+    private bool IsFocusedElementPooledSince() => _focusedElement is { } focused && focused.PoolReturnCount != _focusedElementPoolReturnCount;
+
+    /// <summary>Lets go of a focused element that went back to its pool -- a grid's search box torn down with its tab -- and falls back to the default focus.</summary>
+    /// <remarks>
+    /// Returning to the pool closes an element without raising Closed and clears every subscription on it, this
+    /// controller's included, so nothing else would tell focus it had gone: it would stay on an instance the pool may
+    /// already have handed out as another widget, which then reads as focused here but not to itself. Its siblings went
+    /// with it, so focus goes to the default rather than to one of them.
+    /// </remarks>
+    private void ReleaseFocusIfPooled()
+    {
+        if (!IsFocusedElementPooledSince())
+        {
+            return;
+        }
+
+        var wasTextBox = _focusedElement is TextBox;
+        UnsubscribeFocusTracking();
+        _focusedElement = null;
+        _focusedElementSiblings = null;
+        if (wasTextBox)
+        {
+            StopTextInput();
+        }
+
+        SetFocus(null);
+    }
 
     /// <summary>
     /// Fires for the focused element itself closing, or any of its ancestors (see

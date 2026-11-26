@@ -30,5 +30,8 @@ public sealed record ActionDefinition(
 {
     public override GameplayTagSet DeclaredTags { get; } = Tags;
 
+    /// <summary>Whether every crawler can use this action, whatever its race and class (EntityActions resolves it last, after every grant).</summary>
+    public bool Core { get; init; }
+
     public override IActionActivator? ActivatorOrNone => Activator;
 }

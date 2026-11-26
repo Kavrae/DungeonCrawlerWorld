@@ -58,27 +58,19 @@ public sealed class ItemDetailsWindow(
     ActionStateView actionStateView,
     ActivationPreviews activationPreviews,
     IPlayerQuery playerQuery)
-    : Window(services)
+    : Window(services), IDetailsPopupWindow
 {
     /// <summary>The stack id Configure is given for an item shown from its definition alone (a loot box reward whose stack is gone) -- there's no stack to compare, so Compare does nothing.</summary>
     public const uint NoStackInstanceId = 0;
 
     private static readonly Color BodyTextColor = ActivatableDetailsSections.BodyTextColor;
 
-    /// <summary>Item Details Comparison's own per-line coloring -- Better doubles as the "this item has a stat at least one other compared item doesn't" exclusive marker too (see ResolveLineStyle's own doc comment), so the same color means "advantage" either way.</summary>
-    private static readonly Color BetterColor = ActivatableDetailsSections.BuffColor;
-
-    private static readonly Color WorseColor = ActivatableDetailsSections.DebuffColor;
-
     private readonly ActivatableDetailsSections _sections = new(services.ElementPoolService, services.FontService, actionCatalog, names);
 
     private ItemDefinition? _definition;
     private float _contentWidth;
     private IReadOnlyList<ItemDefinition> _comparedAgainst = [];
-    private readonly List<IReadOnlyList<ItemComparisonStat>> _otherItemsStats = [];
-
-    /// <summary>Each compared item's targeting as the player would use it, at the same index as _comparedAgainst; null for one with no activator.</summary>
-    private readonly List<TargetingSpec?> _otherItemsTargeting = [];
+    private readonly ComparisonLineStyles _comparisonStyles = new(actionCatalog, names);
     private bool _childrenReady;
     private int _currentEntityId;
     private uint _currentStackInstanceId;
@@ -88,12 +80,6 @@ public sealed class ItemDetailsWindow(
     private IReadOnlyList<TooltipRow>? _displayedShopPricingRows;
     private bool _displayedComparing;
     private DetailsMode _displayedMode;
-
-    /// <summary>Height of the Compare and Stop Comparison buttons.</summary>
-    private const float ButtonHeight = 20f;
-
-    /// <summary>Space beside a button's label, each side, and between two buttons.</summary>
-    private const float ButtonGap = 6f;
 
     /// <summary>Settable late-bound: the "Compare" button's action, with the item shown -- set only on the anchor pane (ItemDetailsWindowController); a comparison column has no Compare button.</summary>
     public Action<int, uint>? OnCompareRequested { get; set; }
@@ -132,7 +118,7 @@ public sealed class ItemDetailsWindow(
     /// row is built against -- see this class's own doc comment for why it can't just be read
     /// from this window's own ContentSize the way a Fixed-mode host safely could. comparedAgainst
     /// is empty for plain single-item viewing; Item Details Comparison passes every *other*
-    /// compared item's own definition here (see ResolveLineStyle) so this item's own lines color
+    /// compared item's own definition here (see ComparisonLineStyles.Resolve) so this item's own lines color
     /// symmetrically against them. entityId/stackInstanceId are this exact stack's own identity --
     /// so the Compare button (if this instance has one) invokes OnCompareRequested with the
     /// item currently shown, and the blocker and shop pricing are read for it. shopPricing is the
@@ -229,13 +215,10 @@ public sealed class ItemDetailsWindow(
         var mode = _displayedMode;
         var preview = PreviewOf(_definition);
 
-        _otherItemsStats.Clear();
-        _otherItemsTargeting.Clear();
+        _comparisonStyles.Clear();
         foreach (var other in _comparedAgainst)
         {
-            var otherPreview = PreviewOf(other);
-            _otherItemsStats.Add(ItemComparisonStatExtraction.Extract(other, actionCatalog, names, otherPreview));
-            _otherItemsTargeting.Add(otherPreview?.Targeting ?? other.Activator?.Targeting);
+            _comparisonStyles.Add(other, PreviewOf(other));
         }
 
         // _contentWidth is the target OUTER width this window should end up matching (see this
@@ -245,7 +228,7 @@ public sealed class ItemDetailsWindow(
         // the caller actually asked for.
         var width = _contentWidth - ContentPadding.X * 2;
 
-        BuildNameRowWithButtons(width, ComputeButtons());
+        _sections.BuildNameRowWithButtons(this, _definition.SpriteName, _definition.Glyph, _definition.GlyphColor, _definition.Name, width, ComputeButtons());
 
         if (ToggleText.IsLit(_definition))
         {
@@ -264,19 +247,19 @@ public sealed class ItemDetailsWindow(
             _sections.BuildFixedTextLine(this, width, $"Cooling down: {_displayedCooldownSeconds}s", ActivationBlockerText.ReasonColor);
         }
 
-        _sections.BuildEffectsSection(this, _definition, mode, width, ResolveLineStyle, preview, activationPreviews.PreviewAura);
+        _sections.BuildEffectsSection(this, _definition, mode, width, _comparisonStyles.Resolve, preview, activationPreviews.PreviewAura);
 
         if (ToggleText.IsToggleItem(_definition))
         {
             _sections.BuildFixedTextLine(this, width, ToggleText.ItemPlacement, ActivatableDetailsSections.BodyTextColor);
         }
 
-        _sections.BuildCostSection(this, _definition, width);
+        _sections.BuildCostSection(this, _definition, width, _comparisonStyles.Resolve, preview);
 
         if (_definition.Activator is { } activator)
         {
-            _sections.BuildActivationSection(this, activator, mode, width, ResolveLineStyle, ComputeShapeHighlight, preview, isToggle: _definition.Toggle is not null);
-            _sections.BuildResourcesSection(this, activator, width, ResolveLineStyle);
+            _sections.BuildActivationSection(this, activator, mode, width, _comparisonStyles.Resolve, _comparisonStyles.ShapeHighlight, preview, isToggle: _definition.Toggle is not null);
+            _sections.BuildResourcesSection(this, activator, width, _comparisonStyles.Resolve);
         }
 
         if (_definition.Contents is { } contents)
@@ -347,39 +330,6 @@ public sealed class ItemDetailsWindow(
         return buttons;
     }
 
-    /// <summary>The name row, with buttons right-aligned at its top, the name shortened to leave them room.</summary>
-    private void BuildNameRowWithButtons(float width, List<(string Label, Action OnClicked)> buttons)
-    {
-        var buttonWidths = new float[buttons.Count];
-        var buttonsWidth = 0f;
-        for (var index = 0; index < buttons.Count; index++)
-        {
-            buttonWidths[index] = _sections.BodyFont.MeasureString(buttons[index].Label).X + ButtonGap * 2;
-            buttonsWidth += buttonWidths[index] + ButtonGap;
-        }
-
-        var row = _sections.BuildNameRow(this, _definition!, width, reservedRightWidth: buttonsWidth);
-
-        var buttonX = width - ContentPadding.X * 2;
-        for (var index = buttons.Count - 1; index >= 0; index--)
-        {
-            buttonX -= buttonWidths[index];
-            var (label, onClicked) = buttons[index];
-            var button = ElementPoolService.CreateElement<Button>(row, new ElementOptions
-            {
-                Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-                Layout = new ElementLayoutOptions { RelativePosition = new Vector2(buttonX, 0), Size = new Vector2(buttonWidths[index], ButtonHeight), DisplayMode = ElementDisplayMode.Fixed },
-                Chrome = new ElementChromeOptions { ShowBorder = true },
-                Content = new ElementContentOptions { ContentColor = WindowPalette.ControlBackground },
-                Text = new TextOptions { TextColor = WindowPalette.ControlLabelTextColor },
-            });
-            button.SetText(label);
-            button.Clicked += _ => onClicked();
-            row.AddChild(button);
-            buttonX -= ButtonGap;
-        }
-    }
-
     /// <summary>"Shop", then the open shop's stock-band table and the receipt for this stack (see InventoryGridContent.ComputeShopRows).</summary>
     private void BuildShopPricingSection(IReadOnlyList<TooltipRow> rows, float width)
     {
@@ -394,126 +344,5 @@ public sealed class ItemDetailsWindow(
         });
         table.Configure(rows);
         AddChild(table);
-    }
-
-    /// <summary>
-    /// Null (plain grid, no highlight) unless every compared item -- anchor included -- shares
-    /// this exact same Targeting.Shape ("do not compare different shapes for color-coding," even
-    /// though eligibility only gates on matching Activator type, not Shape). When shapes do match,
-    /// a tile highlights green if it's present in this item's own offsets but absent from at
-    /// least one other compared item's own offsets -- the same "green if not every other compared
-    /// item has it" rule ResolveLineStyle already applies per stat line, just at tile granularity
-    /// instead. No red case exists here -- a tile absent from this item's own grid was never drawn
-    /// in the first place, so there is nothing to color.
-    /// </summary>
-    private HashSet<Point>? ComputeShapeHighlight(TargetingSpec targeting, IReadOnlyList<Point> offsets)
-    {
-        if (_comparedAgainst.Count == 0)
-        {
-            return null;
-        }
-
-        var otherOffsetSets = new List<HashSet<Point>>(_otherItemsTargeting.Count);
-        foreach (var otherTargeting in _otherItemsTargeting)
-        {
-            if (otherTargeting is null || otherTargeting.Shape != targeting.Shape)
-            {
-                return null;
-            }
-
-            otherOffsetSets.Add(new HashSet<Point>(TargetShapePreviewGeometry.ComputeOffsets(otherTargeting)));
-        }
-
-        var highlighted = new HashSet<Point>();
-        foreach (var offset in offsets)
-        {
-            foreach (var otherOffsets in otherOffsetSets)
-            {
-                if (!otherOffsets.Contains(offset))
-                {
-                    highlighted.Add(offset);
-                    break;
-                }
-            }
-        }
-
-        return highlighted;
-    }
-
-    /// <summary>
-    /// Normal (no comparison active, or this exact Key isn't shared/rankable). Better/Green when
-    /// at least one other compared item lacks a line with this same Key at all -- an advantage/
-    /// exclusive marker, the whole line colored rather than just a "name" token (this codebase's
-    /// TextWindow has one TextColor for its entire string, no per-substring styling -- see the
-    /// new "Rich inline text formatting" TODO item logged alongside this feature). Otherwise, if
-    /// every other compared item *does* have this Key and every one of them (plus this line
-    /// itself) has a ComparableValue, magnitude-colored via ItemComparisonHighlighting -- ties
-    /// (or a non-numeric Key shared by all, e.g. Shape, or two Scrolls casting different named
-    /// spells) stay Normal. A Better line by magnitude is followed by its difference from the best of the
-    /// others, in green (FF14's "156 (+53)"); nothing follows a worse, tied or exclusive line. With no
-    /// comparison, the line's own style (its advanced-mode change, if any).
-    /// </summary>
-    private LineStyle ResolveLineStyle(ItemComparisonStat stat)
-    {
-        if (_comparedAgainst.Count == 0)
-        {
-            return LineStyle.Of(stat);
-        }
-
-        var otherValues = new List<double>();
-        foreach (var otherStats in _otherItemsStats)
-        {
-            var found = false;
-            foreach (var otherStat in otherStats)
-            {
-                if (otherStat.Key != stat.Key)
-                {
-                    continue;
-                }
-
-                found = true;
-                if (otherStat.ComparableValue is { } otherValue)
-                {
-                    otherValues.Add(otherValue);
-                }
-
-                break;
-            }
-
-            if (!found)
-            {
-                return new LineStyle(BetterColor);
-            }
-        }
-
-        if (stat.ComparableValue is not { } ownValue)
-        {
-            return new LineStyle(BodyTextColor);
-        }
-
-        var bestOther = otherValues.Count == 0 ? (double?)null : stat.HigherIsBetter ? otherValues.Max() : otherValues.Min();
-        otherValues.Add(ownValue);
-        var highlight = ItemComparisonHighlighting.ComputeHighlight(ownValue, otherValues, stat.HigherIsBetter);
-        return highlight switch
-        {
-            ComparisonHighlight.Better => new LineStyle(BetterColor, bestOther is { } best ? ComparisonDifferenceText(ownValue - best, stat.Unit) : null, BetterColor),
-            ComparisonHighlight.Worse => new LineStyle(WorseColor),
-            _ => new LineStyle(BodyTextColor),
-        };
-    }
-
-    /// <summary>A difference between two compared values, in their unit, in parentheses: "(+53)", "(+25%)", "(-3s)".</summary>
-    public static string ComparisonDifferenceText(double difference, StatUnit unit)
-    {
-        var sign = difference >= 0 ? "+" : "-";
-        var magnitude = System.Math.Abs(difference);
-        var text = unit switch
-        {
-            StatUnit.Percent => $"{magnitude:0.#}%",
-            StatUnit.Frames => TimingText.Seconds((int)System.Math.Round(magnitude)),
-            _ => $"{magnitude:0.#}",
-        };
-
-        return $"({sign}{text})";
     }
 }

@@ -16,7 +16,7 @@ namespace Presentation.UI.Inventory;
 /// <remarks>
 /// Every position and size is explicit -- fixed offsets and a fixed column count -- never ambient ContentSize
 /// propagation or auto-tiling, which jumble a window built by hand this way.
-/// The window is exactly as wide as its grid's columns. The grid shows one row more than its cells fill (a full grid
+/// The window is exactly as wide as its grid's columns, unless it has a FixedWindowWidth. The grid shows one row more than its cells fill (a full grid
 /// always has an empty row to drop into), from MinimumGridRows to MaximumGridRows; it gains the row the moment its last
 /// one fills and loses it once a row and one more cell have emptied, so the two mirror each other. Past
 /// MaximumGridRows it scrolls, and widens by the scrollbar so no column is lost. Rows follow the cells shown -- identical
@@ -41,6 +41,7 @@ public abstract class ContainerInventoryWindow(
     private InventoryGridContent _gridContent = null!;
     private TextWindow _gridHeader = null!;
     private int _gridRows;
+    private int _gridColumns;
     private bool _gridScrolls;
     private float _summaryHeight;
     private CurrencyRowContent _currencyRow = null!;
@@ -50,6 +51,9 @@ public abstract class ContainerInventoryWindow(
     private float TextLineHeight => TextWindow.SingleLineHeight(FontService.GetFont(FontChrome.DefaultFontSize));
 
     protected int EntityId { get; private set; }
+
+    /// <summary>What every item window reads and does, for a subclass that needs more of it than this class's own grid and currency row.</summary>
+    protected InventoryServices InventoryServices => inventoryServices;
 
     /// <summary>How many cells a grid row holds.</summary>
     protected abstract int GridColumns { get; }
@@ -66,6 +70,12 @@ public abstract class ContainerInventoryWindow(
     /// <summary>The most stacks the inventory can hold, shown after its count in the header; null for no limit, shown as UnlimitedCapacityText.</summary>
     protected abstract int? StackCapacity { get; }
 
+    /// <summary>The window's width when it is set rather than fitted to its grid's columns (the shop's: two cards and a scrollbar); the grid keeps its own width at the left.</summary>
+    protected virtual float? FixedWindowWidth => null;
+
+    /// <summary>The view this window's grid shows, switched elsewhere (the shop's, from the player's Inventory window); null for a grid always in Icon view (the loot window).</summary>
+    protected virtual GridViewSetting? GridViewSetting => null;
+
     /// <summary>The summary's lines beside the icon, top to bottom -- built once, when the window opens; each wraps and pushes what follows down.</summary>
     protected abstract IReadOnlyList<string> BuildSummaryLines();
 
@@ -81,6 +91,7 @@ public abstract class ContainerInventoryWindow(
         EntityId = entityId;
         _onItemSelected = onItemSelected;
         _gridRows = 0;
+        _gridColumns = 0;
         _gridScrolls = false;
         _summaryHeight = IconSize.Y;
         OnConfigured();
@@ -134,17 +145,18 @@ public abstract class ContainerInventoryWindow(
     private void UpdateGridHeader() =>
         _gridHeader.UpdateText(_stackCountText.Get((inventoryServices.InventoryView.CountStacks(EntityId), StackCapacity), static key => key.Capacity is { } capacity ? $"{key.StackCount}/{capacity}" : $"{key.StackCount}/{UnlimitedCapacityText}"));
 
-    /// <summary>Resizes the window and its grid when the cells shown need another row or leave one spare -- never otherwise.</summary>
+    /// <summary>Resizes the window and its grid when the cells shown need another row or leave one spare, or the view changes its column count -- never otherwise.</summary>
     private void FitGridToCells()
     {
         var cellCount = _gridContent.VisibleItemCount;
         var rows = System.Math.Clamp(cellCount / GridColumns + 1, MinimumGridRows, MaximumGridRows);
         var scrolls = cellCount > MaximumGridRows * GridColumns;
-        if (rows == _gridRows && scrolls == _gridScrolls)
+        if (rows == _gridRows && scrolls == _gridScrolls && GridColumns == _gridColumns)
         {
             return;
         }
 
+        _gridColumns = GridColumns;
         _gridRows = rows;
         _gridScrolls = scrolls;
         SetWindowSize();
@@ -156,6 +168,11 @@ public abstract class ContainerInventoryWindow(
     private void SetWindowSize()
     {
         var size = new Vector2(GridWidth, GridTop + _gridRows * RowHeight) + ContentInset;
+        if (FixedWindowWidth is { } width)
+        {
+            size.X = width;
+        }
+
         SetMinimumSize(size);
         SetSize(size);
     }
@@ -201,6 +218,7 @@ public abstract class ContainerInventoryWindow(
     {
         _gridHeader = CreateTextLine(new Vector2(0, _summaryHeight + Padding),new Vector2(GridWidth, TextLineHeight), string.Empty);
         AddChild(_gridHeader);
+
     }
 
     private TextWindow CreateTextLine(Vector2 position, Vector2 size, string text) =>
@@ -227,7 +245,7 @@ public abstract class ContainerInventoryWindow(
         _gridWindow.ContentPadding = Vector2.Zero;
 
         // Activate is player-inventory-only (InventoryGridContent.CanActivate), so it is never reached here.
-        _gridContent = new InventoryGridContent(world, inventoryServices, ElementPoolService, contextMenuController, EntityId, filterTag: GameplayTag.None, () => EntityId, mapViewState, _onItemSelected, static (_, _) => { }, static _ => { });
+        _gridContent = new InventoryGridContent(world, inventoryServices, ElementPoolService, contextMenuController, EntityId, filterTag: GameplayTag.None, () => EntityId, mapViewState, _onItemSelected, static (_, _) => { }, static _ => { }, viewSetting: GridViewSetting);
         _gridWindow.SetContent(_gridContent);
         AddChild(_gridWindow);
     }

@@ -13,6 +13,7 @@ using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework.Input;
 using Presentation.UI;
+using Presentation.UI.Menus;
 using UIEngine.UI;
 
 namespace Tests.Presentation;
@@ -106,7 +107,7 @@ public sealed class DodgeDuringActionLockTests
             new ActionStateView(components, EntityActions.For(components, result.Catalogs.ActionCatalog, result.Catalogs.Definitions), result.Catalogs.ItemCatalog, localTierRoster: null, TestActionStateViews.EffectServicesOver(components)),
             result.Views.TargetingView,
             playerCommands,
-            simulationClock: clock, dropPlacement: new TestPlayerItemDrops());
+            simulationClock: clock, dropPlacement: new TestPlayerItemDrops(), menuCommands: new MenuCommandCatalog());
 
         return new Harness
         {

@@ -2852,6 +2852,13 @@ combines with the boss's own box -- replaces it or adds to it.
 No direct "is this an NPC" marker -- inferred indirectly today (exclude `PlayerEntityId`, or a specific
 race check). Raised by `TemporaryNpcLootGrant`, which targets Goblin/Fairy/Ghost individually.
 
+Core actions (`ActionDefinition.Core`: Dodge, Quick Attack, Power Attack) belong to every crawler **and every NPC**.
+Today `EntityActions` gives them only to an entity whose spawn record carries `SpawnFlags.Crawler`, which
+`EntityFactory` withholds once the session's crawler numbers run out (and clears at `BuildComplete` from one spawned
+before they did) -- so such a crawler has no Core actions at all. With the NPC marker: a crawler spawned after the
+numbers run out is spawned as an NPC instead, and `EntityActions` (`CopyActionIds`, `TryGetGrant`'s Core fallback)
+grants Core actions to crawlers and NPCs alike. `GetActionSetVersion` must then change with whatever decides it.
+
 #### In-game day/time tracking
 
 `DeadComponent.DiedAtFrame` only shows a raw frame tick in the corpse summary. A real calendar/clock
@@ -3032,6 +3039,10 @@ is held and lands when the key is let go:
 - **Cancelling**: right-click, Escape, or releasing the key over an invalid target cancels the arm.
 - **Switching**: pressing another hotbar slot's key while the first is still held cancels the first action's arm and
   arms the new one.
+- **Targeting mode while aiming**: holding Left Alt switches to the other targeting mode (Target or Ground) for as long
+  as it is held; releasing it switches back to the player's set default. Today Left Alt flips the mode and leaves it
+  (`TargetingModeSwitch`), and Switch targeting mode on the menu sidebar does the same; the default becomes the mode
+  those set, and Left Alt only ever overrides it while held.
 
 #### Replace the text outline with SDF glyphs and an outline shader
 
@@ -3209,7 +3220,7 @@ whatever is nearest. Marks are numbered; the first is the Primary Target.
 - **Friend/foe.** Auto-targeting has no hostile/friendly filter yet: it arrives with the party feature's friend/foe
   tags, and then the Primary Target is used only by activations that can affect it (harmful on a foe, helpful on a
   friend).
-- Related: "Any command on the hotbar" (Low) would let Mark Target sit on a hotbar slot.
+- Related: Mark Target can be a menu command (`MenuCommandCatalog`, Presentation), listed in the Actions window's Menu tab and bindable to any hotbar slot.
 
 #### Global hard minimum/maximum element sizes, and horizontally scrolling title text
 
@@ -3883,12 +3894,6 @@ are the standard model.
   rendering and UI half. Unreal has no built-in fog of war; RTS-style fog in Unreal games is custom
   (typically a visibility texture sampled by a post-process), so the RTS games above remain the model.
 
-#### Magic Menu
-
-Spell-equivalent of the inventory menu, mirroring `InventoryWindowController`'s Button+pooled-Window+
-`TabbedContent` pattern. "Known spells" isn't a tracked concept -- just a `MultiComponentPool<ActionInstanceComponent>`
-query filtered by `Spell`, which `SpellActivator` and `ScrollActivator` imply, so it can't drift from what the action is.
-
 #### Comprehensive control-selection feature
 
 `UiInputController.SetFocus`'s `NextFocusableDescendant` redirect (focusing a window with a `TextBox`
@@ -4459,20 +4464,6 @@ colour per tile, so the wave reads as continuous across tile edges.
 
 Related: "Animation primitives -- flipbooks, tweens and curves" and "Visual 2D lighting" (Medium).
 
-#### Any command on the hotbar
-
-Let the hotbar hold any command, not only actions and items: opening a window (inventory, Health, the map), an
-options page, Mark Target (see "Marked targets", High), switching the targeting mode. Each is bound to a slot like a
-spell or item and goes through the same slot press, so a player can put the commands they use on keys they choose,
-as FFXIV allows.
-- A slot binding today names an action or an item stack (`ActivatableReference`); a command is a third kind. Decide
-  whether commands are Presentation's alone (they change no game state) and how a binding names one stably (a
-  constant id per command, never a key).
-- A command is never armed, never has a cost or a cooldown, and never targets; it runs on the press.
-- Icons, tooltips and drag-to-bind from a command list (an options page, or a "Commands" tab).
-- Overlaps "Input actions and mapping contexts" (High): a command is an input action, and binding one to a slot is
-  binding that action to the slot's key.
-
 #### Targeting effect shader for splash, drink and other activations
 
 What a self-tagged item does on a map click depends on the targeting mode: Ground splashes at the clicked tile,
@@ -4505,7 +4496,7 @@ would clutter the screen in play live in a UI edit mode, as FFXIV's HUD Layout d
   how a detached piece is put back.
 - **Per-window settings in edit mode:** transparency, size, rotation and a fixed position, each kept per window.
 - **Extra hotbars:** create hotbars not bound to any hotkey -- click-only, for emergency items and actions or a
-  player's own menu bars (pairs with "Any command on the hotbar").
+  player's own menu bars (any slot already holds a menu command, as the sidebar does).
 - Layouts are saved with "Data storage, starting with window locations and sizes" (Global, High). Related: "Window
   docking / splitters" and "Options menu".
 

@@ -92,7 +92,21 @@ public sealed class MapWindowTests
     private static (Game.World.World World, MapViewState MapViewState, MapWindow MapWindow, ComponentManager ComponentManager) BuildMapWindowCore(int mapSizeX, int mapSizeY, int mapSizeZ, Vector3Int? playerPosition, ActionCatalog? actionCatalog = null, ItemCatalog? itemCatalog = null)
     {
         var harness = TestMapWindows.Create(mapSizeX, mapSizeY, mapSizeZ, playerPosition, actionCatalog, itemCatalog);
+        HotbarKeysByMapWindow.AddOrUpdate(harness.MapWindow, new HotbarKeyInputHandler(harness.ActionTargetingController));
         return (harness.World, harness.MapViewState, harness.MapWindow, harness.ComponentManager);
+    }
+
+    /// <summary>The hotbar's keys for each map window built here: the input controller offers a key to them as well as to the focused map.</summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<MapWindow, HotbarKeyInputHandler> HotbarKeysByMapWindow = [];
+
+    /// <summary>A key press as the input controller hands it out with the map focused: to the map's own keys and to the hotbar's.</summary>
+    private static void PressKeys(MapWindow mapWindow, KeyboardState current, KeyboardState previous)
+    {
+        mapWindow.HandleHotkeys(current, previous);
+        if (HotbarKeysByMapWindow.TryGetValue(mapWindow, out var hotbarKeys))
+        {
+            hotbarKeys.HandleKeys(current, previous, isTextBoxFocused: false);
+        }
     }
 
     [TestMethod]
@@ -192,13 +206,13 @@ public sealed class MapWindowTests
         var (_, _, mapWindow) = BuildMapWindow(5, 5, 1);
         Assert.IsFalse(mapWindow.IsPaused);
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Space), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.Space), new KeyboardState());
         Assert.IsTrue(mapWindow.IsPaused);
 
-        mapWindow.HandleHotkeys(new KeyboardState(), new KeyboardState(Keys.Space));
+        PressKeys(mapWindow, new KeyboardState(), new KeyboardState(Keys.Space));
         Assert.IsTrue(mapWindow.IsPaused, "Releasing Space must not toggle pause again.");
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Space), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.Space), new KeyboardState());
         Assert.IsFalse(mapWindow.IsPaused);
     }
 
@@ -210,12 +224,12 @@ public sealed class MapWindowTests
         mapViewState.IsEditingComponents = true;
         Assert.IsTrue(mapWindow.IsPaused);
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Space), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.Space), new KeyboardState());
         mapViewState.IsEditingComponents = false;
         Assert.IsTrue(mapWindow.IsPaused, "Space pressed while editing pauses for the player once editing ends.");
 
-        mapWindow.HandleHotkeys(new KeyboardState(), new KeyboardState(Keys.Space));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Space), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(), new KeyboardState(Keys.Space));
+        PressKeys(mapWindow, new KeyboardState(Keys.Space), new KeyboardState());
         mapViewState.IsEditingComponents = true;
         mapViewState.IsEditingComponents = false;
         Assert.IsFalse(mapWindow.IsPaused);
@@ -244,7 +258,7 @@ public sealed class MapWindowTests
         mapWindow.SelectMapNodes(new Point(ScreenCenterColumn * TileSizePixels + 1, ScreenCenterRow * TileSizePixels + 1));
         Assert.AreEqual(new Point(100, 100), mapViewState.SelectedMapNodePosition, "Camera should start centered on the player.");
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D), new KeyboardState());
         Assert.AreEqual(new Vector3Int(101, 100, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition, "A fresh press while unlocked must be written immediately.");
 
         mapWindow.SelectMapNodes(new Point(ScreenCenterColumn * TileSizePixels + 1, ScreenCenterRow * TileSizePixels + 1));
@@ -266,10 +280,10 @@ public sealed class MapWindowTests
         UnlockPlayer(componentManager);
         var movementPool = componentManager.GetPackedPool<MovementComponent>();
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D), new KeyboardState());
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.W), new KeyboardState());
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.A), new KeyboardState(Keys.W));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.S), new KeyboardState(Keys.A));
+        PressKeys(mapWindow, new KeyboardState(Keys.D), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.W), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.A), new KeyboardState(Keys.W));
+        PressKeys(mapWindow, new KeyboardState(Keys.S), new KeyboardState(Keys.A));
 
         Assert.AreEqual(new Vector3Int(100, 101, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition);
     }
@@ -283,8 +297,8 @@ public sealed class MapWindowTests
         var movementPool = componentManager.GetPackedPool<MovementComponent>();
         var transformPool = componentManager.GetDirectPool<TransformComponent>();
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D), new KeyboardState());
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D), new KeyboardState(Keys.D));
+        PressKeys(mapWindow, new KeyboardState(Keys.D), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D), new KeyboardState(Keys.D));
         Assert.AreEqual(new Vector3Int(101, 100, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition, "A held key must not replace a step that hasn't landed yet.");
 
         using (var transform = transformPool.Write(PlayerEntityId))
@@ -292,7 +306,7 @@ public sealed class MapWindowTests
             transform.Value.Position = new Vector3Int(101, 100, 0);
         }
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D), new KeyboardState(Keys.D));
+        PressKeys(mapWindow, new KeyboardState(Keys.D), new KeyboardState(Keys.D));
 
         Assert.AreEqual(new Vector3Int(102, 100, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition);
     }
@@ -305,7 +319,7 @@ public sealed class MapWindowTests
         UnlockPlayer(componentManager);
         var movementPool = componentManager.GetPackedPool<MovementComponent>();
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.A), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.A), new KeyboardState());
 
         Assert.IsNull(movementPool.GetReadonly(PlayerEntityId).NextMapPosition);
     }
@@ -323,12 +337,12 @@ public sealed class MapWindowTests
         mapWindow.HandleRightDragStart();
         mapWindow.HandleRightDrag(new Vector2(-3 * TileSizePixels, 0));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D), new KeyboardState());
 
         mapWindow.SelectMapNodes(new Point(ScreenCenterColumn * TileSizePixels + 1, ScreenCenterRow * TileSizePixels + 1));
         Assert.AreNotEqual(new Point(101, 100), mapViewState.SelectedMapNodePosition, "Camera must not follow the player once right-drag has decoupled it.");
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Home), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.Home), new KeyboardState());
         mapWindow.SelectMapNodes(new Point(ScreenCenterColumn * TileSizePixels + 1, ScreenCenterRow * TileSizePixels + 1));
 
         // Centers on the player's actual TransformComponent.Position (100,100) -- there's no
@@ -453,7 +467,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, _) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(2, 2, 0));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Home), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.Home), new KeyboardState());
 
         mapWindow.SelectMapNodes(new Point(1, 1));
         Assert.AreEqual(new Point(0, 0), mapViewState.SelectedMapNodePosition, "Centering on (2,2) would want a negative scroll -- must clamp to 0, not go out of bounds.");
@@ -474,7 +488,7 @@ public sealed class MapWindowTests
         mapWindow.ChangeLayer(2);
         Assert.AreEqual(2, mapViewState.CurrentMapLayer, "Sanity check -- now viewing Flying, away from the player.");
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Home), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.Home), new KeyboardState());
 
         Assert.AreEqual(0, mapViewState.CurrentMapLayer, "HOME must switch back to the layer the player actually occupies.");
     }
@@ -485,7 +499,7 @@ public sealed class MapWindowTests
         var (_, mapViewState, mapWindow) = BuildMapWindow(5, 5, 3);
         Assert.AreEqual(1, mapViewState.CurrentMapLayer);
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.PageUp), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.PageUp), new KeyboardState());
 
         Assert.AreEqual(2, mapViewState.CurrentMapLayer);
     }
@@ -503,7 +517,7 @@ public sealed class MapWindowTests
         // OemMinus cycles zoom out one level (Team, 36px tiles -> Neighborhood, 18px tiles);
         // 71 columns are now visible against the 60-wide map, so the previously-valid
         // Team-zoom max scroll (24) must be re-clamped down to 0.
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.OemMinus), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.OemMinus), new KeyboardState());
         mapWindow.SelectMapNodes(new Point(1, 1));
 
         Assert.AreEqual(new Point(0, 0), mapViewState.SelectedMapNodePosition);
@@ -525,7 +539,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D4), new KeyboardState());
 
         Assert.AreEqual(TestActionId, mapViewState.ArmedActionId);
         Assert.AreEqual(HotkeySlot.Slot4, mapViewState.ArmedSlot);
@@ -540,11 +554,11 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D4), new KeyboardState());
         Assert.IsNotNull(mapViewState.ArmedActionId);
 
         mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(101, 100, 0)));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D4), new KeyboardState());
 
         var pendingActivations = componentManager.GetPackedPool<PendingActionActivationComponent>();
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
@@ -560,7 +574,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, _, _) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D1), new KeyboardState());
 
         Assert.IsNull(mapViewState.ArmedActionId);
         Assert.IsNull(mapViewState.ArmedSlot);
@@ -596,9 +610,9 @@ public sealed class MapWindowTests
         PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(105, 100, 0));
         PlaceTestTarget(world, componentManager, entityId: 3, new Vector3Int(97, 100, 0));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
         mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(104, 101, 0)));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
 
         var pending = componentManager.GetPackedPool<PendingActionActivationComponent>().GetReadonly(PlayerEntityId);
         Assert.AreEqual(rangedActionId, pending.ActionId);
@@ -620,9 +634,9 @@ public sealed class MapWindowTests
         world.ConvertToNonBlocking(2, ref tinyTransform);
         PlaceTestTarget(world, componentManager, entityId: 3, new Vector3Int(104, 102, 0));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
         mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(104, 101, 0)));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
 
         var pending = componentManager.GetPackedPool<PendingActionActivationComponent>().GetReadonly(PlayerEntityId);
         Assert.AreEqual(new Vector3Int(104, 102, 0), pending.Selection.AimedTile, "Blocking before Tiny, before nearness to the player.");
@@ -639,9 +653,9 @@ public sealed class MapWindowTests
         PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(105, 100, 0));
         PlaceTestTarget(world, componentManager, entityId: 3, new Vector3Int(98, 100, 0));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
         mapWindow.UpdateHoveredTile(null);
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
 
         var pending = componentManager.GetPackedPool<PendingActionActivationComponent>().GetReadonly(PlayerEntityId);
         Assert.AreEqual(new Vector3Int(98, 100, 0), pending.Selection.AimedTile, "Nearest the player.");
@@ -657,9 +671,9 @@ public sealed class MapWindowTests
         RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
         PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(105, 100, 0));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
         mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(102, 100, 0)));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
 
         Assert.IsFalse(componentManager.GetPackedPool<PendingActionActivationComponent>().Has(PlayerEntityId), "3 tiles from the cursor is past the default 2.");
         Assert.AreEqual(HotkeySlot.Slot5, mapViewState.ArmedSlot);
@@ -673,13 +687,13 @@ public sealed class MapWindowTests
         RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
         PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(105, 100, 0));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
         mapWindow.UpdateHoveredTile(null);
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
         Assert.IsFalse(componentManager.GetPackedPool<PendingActionActivationComponent>().Has(PlayerEntityId), "5 tiles from the player is past the default 2.");
 
         mapViewState.TargetSearchDistanceTiles = 5;
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
 
         var pending = componentManager.GetPackedPool<PendingActionActivationComponent>().GetReadonly(PlayerEntityId);
         Assert.AreEqual(world.EntityKeys.GetKey(2), pending.Selection.MarkedEntity, "A larger search distance reaches it.");
@@ -691,7 +705,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
         mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(104, 102, 0)));
         Assert.IsNotNull(mapViewState.HoveredTile);
 
@@ -710,7 +724,7 @@ public sealed class MapWindowTests
         var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
         PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(102, 100, 0));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D1), new KeyboardState());
 
         mapWindow.HandleClick(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(102, 100, 0)));
 
@@ -729,7 +743,7 @@ public sealed class MapWindowTests
         var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
         PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(102, 100, 0));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D1), new KeyboardState());
 
         mapWindow.HandleClick(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(101, 101, 0)));
 
@@ -747,7 +761,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
         PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(102, 100, 0));
         mapViewState.TargetingMode = TargetingMode.Ground;
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D1), new KeyboardState());
 
         mapWindow.HandleClick(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(102, 100, 0)));
 
@@ -767,9 +781,9 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
         mapViewState.TargetingMode = TargetingMode.Ground;
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D1), new KeyboardState());
         mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(102, 100, 0)));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D1), new KeyboardState());
 
         var pending = componentManager.GetPackedPool<PendingItemActivationComponent>().GetReadonly(PlayerEntityId);
         Assert.AreEqual(world.EntityKeys.GetKey(PlayerEntityId), pending.Selection.MarkedEntity);
@@ -784,9 +798,9 @@ public sealed class MapWindowTests
         PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(105, 100, 0));
         PlaceTestTarget(world, componentManager, entityId: 3, new Vector3Int(102, 100, 0));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
         mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(105, 100, 0)));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
 
         var pending = componentManager.GetPackedPool<PendingActionActivationComponent>().GetReadonly(PlayerEntityId);
         Assert.AreEqual(new Vector3Int(105, 100, 0), pending.Selection.AimedTile);
@@ -800,9 +814,9 @@ public sealed class MapWindowTests
         mapViewState.TargetingMode = TargetingMode.Target;
         RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
         mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(103, 100, 0)));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
 
         Assert.IsFalse(componentManager.GetPackedPool<PendingActionActivationComponent>().Has(PlayerEntityId));
         Assert.AreEqual(HotkeySlot.Slot5, mapViewState.ArmedSlot);
@@ -817,9 +831,9 @@ public sealed class MapWindowTests
         PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(102, 100, 0));
         mapViewState.TargetingMode = TargetingMode.Ground;
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
         mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(104, 101, 0)));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
 
         var pending = componentManager.GetPackedPool<PendingActionActivationComponent>().GetReadonly(PlayerEntityId);
         Assert.AreEqual(TargetingMode.Ground, pending.Selection.Mode);
@@ -836,9 +850,9 @@ public sealed class MapWindowTests
         PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(102, 100, 0));
         mapViewState.TargetingMode = TargetingMode.Ground;
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
         mapWindow.UpdateHoveredTile(null);
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
 
         Assert.IsFalse(componentManager.GetPackedPool<PendingActionActivationComponent>().Has(PlayerEntityId));
         Assert.AreEqual(HotkeySlot.Slot5, mapViewState.ArmedSlot);
@@ -898,7 +912,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D4), new KeyboardState());
 
         Assert.IsNotNull(mapViewState.TargetableTiles);
         Assert.HasCount(8, mapViewState.TargetableTiles);
@@ -916,7 +930,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedActionId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
 
         // Rounded circle of radius 10: every offset with x^2 + y^2 <= 10^2 + 10.
         Assert.IsNotNull(mapViewState.TargetableTiles);
@@ -941,7 +955,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
         var transformPool = componentManager.GetDirectPool<TransformComponent>();
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D4), new KeyboardState());
         Assert.IsNotNull(mapViewState.TargetableTiles);
         Assert.Contains(new Vector3Int(101, 100, 0), mapViewState.TargetableTiles);
         Assert.DoesNotContain(new Vector3Int(105, 100, 0), mapViewState.TargetableTiles);
@@ -967,7 +981,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, sightedActionId));
         var wall = world.Terrain.Register(new Game.Terrain.TerrainDefinition("test:wall", "Wall", "", "#", Color.Gray, BlocksMovement: true));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
         Assert.IsNotNull(mapViewState.TargetableTiles);
         Assert.Contains(new Vector3Int(104, 100, 0), mapViewState.TargetableTiles);
 
@@ -988,7 +1002,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D4), new KeyboardState());
         Assert.IsNotNull(mapViewState.TargetableTiles);
 
         mapWindow.HandleRightClickTap(new Point(0, 0));
@@ -1018,7 +1032,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedActionId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
         mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(101, 100, 0)));
 
         Assert.AreEqual(new Vector3Int(101, 100, 0), mapViewState.HoveredTile);
@@ -1035,7 +1049,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedActionId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
         mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(115, 100, 0)));
 
         Assert.AreEqual(new Vector3Int(115, 100, 0), mapViewState.HoveredTile);
@@ -1050,7 +1064,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D4), new KeyboardState());
         mapWindow.UpdateHoveredTile(new Point(-100, -100));
 
         Assert.IsNull(mapViewState.HoveredTile);
@@ -1064,7 +1078,7 @@ public sealed class MapWindowTests
         RegisterTestAdjacentAction(actionCatalog);
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D4), new KeyboardState());
 
         // One of the caster's 8 neighbors -- part of Adjacent's fixed footprint (the caster's own tile no longer is).
         var clickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(101, 100, 0));
@@ -1089,7 +1103,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(burstActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, burstActionId));
         mapViewState.TargetingMode = TargetingMode.Ground;
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D4), new KeyboardState());
 
         // Outside Range 3 of (100,100), but still comfortably within the visible viewport.
         var farClickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(105, 100, 0));
@@ -1110,7 +1124,7 @@ public sealed class MapWindowTests
         var wall = world.Terrain.Register(new Game.Terrain.TerrainDefinition("test:wall", "Wall", "", "#", Color.Gray, BlocksMovement: true));
         world.SetStructure(new Vector3Int(103, 100, 0), new Game.Terrain.TerrainCell(wall));
         mapViewState.TargetingMode = TargetingMode.Ground;
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D4), new KeyboardState());
         Assert.IsNotNull(mapViewState.TargetableTiles);
         Assert.DoesNotContain(new Vector3Int(103, 100, 0), mapViewState.TargetableTiles, "A wall is never a tile to aim at.");
 
@@ -1130,7 +1144,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(lineActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, lineActionId));
         mapViewState.TargetingMode = TargetingMode.Ground;
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D4), new KeyboardState());
 
         // Two tiles east -- within the range-2 candidate diamond ComputeTargetableTiles builds around the caster.
         var clickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(102, 100, 0));
@@ -1152,7 +1166,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(burstActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, burstActionId));
         mapViewState.TargetingMode = TargetingMode.Ground;
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
 
         var clickedTile = new Vector3Int(105, 100, 0);
         var clickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, clickedTile);
@@ -1175,7 +1189,7 @@ public sealed class MapWindowTests
         var rangedActionId = RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
         PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(106, 100, 0));
         PlaceTestTarget(world, componentManager, entityId: 3, new Vector3Int(100, 103, 0));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
 
         mapWindow.HandleClick(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(105, 100, 0)));
 
@@ -1192,7 +1206,7 @@ public sealed class MapWindowTests
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         mapViewState.TargetingMode = TargetingMode.Target;
         RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D5), new KeyboardState());
 
         mapWindow.HandleClick(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(105, 100, 0)));
 
@@ -1207,7 +1221,7 @@ public sealed class MapWindowTests
         RegisterTestAdjacentAction(actionCatalog);
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D4), new KeyboardState());
 
         mapWindow.HandleRightClickTap(new Point(0, 0));
 
@@ -1223,7 +1237,7 @@ public sealed class MapWindowTests
         RegisterTestAdjacentAction(actionCatalog);
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D4), new KeyboardState());
 
         mapWindow.HandleEscape();
 
@@ -1718,7 +1732,7 @@ public sealed class MapWindowTests
         var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D1), new KeyboardState());
 
         Assert.AreEqual(stackInstanceId, mapViewState.ArmedItemStackInstanceId);
         Assert.AreEqual(HotkeySlot.Slot1, mapViewState.ArmedSlot);
@@ -1735,9 +1749,9 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
         PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(102, 100, 0));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D1), new KeyboardState());
         mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(102, 100, 0)));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D1), new KeyboardState());
 
         var pendingActivations = componentManager.GetPackedPool<PendingItemActivationComponent>();
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
@@ -1760,9 +1774,9 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
         PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(100, 102, 0));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D1), new KeyboardState());
         mapWindow.UpdateHoveredTile(null);
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D1), new KeyboardState());
 
         var pending = componentManager.GetPackedPool<PendingItemActivationComponent>().GetReadonly(PlayerEntityId);
         Assert.AreEqual(stackInstanceId, pending.StackInstanceId);
@@ -1779,9 +1793,9 @@ public sealed class MapWindowTests
         var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestNonSelfPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D1), new KeyboardState());
         mapWindow.UpdateHoveredTile(null);
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D1), new KeyboardState());
 
         Assert.IsFalse(componentManager.GetPackedPool<PendingItemActivationComponent>().Has(PlayerEntityId));
         Assert.AreEqual(stackInstanceId, mapViewState.ArmedItemStackInstanceId);
@@ -1796,7 +1810,7 @@ public sealed class MapWindowTests
         var nonConsumableStackId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestNonConsumableItemId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, nonConsumableStackId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D1), new KeyboardState());
 
         Assert.IsNull(mapViewState.ArmedItemStackInstanceId);
         Assert.IsNull(mapViewState.ArmedSlot);
@@ -1812,7 +1826,7 @@ public sealed class MapWindowTests
         // consumed) this item.
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId: 9999));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D1), new KeyboardState());
 
         Assert.IsNull(mapViewState.ArmedItemStackInstanceId);
         Assert.IsNull(mapViewState.ArmedSlot);
@@ -1826,7 +1840,7 @@ public sealed class MapWindowTests
         var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
         mapViewState.TargetingMode = TargetingMode.Ground;
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D1), new KeyboardState());
 
         // Within the Potion's Range 3, so within TargetableTiles.
         var clickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(102, 100, 0));
@@ -1853,7 +1867,7 @@ public sealed class MapWindowTests
         RegisterTestPotion(itemCatalog);
         var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D1), new KeyboardState());
 
         var clickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(100, 100, 0));
         mapWindow.HandleClick(clickPosition);
@@ -1874,7 +1888,7 @@ public sealed class MapWindowTests
         RegisterTestPotion(itemCatalog);
         var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D1), new KeyboardState());
 
         mapWindow.HandleRightClickTap(new Point(0, 0));
 
@@ -1895,8 +1909,8 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D4), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D1), new KeyboardState());
 
         Assert.IsNull(mapViewState.ArmedActionId);
         Assert.AreEqual(stackInstanceId, mapViewState.ArmedItemStackInstanceId);
@@ -1916,8 +1930,8 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D1), new KeyboardState());
+        PressKeys(mapWindow, new KeyboardState(Keys.D4), new KeyboardState());
 
         Assert.IsNull(mapViewState.ArmedItemStackInstanceId);
         Assert.AreEqual(TestActionId, mapViewState.ArmedActionId);

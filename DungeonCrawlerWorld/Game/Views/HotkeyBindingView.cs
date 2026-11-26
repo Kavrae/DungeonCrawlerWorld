@@ -12,11 +12,16 @@ public sealed class HotkeyBindingView(ComponentManager componentManager)
 {
     private readonly MultiComponentPool<ActionHotkeyBindingComponent> _actionHotkeyBindings = componentManager.GetMultiPool<ActionHotkeyBindingComponent>();
     private readonly MultiComponentPool<ItemHotkeyBindingComponent> _itemHotkeyBindings = componentManager.GetMultiPool<ItemHotkeyBindingComponent>();
+    private readonly MultiComponentPool<MenuCommandHotkeyBindingComponent> _menuCommandHotkeyBindings = componentManager.GetMultiPool<MenuCommandHotkeyBindingComponent>();
     private readonly PackedComponentPool<HotkeyExpansionUnlockComponent> _hotkeyExpansionUnlocks = componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>();
 
     /// <summary>The action slot is bound to, if it's bound to one.</summary>
     public bool TryGetBoundAction(int entityId, HotkeySlot slot, out Guid actionId) =>
         ActionHotkeyBindingQueries.TryGet(_actionHotkeyBindings, entityId, slot, out actionId);
+
+    /// <summary>The menu command slot is bound to, if it's bound to one.</summary>
+    public bool TryGetBoundMenuCommand(int entityId, HotkeySlot slot, out Guid menuCommandId) =>
+        HotkeySlotBindingQueries.TryGet<MenuCommandHotkeyBindingComponent, Guid>(_menuCommandHotkeyBindings, entityId, slot, out menuCommandId);
 
     /// <summary>The stack slot is bound to, if it's bound to one.</summary>
     public bool TryGetBoundItem(int entityId, HotkeySlot slot, out uint stackInstanceId) =>

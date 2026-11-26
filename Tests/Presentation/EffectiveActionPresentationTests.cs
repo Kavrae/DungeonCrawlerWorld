@@ -12,6 +12,7 @@ using Game.Views;
 using Microsoft.Xna.Framework;
 using Presentation.UI;
 using Presentation.UI.Content;
+using Presentation.UI.Menus;
 using Tests.UIEngine;
 using UIEngine.Rendering;
 
@@ -48,7 +49,7 @@ public sealed class EffectiveActionPresentationTests
         var itemCatalog = new ItemCatalog();
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, Catalog(), itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), itemCatalog,
-            TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(2000, 2000), simulationClock: new SimulationClock());
+            TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(2000, 2000), simulationClock: new SimulationClock(), menuCommands: new MenuCommandCatalog());
 
         Assert.IsTrue(hotbar.TryGetSlotSummary(HotkeySlot.Slot1, out var title, out _, out _));
         Assert.AreEqual("Overridden Spell", title);
@@ -64,7 +65,7 @@ public sealed class EffectiveActionPresentationTests
         var itemCatalog = new ItemCatalog();
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, Catalog(), itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), itemCatalog,
-            TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(2000, 2000), simulationClock: new SimulationClock());
+            TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(2000, 2000), simulationClock: new SimulationClock(), menuCommands: new MenuCommandCatalog());
 
         Assert.IsFalse(hotbar.TryGetSlotSummary(HotkeySlot.Slot1, out _, out _, out _));
     }

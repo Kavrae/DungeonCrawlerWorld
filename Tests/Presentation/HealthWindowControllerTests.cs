@@ -33,12 +33,7 @@ using UIEngine.UI.ColorPalettes;
 
 namespace Tests.Presentation;
 
-/// <summary>
-/// Drives the real click pipeline (Button.HandleClick, the same public entry point
-/// UiInputController itself calls on a real mouse click) rather than calling WindowLifecycle/the
-/// button's Clicked handler directly -- per this session's own "live testing catches what code
-/// review misses" lesson for click/hit-test work.
-/// </summary>
+/// <summary>The Health window as its menu command opens and closes it (HealthWindowController.ToggleHealthWindow), and its rows and menus through the real input controller.</summary>
 [TestClass]
 [DoNotParallelize]
 public sealed class HealthWindowControllerTests
@@ -118,8 +113,7 @@ public sealed class HealthWindowControllerTests
 
     private static HealthWindow OpenWindow(Harness harness)
     {
-        var button = FindButton(harness.Layers);
-        button.HandleClick(button.Rectangle.Center);
+        harness.Health.ToggleHealthWindow();
         return FindWindow(harness.Layers)!;
     }
 
@@ -201,8 +195,7 @@ public sealed class HealthWindowControllerTests
         HoverFor(harness, window, FindRow(window, "Resistance").Rectangle.Center, PopupChrome.HoverTooltipDelayFrames);
         Assert.IsTrue(tooltip.IsVisible);
 
-        var button = FindButton(harness.Layers);
-        button.HandleClick(button.Rectangle.Center);
+        harness.Health.ToggleHealthWindow();
 
         Assert.IsFalse(tooltip.IsVisible);
     }
@@ -262,59 +255,44 @@ public sealed class HealthWindowControllerTests
 
         Assert.IsNull(FindWindow(harness.Layers));
         CollectionAssert.DoesNotContain(harness.Layers[UiLayer.DynamicHud].ToList(), otherWindow);
-        Assert.IsNotNull(FindButton(harness.Layers), "Close All closes windows, never the HUD buttons that open them.");
     }
-
-    private static Button FindButton(UiLayerStack layers) => layers[UiLayer.DynamicHud].OfType<Button>().Single();
 
     private static HealthWindow? FindWindow(UiLayerStack layers) => layers[UiLayer.DynamicHud].OfType<HealthWindow>().SingleOrDefault();
 
     [TestMethod]
-    public void ButtonClick_OpensHealthWindow()
+    public void Toggling_OpensTheHealthWindow()
     {
-        var (_, layers) = Build();
-        var button = FindButton(layers);
+        var (health, layers) = Build();
 
-        button.HandleClick(button.Rectangle.Center);
+        health.ToggleHealthWindow();
 
-        Assert.IsNotNull(FindWindow(layers), "Clicking the heart button must open the HealthWindow.");
+        Assert.IsNotNull(FindWindow(layers));
     }
 
     [TestMethod]
-    public void ButtonClick_Twice_ClosesHealthWindow()
+    public void TogglingTwice_ClosesTheHealthWindow()
     {
-        var (_, layers) = Build();
-        var button = FindButton(layers);
+        var (health, layers) = Build();
 
-        button.HandleClick(button.Rectangle.Center);
-        Assert.IsNotNull(FindWindow(layers), "Sanity check: the window must have opened first.");
+        health.ToggleHealthWindow();
+        Assert.IsNotNull(FindWindow(layers));
 
-        button.HandleClick(button.Rectangle.Center);
+        health.ToggleHealthWindow();
 
-        Assert.IsNull(FindWindow(layers), "Re-clicking an already-open window's own trigger must close it, same as Inventory/Ability Score's own toggle.");
+        Assert.IsNull(FindWindow(layers));
     }
 
     private static IEnumerable<Element> SelfAndDescendants(Element element) =>
         element.ChildElements.SelectMany(SelfAndDescendants).Prepend(element);
 
     [TestMethod]
-    public void ButtonClick_OpensHealthWindow_BodyPartBarShowsCurrentOverMaximum()
+    public void Toggling_OpensTheHealthWindow_BodyPartBarShowsCurrentOverMaximum()
     {
-        var (_, layers) = Build();
-        var button = FindButton(layers);
+        var (health, layers) = Build();
 
-        button.HandleClick(button.Rectangle.Center);
+        health.ToggleHealthWindow();
 
         var bar = SelfAndDescendants(FindWindow(layers)!).OfType<FractionBarElement>().Single();
         Assert.AreEqual("50 / 100", bar.ValueText);
-    }
-
-    [TestMethod]
-    public void InventoryButtonPosition_ShiftedBelowHealthButton_NoOverlap()
-    {
-        var buttonBottom = HealthWindowChrome.ButtonPosition.Y + HealthWindowChrome.ButtonSize.Y;
-
-        Assert.IsGreaterThanOrEqualTo(buttonBottom, InventoryChrome.ButtonPosition.Y, "The Inventory button must sit at or below the Health button's own bottom edge -- no overlap.");
-        Assert.AreEqual(HealthWindowChrome.ButtonPosition.X, InventoryChrome.ButtonPosition.X, "Both stay left-aligned under HudChrome.Margin.");
     }
 }

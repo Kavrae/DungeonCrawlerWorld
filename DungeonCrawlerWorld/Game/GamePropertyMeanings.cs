@@ -19,6 +19,9 @@ public static class GamePropertyMeanings
     /// <summary>An action definition's Guid.</summary>
     public const string ActionId = nameof(ActionId);
 
+    /// <summary>A menu command's Guid (BuiltInMenuCommandIds), which only Presentation reads.</summary>
+    public const string MenuCommandId = nameof(MenuCommandId);
+
     /// <summary>An achievement's Guid.</summary>
     public const string AchievementId = nameof(AchievementId);
 

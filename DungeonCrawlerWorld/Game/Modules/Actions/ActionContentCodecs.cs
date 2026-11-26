@@ -13,6 +13,9 @@ internal static class ActionContentCodecs
 {
     public const string ActionsTable = "Actions";
 
+    /// <summary>An action's Core flag (ActionDefinition.Core), read into its summary without decoding it as well.</summary>
+    public const string CoreKey = "core";
+
     public static void Register(ContentTypeDeclarations contentTypes)
     {
         contentTypes.RegisterValue(new TargetingSpecCodec());
@@ -163,6 +166,7 @@ internal static class ActionContentCodecs
             .. ActivatableContent.LeadingFields,
             ContentField.Polymorphic<IActionActivator>(ActivatableContent.ActivatorKey, "Activator", isRequired: true),
             .. ActivatableContent.TrailingFields,
+            ContentField.Boolean(CoreKey, "Core (every crawler can use it, whatever its race and class)"),
         ]);
 
         public override void WriteProperties(ContentWriter writer, ActionDefinition value)
@@ -170,6 +174,7 @@ internal static class ActionContentCodecs
             ActivatableContent.WriteLeading(writer, value);
             writer.Polymorphic(ActivatableContent.ActivatorKey, value.Activator);
             ActivatableContent.WriteTrailing(writer, value);
+            writer.Boolean(CoreKey, value.Core);
         }
 
         public override ActionDefinition Read(ContentObject element)
@@ -189,6 +194,7 @@ internal static class ActionContentCodecs
                 element.Object<ToggleSpec>("tog"))
             {
                 ActivationEffects = element.List<Effect>("ae"),
+                Core = element.Boolean(CoreKey),
             };
         }
     }

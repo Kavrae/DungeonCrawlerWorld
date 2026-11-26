@@ -21,6 +21,7 @@ public sealed class EntityActionsTests
     private static readonly Guid UnknownActionId = new("11111111-0000-0000-0000-000000000003");
     private static readonly Guid TraitActionId = new("11111111-0000-0000-0000-000000000004");
     private static readonly Guid OtherClassActionId = new("11111111-0000-0000-0000-000000000005");
+    private static readonly Guid CoreActionId = new("11111111-0000-0000-0000-000000000006");
     private static readonly Guid RaceId = new("22222222-0000-0000-0000-000000000001");
     private static readonly Guid ClassId = new("22222222-0000-0000-0000-000000000002");
     private static readonly Guid TraitId = new("22222222-0000-0000-0000-000000000003");
@@ -33,6 +34,10 @@ public sealed class EntityActionsTests
         /// <summary>Makes EntityId an entity spawned from the blueprint registered as blueprintId, the way EntityFactory records one.</summary>
         public void SpawnedAs(Guid blueprintId) =>
             Components.Merge(EntityId, new SpawnRecordComponent(Blueprints.GetId(blueprintId), seed: 1));
+
+        /// <summary>Makes EntityId a crawler spawned from the blueprint registered as blueprintId.</summary>
+        public void SpawnedAsCrawler(Guid blueprintId) =>
+            Components.Merge(EntityId, new SpawnRecordComponent(Blueprints.GetId(blueprintId), SpawnFlags.Crawler, Seed: 1));
 
         /// <summary>Records blueprintId as applied to EntityId, the way EntityFactory.Apply does.</summary>
         public void Applied(Guid blueprintId)
@@ -52,11 +57,12 @@ public sealed class EntityActionsTests
         var components = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 8));
 
         var catalog = new ActionCatalog();
-        catalog.Register(ActionWithDamage(RacialActionId, "Racial Attack", 1, cooldownFrames: 40));
+        catalog.Register(ActionWithDamage(RacialActionId, "Racial Attack", 1, cooldownFrames: 40) with { Core = true });
         catalog.Register(ActionWithDamage(ClassActionId, "Class Trick", 2));
         catalog.Register(ActionWithDamage(UnknownActionId, "Nobody Knows This", 3));
         catalog.Register(ActionWithDamage(TraitActionId, "Trait Trick", 4));
         catalog.Register(ActionWithDamage(OtherClassActionId, "Other Class Trick", 5));
+        catalog.Register(ActionWithDamage(CoreActionId, "Core Trick", 6) with { Core = true });
 
         var blueprints = new BlueprintRegistry();
         blueprints.Register(new BlueprintDefinition(RaceId, "Test Race")
@@ -250,5 +256,64 @@ public sealed class EntityActionsTests
 
         Assert.IsTrue(fixture.Actions.IsOnCooldown(EntityId, RacialActionId, now: 0));
         Assert.IsFalse(fixture.Actions.IsOnCooldown(EntityId, ClassActionId, now: 0));
+    }
+
+    [TestMethod]
+    public void ACrawler_HasEveryCoreAction_AsTheCatalogDefinesIt()
+    {
+        var fixture = Build();
+        fixture.SpawnedAsCrawler(ClassId);
+
+        Assert.IsTrue(fixture.Actions.TryGetEffectiveAction(EntityId, CoreActionId, out var core));
+        Assert.AreSame(fixture.Catalog.Get(CoreActionId), core);
+        Assert.IsTrue(fixture.Actions.TryGetEffectiveAction(EntityId, RacialActionId, out var racial));
+        Assert.AreEqual((short)1, FlatDamageOf(racial));
+    }
+
+    [TestMethod]
+    public void ACrawlersOwnGrantOfACoreAction_WinsOverTheCatalogs()
+    {
+        var fixture = Build();
+        fixture.SpawnedAsCrawler(CreatureId);
+
+        Assert.IsTrue(fixture.Actions.TryGetEffectiveAction(EntityId, RacialActionId, out var racial));
+        Assert.AreEqual((short)11, FlatDamageOf(racial), "The race's grant, not the catalog's Core definition.");
+    }
+
+    [TestMethod]
+    public void AnEntityThatIsntACrawler_HasNoCoreActionItWasntGranted()
+    {
+        var fixture = Build();
+        fixture.SpawnedAs(ClassId);
+
+        Assert.IsFalse(fixture.Actions.Has(EntityId, CoreActionId));
+        Assert.IsFalse(fixture.Actions.Has(EntityId, RacialActionId));
+    }
+
+    [TestMethod]
+    public void ACrawlersActionIds_EndWithTheCoreActions_EachOnce()
+    {
+        var fixture = Build();
+        fixture.SpawnedAsCrawler(CreatureId);
+        var actionIds = new List<Guid>();
+
+        fixture.Actions.CopyActionIds(EntityId, actionIds);
+
+        CollectionAssert.AreEqual(new[] { RacialActionId, ClassActionId, CoreActionId }, actionIds);
+    }
+
+    [TestMethod]
+    public void TheActionSetVersion_ChangesWithAGrantOrAnAppliedPart()
+    {
+        var fixture = Build();
+        fixture.SpawnedAs(CreatureId);
+        var before = fixture.Actions.GetActionSetVersion(EntityId);
+
+        fixture.Applied(TraitId);
+        var afterApplying = fixture.Actions.GetActionSetVersion(EntityId);
+        fixture.Components.GetMultiPool<ActionInstanceComponent>().Add(EntityId, new ActionInstanceComponent(UnknownActionId, overrideDefinition: null));
+
+        Assert.AreNotEqual(before, afterApplying);
+        Assert.AreNotEqual(afterApplying, fixture.Actions.GetActionSetVersion(EntityId));
     }
 }

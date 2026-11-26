@@ -1,4 +1,5 @@
 using Engine.Math;
+using Game.Blueprints.Composites;
 using Game.Bootstrap;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
@@ -7,6 +8,7 @@ using Game.Modules.Currency.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Lootboxes;
+using Game.Spawning;
 using Game.World;
 
 namespace Tests.GameTests.Bootstrap;
@@ -114,6 +116,51 @@ public sealed class GameCommandsTests
         Assert.IsFalse(ActionHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ActionHotkeyBindingComponent>(), playerEntityId, HotkeySlot.Slot3, out _));
         Assert.IsTrue(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), playerEntityId, HotkeySlot.Slot3, out var boundStackInstanceId));
         Assert.AreEqual(stackInstanceId, boundStackInstanceId);
+    }
+
+    [TestMethod]
+    public void HotkeyBindingCommands_BindMenuCommand_ReplacesAnActionOnTheSlot_AndPublishes()
+    {
+        var (gameSession, _, playerEntityId) = BuildWithPlayer();
+        var hotkeyBindingCommands = gameSession.Commands.HotkeyBindingCommands;
+        var views = gameSession.Views.HotkeyBindingView;
+        MenuCommandHotkeyBoundEvent? published = null;
+        gameSession.EcsContext.EventBus.Subscribe<MenuCommandHotkeyBoundEvent>(bound => published = bound);
+        hotkeyBindingCommands.BindAction(playerEntityId, HotkeySlot.Slot3, Guid.NewGuid());
+
+        hotkeyBindingCommands.BindMenuCommand(playerEntityId, HotkeySlot.Slot3, BuiltInMenuCommandIds.Inventory);
+
+        Assert.IsFalse(views.TryGetBoundAction(playerEntityId, HotkeySlot.Slot3, out _));
+        Assert.IsTrue(views.TryGetBoundMenuCommand(playerEntityId, HotkeySlot.Slot3, out var boundCommandId));
+        Assert.AreEqual(BuiltInMenuCommandIds.Inventory, boundCommandId);
+        Assert.AreEqual(new MenuCommandHotkeyBoundEvent(playerEntityId, HotkeySlot.Slot3, BuiltInMenuCommandIds.Inventory), published);
+    }
+
+    [TestMethod]
+    public void HotkeyBindingCommands_BindAction_ReplacesAMenuCommandOnTheSlot()
+    {
+        var (gameSession, _, playerEntityId) = BuildWithPlayer();
+        var hotkeyBindingCommands = gameSession.Commands.HotkeyBindingCommands;
+        hotkeyBindingCommands.BindMenuCommand(playerEntityId, HotkeySlot.Menu3, BuiltInMenuCommandIds.Inventory);
+
+        hotkeyBindingCommands.BindAction(playerEntityId, HotkeySlot.Menu3, BuiltInActionIds.PowerAttack);
+
+        Assert.IsFalse(gameSession.Views.HotkeyBindingView.TryGetBoundMenuCommand(playerEntityId, HotkeySlot.Menu3, out _));
+        Assert.IsTrue(gameSession.Views.HotkeyBindingView.TryGetBoundAction(playerEntityId, HotkeySlot.Menu3, out _));
+    }
+
+    [TestMethod]
+    public void ThePlayersKit_BindsTheMenuSidebarToTheMenuCommands()
+    {
+        var gameSession = Build();
+        var playerEntityId = gameSession.Internals.Factory.Spawn(SpawnRequest.At(gameSession.Catalogs.Definitions.GetId(Player.Id), new Vector3Int(5, 5, 0)));
+        var views = gameSession.Views.HotkeyBindingView;
+
+        var bound = new[] { HotkeySlot.Menu1, HotkeySlot.Menu2, HotkeySlot.Menu3, HotkeySlot.Menu4, HotkeySlot.Menu5 }
+            .Select(slot => views.TryGetBoundMenuCommand(playerEntityId, slot, out var commandId) ? commandId : Guid.Empty)
+            .ToArray();
+
+        CollectionAssert.AreEqual(new[] { BuiltInMenuCommandIds.Health, BuiltInMenuCommandIds.Actions, BuiltInMenuCommandIds.Inventory, BuiltInMenuCommandIds.AbilityScores, BuiltInMenuCommandIds.SwitchTargetingMode }, bound);
     }
 
     [TestMethod]

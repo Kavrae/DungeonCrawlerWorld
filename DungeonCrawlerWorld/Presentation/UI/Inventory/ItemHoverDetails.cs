@@ -1,13 +1,15 @@
-using Engine.Utilities;
 using Game.Modules.Inventory;
+using Presentation.UI.Details;
 using UIEngine.UI;
 using UIEngine.UI.Content;
 
 namespace Presentation.UI.Inventory;
 
 /// <summary>An item cell under the pointer: whose inventory it is in, the stack (none for a merged cell) and the item shown.</summary>
-public readonly record struct ItemHoverTarget(int EntityId, uint? StackInstanceId, ItemDefinition Definition)
+public readonly record struct ItemHoverTarget(int EntityId, uint? StackInstanceId, ItemDefinition Definition) : IHoverTarget<ItemHoverTarget>
 {
+    public string Name => Definition.Name;
+
     /// <summary>Whether this names the same cell as other -- the same stack, or for a merged cell the same item in the same inventory.</summary>
     public bool IsSameCellAs(in ItemHoverTarget other) =>
         EntityId == other.EntityId &&
@@ -25,112 +27,19 @@ public interface IItemShopPricingSource
     (int Buy, int Sell)? ReferencePricesFor(in ItemHoverTarget target);
 }
 
-/// <summary>The Item Details popup as hovering sees it.</summary>
-public interface IItemDetailsPopup
+/// <summary>The Item Details popup as hovering sees it, priced by the grid an item was hovered in.</summary>
+public interface IItemDetailsPopup : IDetailsPopup<ItemHoverTarget, IItemShopPricingSource>
 {
-    /// <summary>Whether hovering target opens a popup -- false for an item compare mode can't compare, which hovering then only names.</summary>
-    bool OpensFor(in ItemHoverTarget target);
-
-    /// <summary>Whether the popup is open showing target's cell.</summary>
-    bool IsShowing(in ItemHoverTarget target);
-
-    /// <summary>Opens the popup at the cursor showing target, priced by shopPricing while a shop is open.</summary>
-    void OpenAtCursor(in ItemHoverTarget target, IItemShopPricingSource shopPricing);
-
     /// <summary>Starts compare mode on entityId's stack, priced by shopPricing while a shop is open -- an item cell's "Compare".</summary>
     void Compare(int entityId, uint stackInstanceId, IItemShopPricingSource shopPricing);
 }
 
-/// <summary>What hovering an item cell shows: its name above the cursor at once, then Item Details at the cursor after DetailsDelayFrames.</summary>
-/// <remarks>
-/// Every grid reports its hovered cell each update, with how long it has been hovered; the label is owner-checked, so
-/// one grid's routine end of hover never hides another's. The popup is wired after construction (ItemWindowCoordinator),
-/// since the grids are built before Item Details. A hover opens the popup once: closed while the cell is still hovered
-/// (Escape, Stop Comparison), it stays closed until the hover ends or starts over. Updates hovered while the popup is held
-/// back don't count toward the delay, so a hover still on its cell when a drag ends waits the whole delay again.
-/// </remarks>
-public sealed class ItemHoverDetails(CursorTextContent cursorLabel)
+/// <summary>What hovering an item cell shows (HoverDetails): its name above the cursor at once, then Item Details at the cursor after the delay.</summary>
+public sealed class ItemHoverDetails(CursorTextContent cursorLabel) : HoverDetails<ItemHoverTarget, IItemShopPricingSource, IItemDetailsPopup>(cursorLabel)
 {
-    public static readonly int DetailsDelayFrames = GameTiming.FramesForSeconds(1.5f);
-
-    /// <summary>The owner and cell whose current hover has already opened the popup.</summary>
-    private (object Owner, ItemHoverTarget Target)? _openedHover;
-
-    /// <summary>The owner whose hover went on while the popup was held back, and its hovered frames at the last such update.</summary>
-    private (object Owner, int HoveredFrames)? _heldBackHover;
-
-    public IItemDetailsPopup? Popup { get; set; }
-
-    /// <summary>True while an item is being dragged: a hover shows only the name, never the popup.</summary>
-    public bool IsPopupHeldBack { get; set; }
-
-    /// <summary>owner's hovered cell this update, hovered for hoveredFrames updates so far (1 on the first).</summary>
-    public void Hover(object owner, in ItemHoverTarget target, int hoveredFrames, IItemShopPricingSource shopPricing)
-    {
-        hoveredFrames = FramesCountingTowardDetails(owner, hoveredFrames);
-        if (hoveredFrames < DetailsDelayFrames)
-        {
-            ForgetOpenedHover(owner);
-        }
-
-        if (Popup is { } popup && popup.IsShowing(target))
-        {
-            cursorLabel.HideLabel(owner);
-            return;
-        }
-
-        if (hoveredFrames >= DetailsDelayFrames && !HasOpened(owner, target) && Popup is { } openingPopup && openingPopup.OpensFor(target))
-        {
-            cursorLabel.HideLabel(owner);
-            _openedHover = (owner, target);
-            openingPopup.OpenAtCursor(target, shopPricing);
-            return;
-        }
-
-        cursorLabel.ShowLabel(owner, target.Definition.Name);
-    }
+    /// <summary>How long an item cell is hovered before Item Details opens (HoverDetailsTiming).</summary>
+    public static int DetailsDelayFrames => HoverDetailsTiming.DetailsDelayFrames;
 
     /// <summary>An item cell's "Compare": starts compare mode on entityId's stack, priced by the grid it was chosen in.</summary>
     public void Compare(int entityId, uint stackInstanceId, IItemShopPricingSource shopPricing) => Popup?.Compare(entityId, stackInstanceId, shopPricing);
-
-    /// <summary>owner hovers no cell this update.</summary>
-    public void EndHover(object owner)
-    {
-        ForgetOpenedHover(owner);
-        if (_heldBackHover is { } heldBack && ReferenceEquals(heldBack.Owner, owner))
-        {
-            _heldBackHover = null;
-        }
-
-        cursorLabel.HideLabel(owner);
-    }
-
-    /// <summary>hoveredFrames less the updates owner's hover spent with the popup held back -- 0 while it is held back.</summary>
-    private int FramesCountingTowardDetails(object owner, int hoveredFrames)
-    {
-        if (IsPopupHeldBack)
-        {
-            _heldBackHover = (owner, hoveredFrames);
-            return 0;
-        }
-
-        if (_heldBackHover is { } heldBack && ReferenceEquals(heldBack.Owner, owner) && hoveredFrames >= heldBack.HoveredFrames)
-        {
-            return hoveredFrames - heldBack.HoveredFrames;
-        }
-
-        _heldBackHover = null;
-        return hoveredFrames;
-    }
-
-    private bool HasOpened(object owner, in ItemHoverTarget target) =>
-        _openedHover is { } opened && ReferenceEquals(opened.Owner, owner) && opened.Target.IsSameCellAs(target);
-
-    private void ForgetOpenedHover(object owner)
-    {
-        if (_openedHover is { } opened && ReferenceEquals(opened.Owner, owner))
-        {
-            _openedHover = null;
-        }
-    }
 }

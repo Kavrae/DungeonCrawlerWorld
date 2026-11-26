@@ -13,14 +13,14 @@ namespace Presentation.UI.Content;
 /// told a tap from a drag); dragging picks up what the slot holds; a drop lands on HotbarSlotDropTarget.
 /// </remarks>
 public sealed class HotbarSlotElement(ElementServices services)
-    : Element(services), IContentDragSource, IContentDropTarget, IShowsItemStacks
+    : Element(services), IContentDragSource, IContentDropTarget, IShowsItemStacks, IShowsActions
 {
     private HotbarContent _hotbar = null!;
     private HotbarSlotDropTarget _dropTarget = null!;
 
     public HotkeySlot Slot { get; private set; }
 
-    /// <summary>Whether the slot holds an action or item stack that resolves, as of the hotbar's last Update.</summary>
+    /// <summary>Whether the slot holds an action, item stack or menu command that resolves, as of the hotbar's last Update.</summary>
     public bool IsBound => _hotbar.IsSlotBound(Slot);
 
     /// <summary>Whether the slot is usable, as of the hotbar's last Update -- false for a locked slot or a blocked binding.</summary>
@@ -34,6 +34,10 @@ public sealed class HotbarSlotElement(ElementServices services)
     }
 
     public bool ShowsStack(int entityId, uint stackInstanceId) => _hotbar.SlotShowsStack(Slot, entityId, stackInstanceId);
+
+    public bool ShowsAction(Guid actionId) => _hotbar.SlotShowsAction(Slot, actionId);
+
+    public bool ShowsMenuCommand(Guid menuCommandId) => _hotbar.SlotShowsMenuCommand(Slot, menuCommandId);
 
     public override void DrawContent(GameTime gameTime) => _hotbar.DrawSlot(Render.Batch, this, LocalContentRectangle);
 

@@ -22,19 +22,57 @@ namespace Presentation.UI;
 /// </summary>
 public static class ItemComparisonStatExtraction
 {
-    /// <summary>Every line Item Details Comparison compares, in simple mode -- the mode comparison always shows.</summary>
-    /// <param name="preview">The item as the player would use it (Game.Views.ActivationPreviews); null shows its own values.</param>
-    public static IReadOnlyList<ItemComparisonStat> Extract(ItemDefinition definition, ActionCatalog actionCatalog, EffectTextNames names, ActivatablePreview? preview = null)
+    /// <summary>Every line a comparison compares, in simple mode -- the mode comparison always shows -- for an item or an action.</summary>
+    /// <param name="preview">The item or action as the player would use it (Game.Views.ActivationPreviews); null shows its own values.</param>
+    public static IReadOnlyList<ItemComparisonStat> Extract(ActivatableDefinition definition, ActionCatalog actionCatalog, EffectTextNames names, ActivatablePreview? preview = null)
     {
         var stats = new List<ItemComparisonStat>(ExtractEffectStats(definition, names, DetailsMode.Simple, preview));
+        stats.AddRange(ExtractCostStats(definition, names, preview));
 
-        if (definition.Activator is { } activator)
+        if (definition.ActivatorOrNone is { } activator)
         {
             stats.AddRange(ExtractActivatorStats(activator, actionCatalog, preview, DetailsMode.Simple, names));
             stats.AddRange(ExtractResourceStats(activator));
         }
 
         return stats;
+    }
+
+    /// <summary>
+    /// The Cost section's lines, one per entry: what using it takes ("To use: ...", "To turn on: ..." for a toggle), then
+    /// what a toggle takes while on ("While on, every 1s: ..."), each as the player would pay it when previewed. A
+    /// resource drain compares only with a drain of the same resource at the same point (its Key names both), lower being
+    /// better and none best; anything else a use takes is shown but never ranked.
+    /// </summary>
+    public static IReadOnlyList<ItemComparisonStat> ExtractCostStats(ActivatableDefinition definition, EffectTextNames names, ActivatablePreview? preview = null)
+    {
+        var stats = new List<ItemComparisonStat>();
+        AddCostStats(stats, definition.ActivationEffects, definition.Toggle is null ? "To use" : "To turn on", "use", names, preview);
+        if (definition.Toggle?.Periodic is { } periodic)
+        {
+            AddCostStats(stats, periodic.Effects, $"While on, every {TimingText.Seconds(periodic.IntervalFrames)}", "upkeep", names, preview);
+        }
+
+        return stats;
+    }
+
+    private static void AddCostStats(List<ItemComparisonStat> stats, IReadOnlyList<Effect> effects, string prefix, string keyPoint, EffectTextNames names, ActivatablePreview? preview)
+    {
+        foreach (var effect in effects)
+        {
+            foreach (var entry in effect.Entries)
+            {
+                var text = $"{prefix}: {EffectFormatting.FormatEntry(entry, names, DetailsMode.Simple, preview?.Entries)}";
+                if (entry is IResourceDrain drain)
+                {
+                    var amount = preview?.Of(entry)?.ValueOr(EffectAmount.ResourceDrained, drain.Amount) ?? drain.Amount;
+                    stats.Add(new ItemComparisonStat($"cost:{keyPoint}:{drain.Resource}", text, amount, HigherIsBetter: false, ValueWhenAbsent: 0));
+                    continue;
+                }
+
+                stats.Add(new ItemComparisonStat($"cost:{keyPoint}:{entry.GetType().Name}", text, null, HigherIsBetter: false, ValueWhenAbsent: 0));
+            }
+        }
     }
 
     /// <summary>Just the Effects-section half -- ItemDetailsWindow.BuildEffectsSection's own line source, since Effects and Activation render as separate sections with their own headers.</summary>
@@ -201,16 +239,21 @@ public static class ItemComparisonStatExtraction
 
         if (activator.Timing.ActionLockFrames is { } actionLockFrames)
         {
-            stats.Add(new ItemComparisonStat("activator:actionLock", $"Action Lock: {FormatSeconds(actionLockFrames)}", actionLockFrames, HigherIsBetter: false, Unit: StatUnit.Frames));
+            stats.Add(category == ActionTimingCategory.Delayed
+                ? new ItemComparisonStat("activator:windup", $"Windup: {FormatSeconds(actionLockFrames)}", actionLockFrames, HigherIsBetter: false, Unit: StatUnit.Frames)
+                : new ItemComparisonStat("activator:actionLock", $"Action Lock: {FormatSeconds(actionLockFrames)}", actionLockFrames, HigherIsBetter: false, Unit: StatUnit.Frames));
         }
 
         if (activator.Timing.CooldownFrames is { } cooldownFrames)
         {
-            stats.Add(new ItemComparisonStat("activator:cooldown", $"Cooldown: {FormatSeconds(cooldownFrames)}", cooldownFrames, HigherIsBetter: false, Unit: StatUnit.Frames));
+            stats.Add(CooldownStat(cooldownFrames, FormatSeconds(cooldownFrames), tooltip: null));
         }
         else if (activator.Timing.CooldownMatchesActionLock)
         {
-            stats.Add(new ItemComparisonStat("activator:cooldown", "Cooldown: as long as the action lock", null, HigherIsBetter: false));
+            var tooltip = mode == DetailsMode.Advanced ? CooldownMatchesActionLockTooltip : null;
+            stats.Add((preview?.ActionLockFrames ?? activator.Timing.ActionLockFrames) is { } lockFrames
+                ? CooldownStat(lockFrames, TimingText.Seconds(lockFrames), tooltip)
+                : new ItemComparisonStat("activator:cooldown", "Cooldown: your action lock", null, HigherIsBetter: false, tooltip, ValueWhenAbsent: 0));
         }
 
         switch (activator)
@@ -249,6 +292,13 @@ public static class ItemComparisonStatExtraction
             ? stat with { ChangeText = changeText, ChangeIsBuff = isBuff, TooltipText = PreviewedValueText.Tooltip(shown, names) }
             : stat;
     }
+
+    /// <summary>Advanced mode's tooltip over a cooldown that is as long as its user's action lock (ActionTiming.CooldownMatchesActionLock): Dodge's.</summary>
+    public const string CooldownMatchesActionLockTooltip = "As long as your action lock";
+
+    /// <summary>"Cooldown: 3s": lower is better, and none is best (ValueWhenAbsent 0).</summary>
+    private static ItemComparisonStat CooldownStat(ushort frames, string seconds, string? tooltip) =>
+        new("activator:cooldown", $"Cooldown: {seconds}", frames, HigherIsBetter: false, tooltip, Unit: StatUnit.Frames, ValueWhenAbsent: 0);
 
     /// <summary>Same Ceiling(frames / GameFrameRate.FramesPerSecond) idiom ActionActivatorFormatting/ModifierDisplayFormatting already use.</summary>
     private static string FormatSeconds(ushort frames) => $"{(int)System.Math.Ceiling(frames / (float)GameFrameRate.FramesPerSecond)}s";

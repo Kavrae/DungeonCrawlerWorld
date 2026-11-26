@@ -17,6 +17,7 @@ using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.UI;
+using Presentation.UI.Menus;
 using Tests.Presentation;
 using UIEngine.UI;
 
@@ -129,7 +130,7 @@ public sealed class PlayerCommandsTests
             TestActionStateViews.Over(componentManager, actionCatalog),
             TestActionStateViews.Targeting(componentManager, world, actionCatalog),
             playerCommands,
-            simulationClock: clock, dropPlacement: new TestPlayerItemDrops());
+            simulationClock: clock, dropPlacement: new TestPlayerItemDrops(), menuCommands: new MenuCommandCatalog());
 
         return new Harness
         {

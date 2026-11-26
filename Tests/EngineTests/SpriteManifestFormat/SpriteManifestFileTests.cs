@@ -74,7 +74,7 @@ public sealed class SpriteManifestFileTests
         }
         finally
         {
-            directory.Delete(recursive: true);
+            TestDirectory.TryDelete(directory.FullName);
         }
     }
 

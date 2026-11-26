@@ -15,6 +15,7 @@ using Presentation.Input.DragDrop;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
+using Presentation.UI.Menus;
 using UIEngine;
 using UIEngine.Fonts;
 using UIEngine.Input;
@@ -57,6 +58,7 @@ public sealed class HotbarContent(
     SpriteSheetService spriteSheetService,
     Vector2 screenSize,
     SimulationClock simulationClock,
+    MenuCommandCatalog menuCommands,
     EntityActions? actions = null,
     EffectTextNames? effectTextNames = null,
     ContextMenuController? contextMenus = null) : IElementContent
@@ -111,6 +113,9 @@ public sealed class HotbarContent(
 
     /// <summary>Every laid-out slot, as a child element of the host window -- rebuilt only when the revealed rows or pages change (see RebuildSlots).</summary>
     private readonly List<HotbarSlotElement> _slotElements = [];
+
+    /// <summary>The menu sidebar's slot elements, children of its own window (AddMenuSidebar), laid out once.</summary>
+    private readonly List<HotbarSlotElement> _menuSidebarSlotElements = [];
 
     /// <summary>A slot was clicked -- a tap the input controller has already told from a drag.</summary>
     public event Action<HotkeySlot>? SlotClicked;
@@ -197,15 +202,31 @@ public sealed class HotbarContent(
             _slotBoundStates[entry.Slot] = isBound;
 
             // Unbound but unlocked is empty, not disabled (nothing to fade).
-            _slotActiveStates[entry.Slot] = !IsSlotLocked(entry.Slot) && (!isBound || blocker == ActivationBlocker.None);
+            _slotActiveStates[entry.Slot] = !IsSlotLocked(entry.Slot) && (!isBound || blocker == ActivationBlocker.None) &&
+                (!TryGetBoundMenuCommand(playerEntityId, entry.Slot, out var command) || command.CanRun());
         }
     }
 
-    /// <summary>Whether slot holds an action or item stack that resolves, as of the last Update -- exactly when TryGetSlotSummary has something to describe, without building its text.</summary>
+    /// <summary>The menu command slot is bound to, if it is bound to one the catalog holds.</summary>
+    private bool TryGetBoundMenuCommand(int playerEntityId, HotkeySlot slot, out MenuCommand command)
+    {
+        if (hotkeyBindingView.TryGetBoundMenuCommand(playerEntityId, slot, out var menuCommandId))
+        {
+            return menuCommands.TryGet(menuCommandId, out command);
+        }
+
+        command = null!;
+        return false;
+    }
+
+    /// <summary>The menu command slot holds, if any -- what its context menu offers to run.</summary>
+    internal bool TryGetSlotMenuCommand(HotkeySlot slot, out MenuCommand command) => TryGetBoundMenuCommand(world.PlayerEntityId, slot, out command);
+
+    /// <summary>Whether slot holds an action, item stack or menu command that resolves, as of the last Update -- exactly when TryGetSlotSummary has something to describe, without building its text.</summary>
     /// <remarks>Read every frame the cursor rests on the hotbar, so it's the answer RefreshSlotActiveStates already resolved rather than a fresh binding lookup.</remarks>
     internal bool IsSlotBound(HotkeySlot slot) => _slotBoundStates.GetValueOrDefault(slot);
 
-    /// <summary>Why the player can't use what slot holds right now (None if they can) -- false if the slot holds nothing. The blocker TryGetSlotSummary reports, without building its text.</summary>
+    /// <summary>Why the player can't use what slot holds right now (None if they can, and always for a menu command) -- false if the slot holds nothing. The blocker TryGetSlotSummary reports, without building its text.</summary>
     internal bool TryGetSlotBlocker(HotkeySlot slot, out ActivationBlocker blocker) => TryGetSlotBlocker(world.PlayerEntityId, slot, out blocker);
 
     private bool TryGetSlotBlocker(int playerEntityId, HotkeySlot slot, out ActivationBlocker blocker)
@@ -223,7 +244,7 @@ public sealed class HotbarContent(
         }
 
         blocker = ActivationBlocker.None;
-        return false;
+        return TryGetBoundMenuCommand(playerEntityId, slot, out _);
     }
 
     /// <summary>Unlocking more Expansion slots is rare and permanent (see HotkeyExpansion.Apply), so this only actually resizes/repositions the host window on the frame the row/page count changes, not every frame -- centered horizontally and anchored to the same bottom margin as before, recomputed against the new Size so the bar grows upward as rows are added and rightward as page 2 appears (see ShellBootstrapper, which sizes/positions the window identically at construction).</summary>
@@ -306,9 +327,11 @@ public sealed class HotbarContent(
         }
     }
 
-    private void AddSlot(HotkeySlot slot, Vector2 relativePosition)
+    private void AddSlot(HotkeySlot slot, Vector2 relativePosition) => _slotElements.Add(CreateSlotElement(_hostWindow, slot, relativePosition));
+
+    private HotbarSlotElement CreateSlotElement(Window hostWindow, HotkeySlot slot, Vector2 relativePosition)
     {
-        var slotElement = _hostWindow.ElementPoolService.CreateElement<HotbarSlotElement>(_hostWindow, new ElementOptions
+        var slotElement = hostWindow.ElementPoolService.CreateElement<HotbarSlotElement>(hostWindow, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2((int)relativePosition.X, (int)relativePosition.Y), Size = SlotSize, DisplayMode = ElementDisplayMode.Fixed },
@@ -316,8 +339,32 @@ public sealed class HotbarContent(
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
         slotElement.Configure(this, slot);
-        _hostWindow.AddChild(slotElement);
-        _slotElements.Add(slotElement);
+        hostWindow.AddChild(slotElement);
+        return slotElement;
+    }
+
+    /// <summary>The menu sidebar's size: its slots in one column, a slot gap apart.</summary>
+    public static Vector2 MenuSidebarSize
+    {
+        get
+        {
+            var slotCount = HotkeySlotLayout.Entries.Count(static entry => entry.Category == HotkeyCategory.Menu);
+            return new Vector2(SlotSize.X, slotCount * SlotSize.Y + (slotCount - 1) * HotbarChrome.SlotGap);
+        }
+    }
+
+    /// <summary>Lays the menu sidebar's slots out in sidebarWindow, top to bottom: slots of this hotbar like any other, which never move once laid out.</summary>
+    /// <remarks>Call once, after sidebarWindow is initialized; the bar's own rebuilds never touch these.</remarks>
+    public void AddMenuSidebar(Window sidebarWindow)
+    {
+        sidebarWindow.ContentPadding = Vector2.Zero;
+        foreach (var entry in HotkeySlotLayout.Entries)
+        {
+            if (entry.Category == HotkeyCategory.Menu)
+            {
+                _menuSidebarSlotElements.Add(CreateSlotElement(sidebarWindow, entry.Slot, new Vector2(0, entry.Row * (SlotSize.Y + HotbarChrome.SlotGap))));
+            }
+        }
     }
 
     /// <summary>Whether slot is usable as of the last Update (see RefreshSlotActiveStates) -- true until the first one has run.</summary>
@@ -327,6 +374,14 @@ public sealed class HotbarContent(
     internal HotbarSlotElement? FindSlotElement(HotkeySlot slot)
     {
         foreach (var slotElement in _slotElements)
+        {
+            if (slotElement.Slot == slot)
+            {
+                return slotElement;
+            }
+        }
+
+        foreach (var slotElement in _menuSidebarSlotElements)
         {
             if (slotElement.Slot == slot)
             {
@@ -413,6 +468,14 @@ public sealed class HotbarContent(
             return true;
         }
 
+        if (TryGetBoundMenuCommand(playerEntityId, slot, out var command))
+        {
+            title = command.Name;
+            summary = command.Description;
+            blocker = ActivationBlocker.None;
+            return true;
+        }
+
         title = string.Empty;
         summary = string.Empty;
         blocker = ActivationBlocker.None;
@@ -465,6 +528,23 @@ public sealed class HotbarContent(
     /// <summary>Removes slot's action binding, if any -- mirrors UnbindItemSlot for a bound action dragged off the hotbar entirely.</summary>
     internal void UnbindActionSlot(HotkeySlot slot) => hotkeyBindingCommands.UnbindAction(world.PlayerEntityId, slot);
 
+    /// <summary>Binds slot to menu command menuCommandId -- refusing a locked slot, as BindAction does.</summary>
+    internal void BindMenuCommand(HotkeySlot slot, Guid menuCommandId)
+    {
+        if (IsSlotLocked(slot))
+        {
+            return;
+        }
+
+        hotkeyBindingCommands.BindMenuCommand(world.PlayerEntityId, slot, menuCommandId);
+    }
+
+    /// <summary>Removes slot's menu command binding, if any.</summary>
+    internal void UnbindMenuCommandSlot(HotkeySlot slot) => hotkeyBindingCommands.UnbindMenuCommand(world.PlayerEntityId, slot);
+
+    /// <summary>Removes slot's binding of any kind -- its context menu's Unbind.</summary>
+    internal void ClearSlot(HotkeySlot slot) => hotkeyBindingCommands.ClearSlot(world.PlayerEntityId, slot);
+
     /// <summary>
     /// Resolves a completed content-drag drop in one call -- unbinds originSlot first (if the
     /// drag started on an already-bound hotbar slot), then binds destinationSlot (if the release
@@ -483,14 +563,18 @@ public sealed class HotbarContent(
     /// source Element entirely (e.g. InventoryItemStackCell); this method only knows the
     /// hotbar-slot half of that, handed to it already resolved.
     /// </summary>
-    /// <remarks>An action is identified by a catalog Guid and an item stack by a session counter, so the payload arrives as whichever one the drag carried rather than as one shared id type.</remarks>
-    internal void ResolveDroppedBinding(HotkeySlot? originSlot, HotkeySlot? destinationSlot, Guid? actionId, uint? stackInstanceId)
+    /// <remarks>An action and a menu command are identified by a Guid and an item stack by a session counter, so the payload arrives as whichever one the drag carried rather than as one shared id type.</remarks>
+    internal void ResolveDroppedBinding(HotkeySlot? originSlot, HotkeySlot? destinationSlot, Guid? actionId, uint? stackInstanceId, Guid? menuCommandId)
     {
         if (originSlot is { } slot)
         {
             if (actionId is not null)
             {
                 UnbindActionSlot(slot);
+            }
+            else if (menuCommandId is not null)
+            {
+                UnbindMenuCommandSlot(slot);
             }
             else
             {
@@ -503,6 +587,10 @@ public sealed class HotbarContent(
             if (actionId is { } boundAction)
             {
                 BindAction(destination, boundAction);
+            }
+            else if (menuCommandId is { } boundCommand)
+            {
+                BindMenuCommand(destination, boundCommand);
             }
             else if (stackInstanceId is { } boundStack)
             {
@@ -573,7 +661,7 @@ public sealed class HotbarContent(
         }
     }
 
-    /// <summary>Whether the open context menu was opened for slotElement, or for anything showing the stack its slot is bound to: an inventory cell of it, another slot bound to it.</summary>
+    /// <summary>Whether the open context menu was opened for slotElement, or for anything showing what its slot is bound to: an inventory cell of its stack, an Actions window cell of its action or command, another slot bound to it.</summary>
     internal bool IsContextMenuAbout(HotbarSlotElement slotElement)
     {
         if (_contextMenus is null)
@@ -587,15 +675,41 @@ public sealed class HotbarContent(
         }
 
         var playerEntityId = world.PlayerEntityId;
-        return hotkeyBindingView.TryGetBoundItem(playerEntityId, slotElement.Slot, out var stackInstanceId)
+        var slot = slotElement.Slot;
+        if (hotkeyBindingView.TryGetBoundAction(playerEntityId, slot, out var actionId))
+        {
+            return ContextMenuActions.IsAboutAction(_contextMenus, actionId);
+        }
+
+        if (hotkeyBindingView.TryGetBoundMenuCommand(playerEntityId, slot, out var menuCommandId))
+        {
+            return ContextMenuActions.IsAboutMenuCommand(_contextMenus, menuCommandId);
+        }
+
+        return hotkeyBindingView.TryGetBoundItem(playerEntityId, slot, out var stackInstanceId)
             && ContextMenuItemStacks.IsAbout(_contextMenus, playerEntityId, stackInstanceId);
     }
+
+    /// <summary>Whether slot is bound to the player's action actionId.</summary>
+    internal bool SlotShowsAction(HotkeySlot slot, Guid actionId) =>
+        hotkeyBindingView.TryGetBoundAction(world.PlayerEntityId, slot, out var boundActionId) && boundActionId == actionId;
+
+    /// <summary>Whether slot is bound to menu command menuCommandId.</summary>
+    internal bool SlotShowsMenuCommand(HotkeySlot slot, Guid menuCommandId) =>
+        hotkeyBindingView.TryGetBoundMenuCommand(world.PlayerEntityId, slot, out var boundCommandId) && boundCommandId == menuCommandId;
 
     /// <summary>Whether slot is bound to entityId's stack stackInstanceId: only ever the player's.</summary>
     internal bool SlotShowsStack(HotkeySlot slot, int entityId, uint stackInstanceId) =>
         entityId == world.PlayerEntityId
         && hotkeyBindingView.TryGetBoundItem(entityId, slot, out var boundStackInstanceId)
         && boundStackInstanceId == stackInstanceId;
+
+    /// <summary>The glow of a slot bound to what Item Details or Action Details shows selected.</summary>
+    private static void DrawSelectionGlow(SpriteEffectBatch spriteBatch, Rectangle bounds)
+    {
+        GlowRenderer.Draw(spriteBatch, bounds, WindowPalette.AttentionGlow, GlowMode.ExteriorFade);
+        GlowRenderer.Draw(spriteBatch, bounds, WindowPalette.AttentionGlow, GlowMode.InteriorFade);
+    }
 
     private void DrawSlot(SpriteEffectBatch spriteBatch, int playerEntityId, HotkeySlot slot, Rectangle bounds)
     {
@@ -611,6 +725,11 @@ public sealed class HotbarContent(
             {
                 ToggleActiveMarker.Draw(spriteBatch, contentBounds, alpha);
             }
+
+            if (actionId == mapViewState.SelectedActionId)
+            {
+                DrawSelectionGlow(spriteBatch, bounds);
+            }
         }
         else if (hotkeyBindingView.TryGetBoundItem(playerEntityId, slot, out var stackInstanceId) && TryResolveBoundItem(playerEntityId, stackInstanceId, out var item, out var stack))
         {
@@ -623,8 +742,16 @@ public sealed class HotbarContent(
 
             if (stackInstanceId == mapViewState.SelectedItemStackInstanceId)
             {
-                GlowRenderer.Draw(spriteBatch, bounds, WindowPalette.AttentionGlow, GlowMode.ExteriorFade);
-                GlowRenderer.Draw(spriteBatch, bounds, WindowPalette.AttentionGlow, GlowMode.InteriorFade);
+                DrawSelectionGlow(spriteBatch, bounds);
+            }
+        }
+        else if (TryGetBoundMenuCommand(playerEntityId, slot, out var command))
+        {
+            DrawSlotVisual(spriteBatch, slot, bounds, contentBounds, new SlotVisual(command.SpriteName, command.Glyph, command.GlyphColor, FillPercentage: 0f, Costs: default, QuantityText: null, CountdownSecondsAboveSlot: null), alpha);
+
+            if (command.Id == mapViewState.SelectedMenuCommandId)
+            {
+                DrawSelectionGlow(spriteBatch, bounds);
             }
         }
         else
@@ -663,7 +790,7 @@ public sealed class HotbarContent(
             SpriteName: action.SpriteName,
             Glyph: action.Glyph,
             GlyphColor: action.GlyphColor,
-            FillPercentage: isActive ? ComputeActionFillPercentage(playerEntityId, action) : 0f,
+            FillPercentage: isActive ? ActionSlotFill.Of(actionStateView, _actions, playerEntityId, action, simulationClock.CurrentFrame) : 0f,
             Costs: actionStateView.ActionCostsOf(playerEntityId, action.Id),
             QuantityText: null,
             CountdownSecondsAboveSlot: null);
@@ -764,12 +891,8 @@ public sealed class HotbarContent(
     }
 
     /// <summary>Top-left of every slot -- the bind key from HotkeySlotLayout (e.g. "Q", "1", "↑1" for a Shift-page Expansion slot). Drawn even on a locked slot (dimmed like everything else there), a preview of what the key will do once unlocked.</summary>
-    private void DrawKeyLabel(SpriteEffectBatch spriteBatch, Rectangle bounds, HotkeySlot slot, float alpha)
-    {
-        var text = HotkeySlotLayout.GetKeyLabel(slot);
-        var position = new Vector2(bounds.X + OverlayPadding.X, bounds.Y + OverlayPadding.Y);
-        ContrastTextRenderer.Draw(spriteBatch, _overlayFont, text, position, alpha);
-    }
+    private void DrawKeyLabel(SpriteEffectBatch spriteBatch, Rectangle bounds, HotkeySlot slot, float alpha) =>
+        HotkeyKeyLabel.Draw(spriteBatch, _overlayFont, HotkeySlotLayout.GetKeyLabel(slot), bounds, alpha);
 
     /// <summary>Bottom-left -- what using the slot takes, only ever called when it takes anything: each resource's amount in its own colour (CostBadgePalette), mana then health, to one decimal place since a modifier can leave a fraction.</summary>
     private void DrawCosts(SpriteEffectBatch spriteBatch, SlotTextCaches textCaches, Rectangle bounds, ActivationCostTotals costs, float alpha)
@@ -801,46 +924,7 @@ public sealed class HotbarContent(
         ContrastTextRenderer.Draw(spriteBatch, _overlayFont, text, position, alpha);
     }
 
-    /// <summary>
-    /// The granted instance's own cooldown fraction (any category, if it has one) whenever it's
-    /// actually counting down; only otherwise falls back to the shared ActionLock's fraction
-    /// (Immediate/Delayed only -- FreeCast bypasses the shared lock entirely).
-    ///
-    /// The shared ActionLock is genuinely shared across every Immediate/Delayed action, not
-    /// scoped to whichever one actually set it -- so if this were always taken as
-    /// Math.Max(lockFraction, cooldownFraction), using a *different* action (e.g. Default
-    /// Attack's short windup) while this one's own, longer, real cooldown is ticking down would
-    /// make this icon spike to whatever fraction that unrelated windup happens to be at, then
-    /// visibly snap back down once the windup ends -- confusing/wrong, since nothing about this
-    /// action's own readiness actually changed. Preferring cooldownFraction whenever it's
-    /// nonzero avoids that: this action's own cooldown is always the more specific, more
-    /// correct signal once it exists, so the shared lock only ever matters for an action with no
-    /// cooldown of its own (e.g. Default Attack), where it's still the only fill signal available.
-    /// </summary>
-    private float ComputeActionFillPercentage(int playerEntityId, ActionDefinition action)
-    {
-        var cooldownFraction = 0f;
-        if (_actions is not null && actionStateView.CooldownFramesFor(playerEntityId, action.Activator.Timing) is { } cooldownFrames && cooldownFrames > 0)
-        {
-            cooldownFraction = System.Math.Min(1f, (float)_actions.CooldownFramesRemaining(playerEntityId, action.Id, simulationClock.CurrentFrame) / cooldownFrames);
-        }
-
-        if (cooldownFraction > 0f)
-        {
-            return cooldownFraction;
-        }
-
-        if (action.Activator.Timing.Category != ActionTimingCategory.FreeCast &&
-            actionStateView.TryGetActionLock(playerEntityId, out var actionLock) &&
-            actionLock.CurrentLockTotalFrames > 0)
-        {
-            return (float)ActionLockGate.FramesRemaining(actionLock, simulationClock.CurrentFrame) / actionLock.CurrentLockTotalFrames;
-        }
-
-        return 0f;
-    }
-
-    /// <summary>The slot's fill for an item, by the actions' rule (ComputeActionFillPercentage): the bound unit's own cooldown while it is cooling, else the shared ActionLock unless the item is FreeCast.</summary>
+    /// <summary>The slot's fill for an item, by the actions' rule (ActionSlotFill): the bound unit's own cooldown while it is cooling, else the shared ActionLock unless the item is FreeCast.</summary>
     /// <remarks>
     /// Deliberately not PotionCooldownComponent: that cooldown never blocks a second potion (see PotionCooldownEffects'
     /// own doc comment), so masking the slot as if it were on cooldown would be actively misleading -- it gets its own
@@ -863,7 +947,7 @@ public sealed class HotbarContent(
         return 0f;
     }
 
-    /// <summary>Picks up the item or action bound to slot, at SlotSize; dragging it anywhere unbinds that slot (see HotbarBindingDropHandler).</summary>
+    /// <summary>Picks up the item, action or menu command bound to slot, at SlotSize; dragging it anywhere unbinds that slot (see HotbarBindingDropHandler).</summary>
     /// <remarks>A bound item is one of the player's own stacks, so its drag names the player as its origin: dropped on another inventory -- a container on the map, a corpse's window -- it moves there as if dragged from the inventory.</remarks>
     internal bool TryBeginSlotDrag(HotkeySlot slot, out ContentDragStart start)
     {
@@ -876,6 +960,12 @@ public sealed class HotbarContent(
         if (TryGetBoundActionId(slot, out var boundActionId))
         {
             start = new ContentDragStart(new DragPayload(DragPayloadOrigin.HotbarSlot, ActionId: boundActionId, OriginSlot: slot), SlotSize);
+            return true;
+        }
+
+        if (hotkeyBindingView.TryGetBoundMenuCommand(world.PlayerEntityId, slot, out var boundMenuCommandId))
+        {
+            start = new ContentDragStart(new DragPayload(DragPayloadOrigin.HotbarSlot, MenuCommandId: boundMenuCommandId, OriginSlot: slot), SlotSize);
             return true;
         }
 

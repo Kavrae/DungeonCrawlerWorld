@@ -17,6 +17,7 @@ using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.UI;
 using Presentation.UI.Content;
+using Presentation.UI.Menus;
 using Tests.UIEngine;
 using UIEngine.Rendering;
 using UIEngine.UI;
@@ -110,7 +111,7 @@ public sealed class ToggleItemPresentationTests
             new ActionStateView(components, entityActions, session.Catalogs.ItemCatalog, localTierRoster: null, TestActionStateViews.EffectServicesOver(components)),
             session.Views.TargetingView,
             session.Commands.PlayerCommands,
-            simulationClock: ecs.SystemManager.Clock, dropPlacement: new global::Presentation.UI.Inventory.ItemDropPlacement(session.Commands.ItemDropCommands, mapViewState));
+            simulationClock: ecs.SystemManager.Clock, dropPlacement: new global::Presentation.UI.Inventory.ItemDropPlacement(session.Commands.ItemDropCommands, mapViewState), menuCommands: new MenuCommandCatalog());
 
         return new InputHarness { Ecs = ecs, Items = session.Catalogs.ItemCatalog, PlayerEntityId = playerEntityId, ActionTargeting = actionTargeting, MapViewState = mapViewState, World = world };
     }

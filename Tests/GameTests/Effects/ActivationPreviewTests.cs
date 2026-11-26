@@ -109,7 +109,7 @@ public sealed class ActivationPreviewTests
         Assert.AreEqual("Deals 14 damage to a random body part", advanced.DisplayText);
         Assert.AreEqual("(+7)", advanced.ChangeText);
         Assert.IsTrue(advanced.ChangeIsBuff);
-        Assert.AreEqual("Base: 7\nModifier: x2\nTotal: 14", advanced.TooltipText);
+        Assert.AreEqual("Base: 7\nModifier: x2", advanced.TooltipText);
         Assert.AreEqual("Deals 14 damage", simple.DisplayText);
         Assert.IsNull(simple.ChangeText);
         Assert.IsNull(simple.TooltipText);

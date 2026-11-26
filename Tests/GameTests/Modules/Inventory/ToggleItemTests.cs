@@ -39,6 +39,9 @@ public sealed class ToggleItemTests
         public required GameSession Session { get; init; }
         public required int PlayerEntityId { get; init; }
 
+        /// <summary>The tile the player's auras radiate from: its footprint's center (AuraSystem.SourceTileOf).</summary>
+        public Vector3Int PlayerAuraTile => Game.Modules.Auras.Systems.AuraSystem.SourceTileOf(Components.GetDirectPool<Game.Modules.Core.Components.TransformComponent>().GetReadonly(PlayerEntityId));
+
         private long _frame;
 
         public EcsContext Ecs => Session.EcsContext;
@@ -261,13 +264,13 @@ public sealed class ToggleItemTests
 
         Assert.AreEqual(1, harness.ActiveToggleCount(player));
         Assert.AreEqual(1, harness.HeldSourceCount(player));
-        Assert.AreEqual(IdolStrength, harness.PoisonStrengthAt(PlayerPosition));
+        Assert.AreEqual(IdolStrength, harness.PoisonStrengthAt(harness.PlayerAuraTile));
 
         Assert.IsTrue(ToggleItemActions.TryToggle(harness.Components, harness.Items, player, litStackId, out _));
 
         Assert.AreEqual(0, harness.ActiveToggleCount(player));
         Assert.AreEqual(0, harness.HeldSourceCount(player));
-        Assert.AreEqual(0, harness.PoisonStrengthAt(PlayerPosition));
+        Assert.AreEqual(0, harness.PoisonStrengthAt(harness.PlayerAuraTile));
     }
 
     [TestMethod]
@@ -281,13 +284,13 @@ public sealed class ToggleItemTests
 
         Assert.AreEqual(2, harness.ActiveToggleCount(player));
         Assert.AreEqual(2, harness.HeldSourceCount(player));
-        Assert.AreEqual(IdolStrength * 2, harness.PoisonStrengthAt(PlayerPosition));
+        Assert.AreEqual(IdolStrength * 2, harness.PoisonStrengthAt(harness.PlayerAuraTile));
 
         Assert.IsTrue(ToggleItemActions.TryToggle(harness.Components, harness.Items, player, litStackId, out _));
 
         Assert.AreEqual(1, harness.ActiveToggleCount(player));
         Assert.AreEqual(1, harness.HeldSourceCount(player));
-        Assert.AreEqual(IdolStrength, harness.PoisonStrengthAt(PlayerPosition));
+        Assert.AreEqual(IdolStrength, harness.PoisonStrengthAt(harness.PlayerAuraTile));
     }
 
     [TestMethod]
@@ -301,7 +304,7 @@ public sealed class ToggleItemTests
         Assert.IsTrue(harness.Session.Commands.InventoryCommands.TryTransferStack(player, receiver, litStackId));
 
         Assert.AreEqual(0, harness.ActiveToggleCount(player));
-        Assert.AreEqual(0, harness.PoisonStrengthAt(PlayerPosition));
+        Assert.AreEqual(0, harness.PoisonStrengthAt(harness.PlayerAuraTile));
         Assert.AreEqual(1, harness.ActiveToggleCount(receiver));
         Assert.AreEqual(1, harness.HeldSourceCount(receiver));
         Assert.AreEqual(IdolStrength, harness.PoisonStrengthAt(OtherPosition));
@@ -311,7 +314,7 @@ public sealed class ToggleItemTests
 
         Assert.AreEqual(0, harness.ActiveToggleCount(receiver));
         Assert.AreEqual(0, harness.PoisonStrengthAt(OtherPosition));
-        Assert.AreEqual(IdolStrength, harness.PoisonStrengthAt(PlayerPosition));
+        Assert.AreEqual(IdolStrength, harness.PoisonStrengthAt(harness.PlayerAuraTile));
         Assert.AreEqual(1, harness.LitIdolStack(player).Quantity);
     }
 
@@ -332,7 +335,7 @@ public sealed class ToggleItemTests
         Assert.AreEqual(2, harness.LitIdolStack(player).Quantity);
         Assert.AreEqual(2, harness.ActiveToggleCount(player));
         Assert.AreEqual(2, harness.HeldSourceCount(player));
-        Assert.AreEqual(IdolStrength * 2, harness.PoisonStrengthAt(PlayerPosition));
+        Assert.AreEqual(IdolStrength * 2, harness.PoisonStrengthAt(harness.PlayerAuraTile));
     }
 
     [TestMethod]
@@ -361,13 +364,13 @@ public sealed class ToggleItemTests
         Assert.IsTrue(harness.Session.Commands.InventoryCommands.TryTransferStack(player, offMapHolder, litStackId));
 
         Assert.AreEqual(1, harness.ActiveToggleCount(offMapHolder));
-        Assert.AreEqual(0, harness.PoisonStrengthAt(PlayerPosition));
+        Assert.AreEqual(0, harness.PoisonStrengthAt(harness.PlayerAuraTile));
         Assert.AreEqual(1, harness.LitIdolStack(offMapHolder).Quantity);
 
         Assert.IsTrue(harness.Session.Commands.InventoryCommands.TryTransferStack(offMapHolder, player, litStackId));
 
         Assert.AreEqual(0, harness.ActiveToggleCount(offMapHolder));
-        Assert.AreEqual(IdolStrength, harness.PoisonStrengthAt(PlayerPosition));
+        Assert.AreEqual(IdolStrength, harness.PoisonStrengthAt(harness.PlayerAuraTile));
     }
 
     [TestMethod]

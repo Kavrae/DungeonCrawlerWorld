@@ -7,10 +7,10 @@ namespace Game.Content;
 internal static class DefinitionSummaries
 {
     public static DefinitionSummary Of(ActionDefinition action) =>
-        new(action.Id, action.Name, action.SpriteName, action.DeclaredTags, CanTrade: true, HasContents: false);
+        new(action.Id, action.Name, action.SpriteName, action.DeclaredTags, CanTrade: true, HasContents: false, IsCore: action.Core);
 
     public static DefinitionSummary Of(ItemDefinition item) =>
-        new(item.Id, item.Name, item.SpriteName, item.DeclaredTags, item.CanTrade, item.Contents is not null);
+        new(item.Id, item.Name, item.SpriteName, item.DeclaredTags, item.CanTrade, item.Contents is not null, IsCore: false);
 
     /// <summary>source's summaries, then each registered definition source doesn't name, by Guid.</summary>
     public static IReadOnlyList<DefinitionSummary> Of<T>(Func<IReadOnlyList<DefinitionSummary>>? source, IEnumerable<T> registered, Func<T, DefinitionSummary> summarize)

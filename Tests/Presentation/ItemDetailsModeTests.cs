@@ -46,12 +46,23 @@ public sealed class ItemDetailsModeTests
     }
 
     [TestMethod]
-    public void TheTooltip_ListsBaseEachStepAndTotal_HeadedByLabelWhenSeveralChanged()
+    public void TheTooltip_ListsBaseAndEachStep_WithNoTotal_HeadedByLabelWhenSeveralChanged()
     {
         var doubled = new PreviewedValue(7, 14, [new ValueContribution(ValueContributionKind.Modifier, StatModifierOperation.Multiplicative, 1f)]);
 
-        Assert.AreEqual("Base: 7\nModifier: x2\nTotal: 14", PreviewedValueText.Tooltip([new ShownValue("Highest", doubled, static amount => $"{amount:0.#}")], EffectTextNames.None));
+        Assert.AreEqual("Base: 7\nModifier: x2", PreviewedValueText.Tooltip([new ShownValue("Highest", doubled, static amount => $"{amount:0.#}")], EffectTextNames.None));
         Assert.IsNull(PreviewedValueText.Tooltip([Shown(6, 6)], EffectTextNames.None));
+    }
+
+    [TestMethod]
+    public void ARangesTooltip_IsOneList_BaseAsARangeThenEachStep_WithNoTotal()
+    {
+        List<ValueContribution> plusTwo = [new ValueContribution(ValueContributionKind.Modifier, StatModifierOperation.Additive, 2f)];
+        static string Format(float amount) => $"{amount:0.#}";
+
+        Assert.AreEqual(
+            "Base: 10-14\nModifier: +2",
+            PreviewedValueText.Tooltip([new ShownValue("Lowest", new PreviewedValue(10, 12, plusTwo), Format), new ShownValue("Highest", new PreviewedValue(14, 16, plusTwo), Format)], EffectTextNames.None));
     }
 
     [TestMethod]
@@ -60,7 +71,7 @@ public sealed class ItemDetailsModeTests
     [DataRow(-180.0, StatUnit.Frames, "(-3s)")]
     public void AComparisonDifference_IsWrittenInItsUnit(double difference, StatUnit unit, string expected)
     {
-        Assert.AreEqual(expected, ItemDetailsWindow.ComparisonDifferenceText(difference, unit));
+        Assert.AreEqual(expected, ComparisonLineStyles.DifferenceText(difference, unit));
     }
 
     [TestMethod]

@@ -1,21 +1,11 @@
 using Microsoft.Xna.Framework;
-using Presentation.UI.Content;
 
 namespace Presentation.UI.Chrome;
 
-/// <summary>Position/sizing constants for HealthWindowController's own button and the HealthWindow
-/// it opens -- see HudChrome's own doc comment for why these are plain mutable fields rather than
-/// readonly.</summary>
+/// <summary>Position/sizing constants for the HealthWindow HealthWindowController opens -- see HudChrome's own doc
+/// comment for why these are plain mutable fields rather than readonly.</summary>
 public static class HealthWindowChrome
 {
-    /// <summary>Beneath the Notification folder, with enough clearance that NotificationCenter's own folder never overlaps this one even fully expanded (NotificationChrome.FolderMaximumSize) -- the same clearance InventoryChrome.FolderPosition used to keep for itself before this button took its slot.</summary>
-    public static Vector2 NotificationClearanceGap = new(0, 20);
-
-    public static Vector2 ButtonPosition = HudChrome.Margin + new Vector2(0, NotificationChrome.FolderMaximumSize.Y) + NotificationClearanceGap;
-
-    /// <summary>Matches HotbarContent.SlotSize -- reads as a real icon button (its glyph a centred label, Button.SetText) sized consistently with the hotbar, since it also carries a hotbar-style key label in its corner (see HealthWindowController.Initialize).</summary>
-    public static Vector2 ButtonSize = HotbarContent.SlotSize;
-
     /// <summary>Same value as InventoryChrome.WindowPosition today, but kept as its own independent field -- two separately-owned windows that happen to coincide, not one true duplicate (see InventoryChrome's own doc comment).</summary>
     public static Vector2 WindowPosition = new(300, 150);
 

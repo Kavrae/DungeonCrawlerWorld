@@ -6,6 +6,7 @@ using Game.Modules.Inventory;
 using Game.Modules.Shops;
 using Game.Views;
 using Game.World;
+using Presentation.UI.Content;
 using Presentation.UI.Inventory;
 using Tests.UIEngine;
 using UIEngine.Input;
@@ -25,11 +26,13 @@ internal static class TestInventoryServices
             new ShopView(componentManager),
             new CurrencyView(componentManager),
             TestActionStateViews.Over(componentManager, itemCatalog: itemCatalog),
+            new HotkeyBindingView(componentManager),
             new InventoryCommands(componentManager, itemCatalog, playerQuery),
             new ShopCommands(componentManager, itemCatalog, eventBus ?? new EventBus(), playerQuery),
             new CurrencyCommands(componentManager),
             TestGameplayTags.BuiltIn,
             itemHoverDetails ?? new ItemHoverDetails(new CursorTextContent(new PointerState(), TestFonts.Shared)),
             playerItemDrops ?? new TestPlayerItemDrops(),
-            new LootCommands(componentManager, itemCatalog, playerQuery));
+            new LootCommands(componentManager, itemCatalog, playerQuery),
+            GridViewSettings.CreateDefault());
 }

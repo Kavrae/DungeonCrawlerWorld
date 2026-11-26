@@ -223,6 +223,15 @@ public sealed class AuraSystem : ISystem
         }
     }
 
+    /// <summary>The tile an entity's auras radiate from: the center of its footprint, so a large carrier's aura reaches as far on every side.</summary>
+    /// <remarks>
+    /// Every aura an entity carries -- one a toggle holds, one a Target-mode activation granted it (a torch read at a goblin),
+    /// its blueprint's own -- radiates from here. A footprint even along an axis has no center tile on it; there the
+    /// center is the middle tile nearer the footprint's origin (its Position, the corner it extends from).
+    /// </remarks>
+    public static Vector3Int SourceTileOf(in TransformComponent transform) =>
+        transform.Position + new Vector3Int((transform.Size.X - 1) / 2, (transform.Size.Y - 1) / 2, 0);
+
     /// <summary>
     /// Moves entityId's sources in the field to where the entity is now, if that differs from where
     /// the field has them (_sourcePlacementsInField) -- a no-op otherwise. Called on the move for a
@@ -244,7 +253,7 @@ public sealed class AuraSystem : ISystem
             return;
         }
 
-        var currentPosition = transform.Position;
+        var currentPosition = SourceTileOf(transform);
         var hadPreviousPlacement = _sourcePlacementsInField.TryGetValue(entityId, out var previousPlacement);
         var previousPosition = previousPlacement.Position;
         if (hadPreviousPlacement && previousPosition == currentPosition)

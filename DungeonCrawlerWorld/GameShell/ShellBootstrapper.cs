@@ -13,10 +13,12 @@ using Presentation.Input.DragDrop;
 using Presentation.MapRendering;
 using Presentation.UI;
 using Presentation.UI.AbilityScores;
+using Presentation.UI.Actions;
 using Presentation.UI.Chrome;
 using Presentation.UI.Content;
 using Presentation.UI.Diagnostics;
 using Presentation.UI.Inventory;
+using Presentation.UI.Menus;
 using Presentation.UI.Notifications;
 using UIEngine.Bootstrap;
 using UIEngine.Input;
@@ -56,13 +58,15 @@ public static class ShellBootstrapper
             new TooltipController(),
             pointerState,
             cursorTextContent,
-            new ItemHoverDetails(cursorTextContent));
+            new ItemHoverDetails(cursorTextContent),
+            new ItemDetailsModeSetting());
         var uiLayers = shellServices.Layers;
         var mapViewState = shellServices.MapViewState;
         var contextMenuController = shellServices.ContextMenuController;
         var tooltipController = shellServices.TooltipController;
 
         var itemDropPlacement = new ItemDropPlacement(commands.ItemDropCommands, mapViewState);
+        var menuCommands = new MenuCommandCatalog();
         var actionTargetingController = new ActionTargetingController(
             world,
             mapViewState,
@@ -76,20 +80,26 @@ public static class ShellBootstrapper
             views.TargetingView,
             commands.PlayerCommands,
             gameSession.SimulationClock,
-            itemDropPlacement);
+            itemDropPlacement,
+            menuCommands);
         var playerMovementController = new PlayerMovementController(commands.PlayerCommands);
         var playerItemDrops = new PlayerItemDrops(itemDropPlacement, actionTargetingController);
         var dropCursorText = new DropCursorText(shellServices.CursorTextContent, actionTargetingController);
         _ = new ArmedDropHover(views.MapView, mapViewState, playerItemDrops, dropCursorText, actionTargetingController);
-        var dragGhostContent = new DragGhostContent(pointerState, actionTargetingController, world, catalogs.ActionCatalog, catalogs.ItemCatalog, views.InventoryView, uiEngine.FontService, uiEngine.SpriteSheetService);
+        _ = new PausedActivationCursorText(shellServices.CursorTextContent, actionTargetingController);
+        var actionWindows = new ElementGroup();
+        ActionsWindowController? actionsController = null;
+        var actionDetails = new ActionDetailsCoordinator(uiEngine.ElementPoolService, screenSize, pointerState, shellServices.CursorTextContent, actionWindows, shellServices.DetailsMode, mapViewState, views.ActionStateView, views.HotkeyBindingView, menuCommands, world, () => actionsController?.Window);
+        var dragGhostContent = new DragGhostContent(pointerState, actionTargetingController, world, catalogs.ActionCatalog, catalogs.ItemCatalog, views.InventoryView, uiEngine.FontService, uiEngine.SpriteSheetService, menuCommands);
 
-        ElementFactoryRegistry.RegisterAll(uiEngine, gameSession, worldSession.AdminTools, shellServices, actionTargetingController, playerMovementController, playerItemDrops);
+        ElementFactoryRegistry.RegisterAll(uiEngine, gameSession, worldSession.AdminTools, shellServices, actionTargetingController, playerMovementController, playerItemDrops, menuCommands, actionDetails.HoverDetails);
 
         contextMenuController.Dropdowns.Initialize(uiLayers);
         tooltipController.Initialize(uiEngine.ElementPoolService, uiLayers);
+        actionDetails.Initialize(uiLayers);
 
         var mapWindow = BuildBaseWindows(uiEngine, uiLayers);
-        var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(uiEngine, gameSession, screenSize, mapViewState, uiLayers, tooltipController, contextMenuController, pointerState, worldSession.AdminTools.ComponentPropertyEdits);
+        var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(uiEngine, gameSession, screenSize, mapViewState, uiLayers, tooltipController, contextMenuController, pointerState, worldSession.AdminTools.ComponentPropertyEdits, menuCommands);
         mapWindow.OnInspectionOpened = () => inspectionWindow.SetDisplayMode(ElementDisplayMode.Fixed);
         var (notificationCenter, healthController) = BuildDynamicHudWindows(uiEngine, world, ecsContext.EventBus, contextMenuController, uiLayers);
         var itemWindows = new ItemWindowCoordinator(uiEngine.ElementPoolService, shellServices, world, mapWindow, actionTargetingController, views.InventoryView, catalogs.ItemCatalog, catalogs.LootboxCatalog, commands.LootCommands, commands.LootboxCommands, worldSession.ReservedEntityIds);
@@ -97,6 +107,10 @@ public static class ShellBootstrapper
         BuildUserWindows(uiEngine, [dragGhostContent, shellServices.CursorTextContent], uiLayers);
 
         var abilityScoreController = BuildAbilityScoreWindowController(uiEngine, world, views.InventoryView, itemWindows.Inventory, mapWindow, contextMenuController, uiLayers, tooltipController);
+        actionsController = new ActionsWindowController(uiEngine.ElementPoolService, world, mapWindow, itemWindows.Inventory, contextMenuController, actionWindows, mapViewState);
+        itemWindows.ItemComparison.OnComparisonStarting = actionDetails.Comparison.ClearComparison;
+        actionDetails.Comparison.OnComparisonStarting = itemWindows.ItemComparison.ClearComparison;
+        actionsController.Initialize(uiLayers);
         var diagnosticsController = BuildDiagnosticsWindowController(uiEngine, ecsContext, diagnostics, uiLayers);
 
         // A destroyed entity's id is reused straight away, so nothing on screen may keep pointing at
@@ -112,15 +126,15 @@ public static class ShellBootstrapper
         };
 
         var targetingModeSwitch = new TargetingModeSwitch(mapViewState, views.ActionStateView, world, shellServices.CursorTextContent);
+        BuiltInMenuCommands.Register(menuCommands, healthController, actionsController, itemWindows.Inventory, abilityScoreController, targetingModeSwitch);
         IUiInputHandler[] inputHandlers =
         [
             new AdminModeInputHandler(),
-            new KeyPressInputHandler(Keys.U, healthController.ToggleHealthWindow),
-            new KeyPressInputHandler(Keys.I, itemWindows.Inventory.ToggleInventoryWindow),
-            new KeyPressInputHandler(Keys.O, abilityScoreController.ToggleAbilityScoreWindow),
+            new HotbarKeyInputHandler(actionTargetingController),
             new KeyPressInputHandler(Keys.F3, diagnosticsController.ToggleDiagnosticsWindow),
             new KeyPressInputHandler(Keys.LeftAlt, targetingModeSwitch.Switch),
-            new ItemComparisonInputHandler(itemWindows.ItemComparison),
+            new ComparisonInputHandler(itemWindows.ItemComparison),
+            new ComparisonInputHandler(actionDetails.Comparison),
             new HotbarInputHandler(hotbarController),
             new ActivationRefusalInputHandler(),
         ];
@@ -128,7 +142,9 @@ public static class ShellBootstrapper
         IContentDropHandler[] contentDropHandlers =
         [
             new ItemDragDetailsDismissal(itemWindows, shellServices.ItemHoverDetails),
+            new ActionDragDetailsDismissal(actionDetails),
             new HotbarBindingDropHandler(hotbarContent, world),
+            new ActionCellDropRefusal(),
             inventoryTransferDropHandler,
             new MapDropHandler(views.MapView, views.ShopView, mapViewState, inventoryTransferDropHandler, playerItemDrops),
             new DragDropArming(views.MapView, mapViewState, playerItemDrops, actionTargetingController, dropCursorText),
@@ -155,7 +171,7 @@ public static class ShellBootstrapper
         // not Base/StaticHUD.
         questTriggerWindow.Clicked += _ => inputController.FocusElement(OpenQuestComposer(uiEngine.ElementPoolService, notificationCenter, uiLayers));
 
-        return new ShellContext(mapWindow, notificationCenter, itemWindows.Inventory, abilityScoreController, uiLayers, inputController, new UiLayerHost(uiLayers, uiEngine.RenderService));
+        return new ShellContext(mapWindow, notificationCenter, uiLayers, inputController, new UiLayerHost(uiLayers, uiEngine.RenderService));
     }
 
     /// <summary>Base tier: the map itself plus the debug stats footer directly beneath it -- see UiInputController's own doc comment for what each of the four tiers means. MapWindow's own factory (and every other pooled type's) is already registered by the time this runs -- see Build's ElementFactoryRegistry.RegisterAll call.</summary>
@@ -185,9 +201,9 @@ public static class ShellBootstrapper
         return mapWindow;
     }
 
-    /// <summary>StaticHUD tier: the player health bar, action lock, status effects, InspectionWindow, the hotbar, and the quest trigger -- see UiInputController's own doc comment for what each of the four tiers means. questTriggerWindow is returned for Build, which wires its Clicked event once the DynamicHUD tier (needed by OpenQuestComposer) also exists. hotbarContent and inspectionWindow are returned too, for BuildHotbarController and Build's own OnInspectionOpened wiring respectively.</summary>
+    /// <summary>StaticHUD tier: the player health bar, action lock, status effects, InspectionWindow, the hotbar and its menu sidebar, and the quest trigger -- see UiInputController's own doc comment for what each of the four tiers means. questTriggerWindow is returned for Build, which wires its Clicked event once the DynamicHUD tier (needed by OpenQuestComposer) also exists. hotbarContent and inspectionWindow are returned too, for BuildHotbarController and Build's own OnInspectionOpened wiring respectively.</summary>
     private static (TextWindow QuestTriggerWindow, HotbarContent HotbarContent, InspectionWindow InspectionWindow) BuildStaticHudWindows(
-        UiEngineContext uiEngine, GameSession gameSession, Vector2 screenSize, MapViewState mapViewState, UiLayerStack layers, TooltipController tooltipController, ContextMenuController contextMenuController, PointerState pointerState, Engine.ECS.Properties.ComponentPropertyEdits componentPropertyEdits)
+        UiEngineContext uiEngine, GameSession gameSession, Vector2 screenSize, MapViewState mapViewState, UiLayerStack layers, TooltipController tooltipController, ContextMenuController contextMenuController, PointerState pointerState, Engine.ECS.Properties.ComponentPropertyEdits componentPropertyEdits, MenuCommandCatalog menuCommands)
     {
         var world = gameSession.World;
         var ecsContext = gameSession.EcsContext;
@@ -286,7 +302,7 @@ public static class ShellBootstrapper
         // player's currently-unlocked Expansion slot count, so it's constructed first and its own
         // Size read to size/position this window -- see HotbarContent.RefreshLayoutIfChanged for
         // how it keeps itself bottom-anchored/horizontally-centered as that Size changes later.
-        var hotbarContent = new HotbarContent(world, mapViewState, gameSession.Views.HotkeyBindingView, gameSession.Views.InventoryView, gameSession.Views.ActionStateView, gameSession.Commands.HotkeyBindingCommands, catalogs.ItemCatalog, uiEngine.FontService, uiEngine.SpriteSheetService, screenSize, simulationClock, gameSession.Views.EntityActions, EffectTextNames.Of(catalogs), contextMenuController);
+        var hotbarContent = new HotbarContent(world, mapViewState, gameSession.Views.HotkeyBindingView, gameSession.Views.InventoryView, gameSession.Views.ActionStateView, gameSession.Commands.HotkeyBindingCommands, catalogs.ItemCatalog, uiEngine.FontService, uiEngine.SpriteSheetService, screenSize, simulationClock, menuCommands, gameSession.Views.EntityActions, EffectTextNames.Of(catalogs), contextMenuController);
         var hotbarSize = hotbarContent.Size;
         var hotbarWindow = uiEngine.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
@@ -305,6 +321,17 @@ public static class ShellBootstrapper
         hotbarWindow.Initialize();
         layers.Add(UiLayer.StaticHud, hotbarWindow);
         layers.MarkMenuModeExempt(hotbarWindow);
+
+        var menuSidebarWindow = uiEngine.ElementPoolService.CreateElement<Window>(null, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { RelativePosition = MenuSidebarChrome.Position, Size = HotbarContent.MenuSidebarSize, DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
+            Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = false, CanUserFocus = false },
+        });
+        menuSidebarWindow.Initialize();
+        hotbarContent.AddMenuSidebar(menuSidebarWindow);
+        layers.Add(UiLayer.StaticHud, menuSidebarWindow);
+        layers.MarkMenuModeExempt(menuSidebarWindow);
 
         // TEMPORARY First concrete TextBox consumer (see the Text input TODO) -- a multiline TextBox in
         // a closeable popup that submits into a new Quest notification. "New Quest" is a
@@ -325,7 +352,7 @@ public static class ShellBootstrapper
         return (questTriggerWindow, hotbarContent, inspectionWindow);
     }
 
-    /// <summary>DynamicHUD tier: NotificationCenter owns/populates its own folder+popups, and HealthWindowController its own button+window (both add to UiLayer.DynamicHud specifically) -- see UiLayer's own doc comment for what each tier means. The inventory button follows from ItemWindowCoordinator, built right after, so it keeps its place beneath the health button. Build also passes the same layer stack into OpenQuestComposer later, since that popup belongs in DynamicHud too.</summary>
+    /// <summary>DynamicHUD tier: NotificationCenter owns/populates its own folder+popups, and HealthWindowController its window (both add to UiLayer.DynamicHud specifically) -- see UiLayer's own doc comment for what each tier means. Build also passes the same layer stack into OpenQuestComposer later, since that popup belongs in DynamicHud too.</summary>
     private static (NotificationCenter NotificationCenter, HealthWindowController Health) BuildDynamicHudWindows(UiEngineContext uiEngine, World world, EventBus eventBus, ContextMenuController contextMenuController, UiLayerStack layers)
     {
         var notificationCenter = new NotificationCenter(uiEngine.ElementPoolService, eventBus, layers, contextMenuController);
@@ -431,8 +458,6 @@ public static class ShellBootstrapper
 public sealed record ShellContext(
     MapWindow MapWindow,
     NotificationCenter NotificationCenter,
-    InventoryWindowController Inventory,
-    AbilityScoreWindowController AbilityScore,
     UiLayerStack Layers,
     UiInputController InputController,
     UiLayerHost LayerHost)
@@ -453,21 +478,8 @@ public sealed record ShellContext(
         NotificationCenter.Update();
     }
 
-    /// <summary>
-    /// The window tree's own per-frame Update, plus Inventory's/AbilityScore's own (their button's
-    /// Enabled state depends on player state EcsContext.Update can change -- see
-    /// InventoryWindowController.Update/AbilityScoreWindowController.Update -- so it belongs here,
-    /// after simulation, not in PreSimulationUpdate) -- deliberately run after GameLoop's own
-    /// EcsContext.Update, so windows reflect this frame's simulation results rather than last
-    /// frame's.
-    /// </summary>
-    public void Update(GameTime gameTime)
-    {
-        Inventory.Update();
-        AbilityScore.Update();
-
-        LayerHost.Update(gameTime);
-    }
+    /// <summary>The window tree's own per-frame Update -- deliberately run after GameLoop's own EcsContext.Update, so windows reflect this frame's simulation results rather than last frame's.</summary>
+    public void Update(GameTime gameTime) => LayerHost.Update(gameTime);
 
     /// <summary>Every layer bottom to top, with the menu-mode dim -- see UiLayerHost.</summary>
     public void Draw(GameTime gameTime) => LayerHost.Draw(gameTime);

@@ -10,15 +10,18 @@ public enum DragPayloadOrigin : byte
     InventoryCell,
     Currency,
     HotbarSlot,
+
+    /// <summary>An Actions window cell: an action or menu command, which binds to a hotbar slot and is dropped nowhere else (ActionCellDropRefusal).</summary>
+    ActionCell,
 }
 
-/// <summary>What a game content drag carries: an item stack, a Merged Stack, an action or a currency, and where it was picked up.</summary>
+/// <summary>What a game content drag carries: an item stack, a Merged Stack, an action, a menu command or a currency, and where it was picked up.</summary>
 /// <remarks>
-/// Exactly one of ItemStackInstanceId, MergedItemDefinitionId, ActionId and CurrencyType is set. A Merged Stack has no single
+/// Exactly one of ItemStackInstanceId, MergedItemDefinitionId, ActionId, MenuCommandId and CurrencyType is set. A Merged Stack has no single
 /// stack, only the item every member shares (see InventoryItemStackCell's own doc comment for the Base/Diverging/Merged
 /// vocabulary): it can move between inventories as a batch but never binds to a hotbar slot. OriginEntityId is the inventory
 /// or currency row's entity, null for a hotbar slot (always the player's). OriginSlot is the hotbar slot a bound
-/// item or action was dragged off, unbound on release wherever the drag ends. CanStageInTrade is the cell's, read only while
+/// item, action or menu command was dragged off, unbound on release wherever the drag ends. CanStageInTrade is the cell's, read only while
 /// a shop is open.
 /// </remarks>
 public sealed record DragPayload(
@@ -29,7 +32,8 @@ public sealed record DragPayload(
     CurrencyType? CurrencyType = null,
     int? OriginEntityId = null,
     bool CanStageInTrade = false,
-    HotkeySlot? OriginSlot = null)
+    HotkeySlot? OriginSlot = null,
+    Guid? MenuCommandId = null)
 {
     /// <summary>Whether this is anything a hotbar slot could hold -- not a Merged Stack, not currency.</summary>
     public bool CanBindToHotbar => MergedItemDefinitionId is null && CurrencyType is null;

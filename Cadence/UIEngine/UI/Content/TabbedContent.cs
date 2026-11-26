@@ -17,11 +17,8 @@ namespace UIEngine.UI.Content;
 /// scrolling, click routing, and absolute-position tracking for free from the normal Element
 /// pipeline, rather than each needing its own bespoke version (see the git history for the
 /// former flat-Rectangle approach, which supported neither scrolling nor a runtime-changeable
-/// tab list). One gotcha that free click routing brings along: UiInputController.RaiseToFront
-/// reorders whatever tile was just clicked to the end of _tabHeaderWindow's own child list (pure
-/// draw/hit-test z-order, the same thing every other clickable Element gets) -- so tab-index
-/// bookkeeping here is never allowed to read positions back out of ChildElements, only out of
-/// _headerTiles, which this class alone controls the order of. The selected tile's BorderStyle
+/// tab list). Tab-index bookkeeping reads positions only out of _headerTiles, which this class
+/// alone controls the order of, never out of ChildElements. The selected tile's BorderStyle
 /// is Outset (every other tile's Inset) and it keeps TabTileColor/TabLabelColor (dark
 /// background, white text); every unselected tile is tinted WindowPalette.PanelContentColor/
 /// BodyTextColor (light gray background, black text) instead, so the active tab reads clearly
@@ -29,16 +26,24 @@ namespace UIEngine.UI.Content;
 /// SetTabs, for a host whose tabs follow data that changes (one tab per tag present, say).
 ///
 /// A right-aligned search box shares the tab row (see _searchBox), debounce-filtering which tab
-/// headers are visible by a case-insensitive Label.Contains match -- "All" (index 0) always
+/// headers are visible by a case-insensitive Label.Contains match -- the default tab (defaultTabIndex: the one a fresh list opens on, "All" in the inventory) always
 /// stays visible regardless of the filter. Filtering only ever changes which header tiles exist;
 /// _tabs/_bodyWindow/_activeTabIndex are untouched, so the active tab's content keeps showing
 /// even if a search happens to hide its own header tile. Since a filtered tab list is no longer
 /// a contiguous, same-order subset of _tabs, _headerTiles now carries each visible tile's real
 /// _tabs index alongside it, rather than relying on its own list position to mean that index.
 /// </summary>
-public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tabs, ElementPoolService elementPoolService, FontService fontService, Color? bodyBackgroundColor = null) : IElementContent
+/// <param name="defaultTabIndex">The tab shown when the content opens, and when SetTabs no longer holds the tab that was shown.</param>
+/// <param name="toolbar">A row between the tab strip and the body that every tab shares and a tab switch never rebuilds -- a grid's search and sort, which keep their state and focus from tab to tab; none for no row.</param>
+/// <param name="toolbarHeight">The toolbar row's height.</param>
+public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tabs, ElementPoolService elementPoolService, FontService fontService, Color? bodyBackgroundColor = null, int defaultTabIndex = 0, IElementContent? toolbar = null, float toolbarHeight = 0f) : IElementContent
 {
-    public sealed record TabDefinition(string Label, IElementContent Content);
+    /// <summary>One tab: its label and what it shows.</summary>
+    /// <param name="StartsGroup">Whether the header leaves TabGroupGap before this tab, marking it the first of a different kind of tab.</param>
+    public sealed record TabDefinition(string Label, IElementContent Content, bool StartsGroup = false);
+
+    /// <summary>The space the header leaves before a tab that starts a group.</summary>
+    public const float TabGroupGap = 14f;
 
     private const float TabHeaderHeight = 28f;
     private const float TabHorizontalPadding = 9f;
@@ -59,9 +64,7 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
 
     /// <summary>
     /// Currently-visible header tiles, each paired with the real _tabs index it represents --
-    /// NOT the same as _tabHeaderWindow.ChildElements, whose order UiInputController.RaiseToFront
-    /// mutates on every click (it moves whatever was just clicked to the end of its parent's
-    /// child list, purely for draw/hit-test z-order), and not necessarily a contiguous run of
+    /// never read from _tabHeaderWindow.ChildElements, and not necessarily a contiguous run of
     /// _tabs either, since the search filter (see ApplySearchFilter) can skip entries. This list
     /// is rebuilt fresh alongside the tiles and never reordered afterward, so TabIndex is always
     /// the one true source for "which tab does this tile activate."
@@ -71,6 +74,10 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
     private Window _hostWindow = null!;
     private Window _tabHeaderWindow = null!;
     private Window _bodyWindow = null!;
+    private Window? _toolbarWindow;
+
+    /// <summary>Where the body starts: below the tab strip and the toolbar row, if there is one.</summary>
+    private float BodyTop => TabHeaderHeight + (toolbar is null ? 0f : toolbarHeight);
     private TextBox _searchBox = null!;
     private SpriteFontBase _font = null!;
     private int _activeTabIndex = -1;
@@ -122,8 +129,8 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
             Layout = new ElementLayoutOptions
             {
-                RelativePosition = new Vector2(0, TabHeaderHeight),
-                Size = hostWindow.ContentSize - new Vector2(0, TabHeaderHeight),
+                RelativePosition = new Vector2(0, BodyTop),
+                Size = hostWindow.ContentSize - new Vector2(0, BodyTop),
                 DisplayMode = ElementDisplayMode.Fixed,
             },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserScrollVertical = true, CanUserFocus = false },
@@ -131,17 +138,27 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
         });
         hostWindow.AddChild(_bodyWindow);
 
+        if (toolbar is not null)
+        {
+            _toolbarWindow = elementPoolService.CreateElement<Window>(hostWindow, new ElementOptions
+            {
+                Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+                Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, TabHeaderHeight), Size = new Vector2(hostWindow.ContentSize.X, toolbarHeight), DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
+                Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+            });
+            _toolbarWindow.ContentPadding = Vector2.Zero;
+            _toolbarWindow.SetContent(toolbar);
+            hostWindow.AddChild(_toolbarWindow);
+        }
+
         hostWindow.Resized += OnHostWindowResized;
 
         RebuildHeaderTiles();
-        SwitchTab(0);
+        SwitchTab(defaultTabIndex);
     }
 
-    public void Update(GameTime gameTime)
-    {
-        _tabs[_activeTabIndex].Content.Update(gameTime);
-        UpdateSearchFilterDebounce();
-    }
+    /// <summary>Only the tab search's debounce: the active tab's content is the body window's, which updates it once a frame.</summary>
+    public void Update(GameTime gameTime) => UpdateSearchFilterDebounce();
 
     /// <summary>Nothing to draw directly -- the tab strip is real child Button tiles (drawn through the normal child-element pass), and the active tab's own content renders the same way through _bodyWindow.</summary>
     public void DrawContent(GameTime gameTime)
@@ -156,7 +173,7 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
     /// detect "did this specific tab's content actually change." Selection is preserved by
     /// matching the previously-active tab's Label against the new list; if no tab with that
     /// label exists anymore, falls back to
-    /// index 0 ("All"). The currently-applied search filter (if any) carries over unchanged --
+    /// the default tab (defaultTabIndex, "All" in the inventory). The currently-applied search filter (if any) carries over unchanged --
     /// picking up an item mid-search shouldn't clear what was typed.
     /// </summary>
     public void SetTabs(IReadOnlyList<TabDefinition> newTabs)
@@ -173,7 +190,7 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
         RebuildHeaderTiles();
 
         var newIndex = previousLabel is not null ? IndexOfLabel(previousLabel) : -1;
-        SwitchTab(newIndex >= 0 ? newIndex : 0);
+        SwitchTab(newIndex >= 0 ? newIndex : defaultTabIndex);
     }
 
     private int IndexOfLabel(string label)
@@ -243,7 +260,8 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
     {
         _tabHeaderWindow.SetSize(new Vector2(HeaderStripWidth(_hostWindow.ContentSize.X), TabHeaderHeight));
         _searchBox.SetRelativePosition(SearchBoxPosition(_hostWindow.ContentSize.X));
-        _bodyWindow.SetSize(_hostWindow.ContentSize - new Vector2(0, TabHeaderHeight));
+        _toolbarWindow?.SetSize(new Vector2(_hostWindow.ContentSize.X, toolbarHeight));
+        _bodyWindow.SetSize(_hostWindow.ContentSize - new Vector2(0, BodyTop));
     }
 
     private static float HeaderStripWidth(float hostContentWidth) => hostContentWidth - SearchBoxWidth - SearchBoxGap;
@@ -251,7 +269,7 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
     private static Vector2 SearchBoxPosition(float hostContentWidth) => new(hostContentWidth - SearchBoxWidth, 0);
 
     /// <summary>
-    /// Tab 0 ("All") is exempt from the filter and always gets a tile -- every other tab only
+    /// The default tab (defaultTabIndex) is exempt from the filter and always gets a tile -- every other tab only
     /// gets one when _searchFilter.AppliedText is empty (no active search) or its Label contains
     /// it (case-insensitive). Filtering only changes which tiles exist here; it never touches
     /// _tabs itself, _bodyWindow's content, or _activeTabIndex -- see this class's own doc comment.
@@ -268,9 +286,14 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
         for (var tabIndex = 0; tabIndex < _tabs.Count; tabIndex++)
         {
             var tab = _tabs[tabIndex];
-            if (tabIndex != 0 && _searchFilter.AppliedText.Length > 0 && !tab.Label.Contains(_searchFilter.AppliedText, StringComparison.OrdinalIgnoreCase))
+            if (tabIndex != defaultTabIndex && _searchFilter.AppliedText.Length > 0 && !tab.Label.Contains(_searchFilter.AppliedText, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
+            }
+
+            if (tab.StartsGroup && x > 0)
+            {
+                x += TabGroupGap;
             }
 
             var width = _font.MeasureString(tab.Label).X + TabHorizontalPadding * 2;

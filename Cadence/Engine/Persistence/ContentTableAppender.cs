@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text;
 using Engine.Content;
+using Engine.Utilities;
 
 namespace Engine.Persistence;
 
@@ -130,6 +131,6 @@ public sealed class ContentTableAppender : IDisposable
 
         var replacement = path + ".tmp";
         File.WriteAllText(replacement, kept.ToString(), Utf8WithoutMark);
-        File.Move(replacement, path, overwrite: true);
+        FileReplacement.Replace(replacement, path);
     }
 }

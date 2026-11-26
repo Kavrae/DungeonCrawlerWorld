@@ -1,4 +1,5 @@
 using System.Text;
+using Engine.Utilities;
 
 namespace Engine.Content;
 
@@ -130,7 +131,7 @@ public sealed class ContentTableLines
         try
         {
             File.WriteAllText(temporaryPath, ToText(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            File.Move(temporaryPath, path, overwrite: true);
+            FileReplacement.Replace(temporaryPath, path);
         }
         catch
         {

@@ -4,7 +4,7 @@ namespace Game.Tags;
 
 /// <summary>The roles a built-in tag field plays: every field that holds tags names one, and holds only tags it accepts.</summary>
 /// <remarks>
-/// Activation, Item category and Ability score are CoreModule's, over the roots it owns (GameTags); Area is AreasModule's
+/// Activation, Item category, Action category and Ability score are CoreModule's, over the roots it owns (GameTags); Area is AreasModule's
 /// (AreaTags), Behavior NpcBehaviorModule's (NpcDrives). A field that conditions something on an activation (a stat modifier's condition, a disable rule's query)
 /// takes Activation tags too: a condition can only name something an activation can carry, so it can always match.
 /// </remarks>
@@ -15,6 +15,9 @@ public static class GameTagDomains
 
     /// <summary>The categories an item falls in: inventory tabs and what a shop accepts.</summary>
     public static readonly GameplayTagDomain ItemCategory = new("Item category");
+
+    /// <summary>The categories an action falls in: the Actions window's tabs.</summary>
+    public static readonly GameplayTagDomain ActionCategory = new("Action category");
 
     /// <summary>The ability scores a use scales with (AbilityScoreTagBonus).</summary>
     public static readonly GameplayTagDomain AbilityScore = new("Ability score");

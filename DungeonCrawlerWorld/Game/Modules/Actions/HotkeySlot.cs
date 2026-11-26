@@ -8,7 +8,9 @@ namespace Game.Modules.Actions;
 /// group -- Slot1-10 is "page 1", Slot11-20 is "page 2" (reached via Shift); how many of the 20
 /// are actually unlocked for a given entity is tracked separately by
 /// HotkeyExpansionUnlockComponent, not by this enum itself. 20 is the current cap; see
-/// HotkeyExpansionUnlockComponent's own doc comment for why.
+/// HotkeyExpansionUnlockComponent's own doc comment for why. Menu1-Menu5 are the menu sidebar's,
+/// always available, bound by default to the menu commands (BuiltInMenuCommandIds) -- appended
+/// last, so no earlier slot's value moves.
 /// </summary>
 public enum HotkeySlot : byte
 {
@@ -36,17 +38,22 @@ public enum HotkeySlot : byte
     Slot18,
     Slot19,
     Slot20,
+    Menu1,
+    Menu2,
+    Menu3,
+    Menu4,
+    Menu5,
 }
 
 /// <summary>
-/// Shared shape for anything a hotkey slot can be bound to -- ActionHotkeyBindingComponent
-/// (Game.Modules.Actions.Components) and ItemHotkeyBindingComponent
-/// (Game.Modules.Inventory.Components) both implement this rather than sharing a base class:
+/// Shared shape for anything a hotkey slot can be bound to -- ActionHotkeyBindingComponent and
+/// MenuCommandHotkeyBindingComponent (Game.Modules.Actions.Components) and ItemHotkeyBindingComponent
+/// (Game.Modules.Inventory.Components) all implement this rather than sharing a base class:
 /// every component pool in this ECS is constrained "where T : struct" (see
 /// PackedComponentPool/MultiComponentPool/DirectComponentPool), so C#'s no-struct-inheritance
 /// rule rules out a real base type -- an interface is the actual available equivalent. A slot
-/// binds to at most one of {action, item} at a time; whatever writes a new binding for a slot is
-/// responsible for clearing the other kind's entry for that same slot first. BoundId is the
+/// binds to at most one of {action, item, menu command} at a time; whatever writes a new binding for a slot is
+/// responsible for clearing the other kinds' entries for that same slot first. BoundId is the
 /// bound ActionId/StackInstanceId under one shared name, generic because the two are not the same
 /// type (an action is a catalog Guid; a stack is a session counter -- see InventoryItemStackComponent) -- explicit interface implementation on
 /// each struct, so the concrete, better-named property (ActionId, ItemDefinitionId) stays the

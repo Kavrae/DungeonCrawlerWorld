@@ -24,6 +24,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.Input.DragDrop;
 using Presentation.UI;
+using Presentation.UI.Chrome;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
 using Presentation.UI.Looting;
@@ -87,7 +88,8 @@ public sealed class ItemWindowCoordinatorTests
             tooltipController,
             pointerState,
             cursorTextContent,
-            new ItemHoverDetails(cursorTextContent));
+            new ItemHoverDetails(cursorTextContent),
+            new ItemDetailsModeSetting());
 
         var eventBus = new EventBus();
         var inventoryServices = TestInventoryServices.Over(componentManager, itemCatalog, world, eventBus, shellServices.ItemHoverDetails);
@@ -442,32 +444,100 @@ public sealed class ItemWindowCoordinatorTests
         return (window, grid);
     }
 
+    private static float CardsWide(int count) => count * InventoryGridContent.CellSize.X * InventoryGridContent.ShopCellWidthMultiplier + (count - 1) * InventoryGridContent.CellGap;
+
+    private static IEnumerable<Element> SelfAndDescendants(Element element) => element.ChildElements.SelectMany(SelfAndDescendants).Prepend(element);
+
+    private static Toggle InventoryCardViewSwitch(Window inventoryWindow) => SelfAndDescendants(inventoryWindow).OfType<Toggle>().ElementAt(InventoryTabContent.CardViewToggleIndex);
+
+    private static float SquaresWide(int count) => count * InventoryGridContent.CellSize.X + (count - 1) * InventoryGridContent.CellGap;
+
     [TestMethod]
-    public void AShopWindow_IsAsWideAsTwoShopCells_CountsItsStacksOutOfInfinity_AndCantBeResized()
+    public void AShopWindow_HoldsTwoCardsAndAScrollbar_CountsItsStacksOutOfInfinity_AndCantBeResized()
     {
         var harness = Build();
         AddDifferentItems(harness, 3, ShopEntityId);
         var (window, grid) = OpenShop(harness);
 
-        var twoShopCells = 2 * InventoryGridContent.CellSize.X * InventoryGridContent.ShopCellWidthMultiplier + InventoryGridContent.CellGap;
-        Assert.AreEqual(twoShopCells, grid.CurrentSize.X);
+        Assert.AreEqual(CardsWide(2), grid.CurrentSize.X);
+        Assert.AreEqual(CardsWide(2) + global::UIEngine.UI.Chrome.WindowChrome.ScrollbarThickness + window.ContentInset.X, window.CurrentSize.X);
         Assert.AreEqual(5, RowsShown(grid));
         Assert.IsTrue(window.ChildElements.OfType<TextWindow>().Any(line => line.OriginalText == "3/∞"));
         Assert.IsFalse(window.CanUserResize);
+        Assert.IsFalse(window.ChildElements.OfType<Toggle>().Any(), "The shop has no view switch of its own: the player's Inventory window switches both sides.");
     }
 
     [TestMethod]
-    public void AShopWindow_PastTwelveRowsScrolls_AndWidensForTheScrollbar()
+    public void AShopWindow_PastTwelveRowsScrolls_AndItsScrollbarFitsTheWindowItKept()
     {
         var harness = Build();
         var (window, grid) = OpenShop(harness);
+        var widthBefore = window.CurrentSize.X;
 
         AddDifferentItems(harness, 30, ShopEntityId);
         window.Update(new GameTime());
 
         Assert.AreEqual(12, RowsShown(grid));
-        var twoShopCells = 2 * InventoryGridContent.CellSize.X * InventoryGridContent.ShopCellWidthMultiplier + InventoryGridContent.CellGap;
-        Assert.AreEqual(twoShopCells + global::UIEngine.UI.Chrome.WindowChrome.ScrollbarThickness, grid.CurrentSize.X);
+        Assert.AreEqual(CardsWide(2) + global::UIEngine.UI.Chrome.WindowChrome.ScrollbarThickness, grid.CurrentSize.X);
+        Assert.AreEqual(widthBefore, window.CurrentSize.X);
+    }
+
+    [TestMethod]
+    public void TheInventoryWindowsSwitch_ShowsTheShopAsSquaresAcrossTheSameWidth()
+    {
+        var harness = Build();
+        AddDifferentItems(harness, 3, ShopEntityId);
+        var (window, grid) = OpenShop(harness);
+        var widthBefore = window.CurrentSize.X;
+        var inventoryWindow = harness.Coordinator.Inventory.PlayerInventoryWindow!;
+        inventoryWindow.Update(new GameTime());
+        var inventoryCardViewSwitch = InventoryCardViewSwitch(inventoryWindow);
+
+        inventoryCardViewSwitch.HandleClick(inventoryCardViewSwitch.Rectangle.Center);
+        window.Update(new GameTime());
+
+        Assert.AreEqual(SquaresWide(7), grid.CurrentSize.X, "As many squares as fit two cards' width.");
+        Assert.AreEqual(widthBefore, window.CurrentSize.X);
+        Assert.IsFalse(grid.ChildElements.OfType<ShopItemStackCell>().Any());
+    }
+
+    [TestMethod]
+    public void TheInventoryWindow_HoldsFifteenSquaresOrFourCardsARow_EvenWithItsScrollbarShowing()
+    {
+        var harness = Build();
+        AddDifferentItems(harness, 120, PlayerEntityId);
+        harness.Coordinator.Inventory.OpenInventoryWindow();
+        var inventoryWindow = harness.Coordinator.Inventory.PlayerInventoryWindow!;
+        int CellsInFirstRow() => SelfAndDescendants(inventoryWindow).OfType<InventoryItemStackCell>().Count(cell => cell.RelativePosition.Y == 0);
+
+        inventoryWindow.Update(new GameTime());
+        Assert.AreEqual(InventoryChrome.WindowWidth, inventoryWindow.CurrentSize.X);
+        Assert.AreEqual(15, CellsInFirstRow());
+
+        var cardViewSwitch = InventoryCardViewSwitch(inventoryWindow);
+        cardViewSwitch.HandleClick(cardViewSwitch.Rectangle.Center);
+        inventoryWindow.Update(new GameTime());
+        Assert.AreEqual(4, CellsInFirstRow());
+    }
+
+    [TestMethod]
+    public void WhileShopping_TheInventoryWindowsCardViewSwitch_SwitchesBothSides()
+    {
+        var harness = Build();
+        AddDifferentItems(harness, 3, ShopEntityId);
+        var (window, grid) = OpenShop(harness);
+        var inventoryWindow = harness.Coordinator.Inventory.PlayerInventoryWindow!;
+        inventoryWindow.Update(new GameTime());
+        var inventoryCardViewSwitch = InventoryCardViewSwitch(inventoryWindow);
+        Assert.IsTrue(inventoryCardViewSwitch.IsOn, "It shows the shop's Card view, not the inventory's own Icon view.");
+
+        inventoryCardViewSwitch.HandleClick(inventoryCardViewSwitch.Rectangle.Center);
+        window.Update(new GameTime());
+
+        Assert.IsFalse(grid.ChildElements.OfType<ShopItemStackCell>().Any(), "The shop's side follows.");
+        window.Close();
+        inventoryWindow.Update(new GameTime());
+        Assert.IsFalse(inventoryCardViewSwitch.IsOn, "Once the shop closes, the inventory's own Icon view again.");
     }
 
     [TestMethod]
@@ -510,6 +580,7 @@ public sealed class ItemWindowCoordinatorTests
         var otherStack = new InventoryItemStackComponent(PotionItemId, 1);
         harness.ComponentManager.GetMultiPool<InventoryItemStackComponent>().Add(PlayerEntityId, otherStack);
         harness.Coordinator.Inventory.OpenInventoryWindow();
+        harness.Coordinator.Inventory.PlayerInventoryWindow!.SetRelativePosition(new Vector2(0, 150));
         harness.Coordinator.ItemComparison.Arm(PlayerEntityId, anchorStackId);
         Assert.IsTrue(harness.Coordinator.ItemComparison.IsComparing, "Sanity check: a potion has an activator, so compare mode starts.");
         return (harness, anchorStackId, otherStack.StackInstanceId);
@@ -583,7 +654,7 @@ public sealed class ItemWindowCoordinatorTests
 
         var cell = DescendantsOf(harness.Coordinator.Inventory.PlayerInventoryWindow!).OfType<InventoryItemStackCell>().First();
         cell.CompareState = CellCompareState.Ineligible;
-        Assert.IsTrue(new global::Presentation.Input.ItemComparisonInputHandler(harness.Coordinator.ItemComparison).IsInputRefusedAt(cell, Point.Zero));
+        Assert.IsTrue(new global::Presentation.Input.ComparisonInputHandler(harness.Coordinator.ItemComparison).IsInputRefusedAt(cell, Point.Zero));
     }
 
     [TestMethod]

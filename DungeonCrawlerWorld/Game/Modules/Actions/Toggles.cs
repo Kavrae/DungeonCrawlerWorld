@@ -64,8 +64,8 @@ public sealed class Toggles(MultiComponentPool<ActiveToggleComponent> activeTogg
     /// </remarks>
     /// <param name="definition">The toggle's definition; its Effects are what is held.</param>
     /// <param name="now">The simulation frame this happens on.</param>
-    /// <param name="placesAtHolderTile">For a toggle switched on in Ground mode: its entries placed once per activation go to the tile the holder stands on now (an aura it holds is anchored there), not on the holder.</param>
-    public uint TurnOn(int holderEntityId, ActivatableReference owner, ActivatableDefinition definition, long now, bool placesAtHolderTile = false)
+    /// <param name="placedAt">For a toggle switched on in Ground mode, the tile aimed at: its entries placed once per activation go there (an aura it holds is anchored there) when the tile is the holder's own or touches its footprint (TargetingSpec.FootprintOrAdjacent) and isn't a wall, else to the tile the holder stands on. Null carries them on the holder.</param>
+    public uint TurnOn(int holderEntityId, ActivatableReference owner, ActivatableDefinition definition, long now, Vector3Int? placedAt = null)
     {
         var key = IssueKey();
         var nextTickFrame = definition.Toggle?.Periodic is not { } periodic
@@ -76,8 +76,23 @@ public sealed class Toggles(MultiComponentPool<ActiveToggleComponent> activeTogg
 
         var context = HeldContext(holderEntityId, key, definition, now);
         EffectSequence.ApplyOnEachTarget(definition.Effects, in context);
-        EffectSequence.ApplyOnce(definition.Effects, in context, placesAtHolderTile ? null : holderEntityId, HolderTile(holderEntityId));
+        EffectSequence.ApplyOnce(definition.Effects, in context, placedAt is null ? holderEntityId : null, placedAt is { } aimedTile ? PlacementTile(holderEntityId, aimedTile) : HolderTile(holderEntityId));
         return key;
+    }
+
+    /// <summary>Where a toggle turned on in Ground mode places what it places: aimedTile when it is on the holder's layer, on or touching its footprint, and not a wall or off the map (World.BlocksSight, the rule nothing is placed inside); else the holder's own tile.</summary>
+    private Vector3Int PlacementTile(int holderEntityId, Vector3Int aimedTile)
+    {
+        if (!effectServices.ComponentManager.GetDirectPool<TransformComponent>().TryGetReadonly(holderEntityId, out var transform))
+        {
+            return aimedTile;
+        }
+
+        var position = transform.Position;
+        var isBesideFootprint = aimedTile.Z == position.Z &&
+            aimedTile.X >= position.X - 1 && aimedTile.X <= position.X + transform.Size.X &&
+            aimedTile.Y >= position.Y - 1 && aimedTile.Y <= position.Y + transform.Size.Y;
+        return isBesideFootprint && !effectServices.World.BlocksSight(aimedTile.X, aimedTile.Y, aimedTile.Z) ? aimedTile : position;
     }
 
     /// <summary>The tile holderEntityId stands on, for an entry placed at a location that nothing aimed: the holder's own.</summary>

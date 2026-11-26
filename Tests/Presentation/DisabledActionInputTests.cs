@@ -21,6 +21,7 @@ using Microsoft.Xna.Framework.Input;
 using Presentation.Input;
 using Presentation.UI;
 using Presentation.UI.Content;
+using Presentation.UI.Menus;
 using Tests.UIEngine;
 using UIEngine.Input;
 using UIEngine.Rendering;
@@ -132,9 +133,9 @@ public sealed class DisabledActionInputTests
             actionStateView,
             TestActionStateViews.Targeting(componentManager, world, actionCatalog, itemCatalog),
             playerCommands,
-            simulationClock: clock, dropPlacement: new TestPlayerItemDrops());
+            simulationClock: clock, dropPlacement: new TestPlayerItemDrops(), menuCommands: new MenuCommandCatalog());
 
-        var hotbarContent = new HotbarContent(world, mapViewState, new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), actionStateView, new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), itemCatalog, TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: clock);
+        var hotbarContent = new HotbarContent(world, mapViewState, new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), actionStateView, new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), itemCatalog, TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: clock, menuCommands: new MenuCommandCatalog());
         var hotbarController = new HotbarController(mapViewState, hotbarContent, actionTargeting, new TooltipController(), TestElementPoolServiceFactory.CreateContextMenuController(TestElementPoolServiceFactory.Create(TestFonts.Shared), new UiLayerStack()));
 
         return new Harness

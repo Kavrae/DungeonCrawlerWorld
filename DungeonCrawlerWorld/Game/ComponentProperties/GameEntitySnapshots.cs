@@ -58,6 +58,7 @@ public sealed class GameEntitySnapshots(GameModuleContext context, World.World w
         persistence.Register(ComponentPropertyMeaningNames.BehaviorId, new BehaviorPersistence(context));
         persistence.RegisterAsStored(
             GamePropertyMeanings.ActionId,
+            GamePropertyMeanings.MenuCommandId,
             GamePropertyMeanings.AchievementId,
             GamePropertyMeanings.ItemDefinitionId,
             GamePropertyMeanings.BodyPartId,

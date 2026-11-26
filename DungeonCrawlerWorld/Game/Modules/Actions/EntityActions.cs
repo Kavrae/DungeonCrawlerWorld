@@ -18,7 +18,9 @@ namespace Game.Modules.Actions;
 /// sitting beside it. Parts applied to it after spawning (AppliedBlueprintComponent) come next, the
 /// most recently applied first, then its spawn blueprint's grants -- already merged, one per action, by
 /// ResolvedBlueprint. That is composition's own rule, a later part's grant replacing an earlier one's:
-/// an applied part is later than everything the entity spawned with. A view over pools with no state of
+/// an applied part is later than everything the entity spawned with. A crawler (SpawnFlags.Crawler) also has
+/// every Core action (ActionCatalog.CoreActionIds), found last, so any grant of one wins over the catalog's
+/// definition. A view over pools with no state of
 /// its own -- construct one wherever it is needed.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
@@ -65,7 +67,7 @@ public sealed class EntityActions(
         return actionCatalog.TryGet(actionId, out definition!);
     }
 
-    /// <summary>Fills destination with every action entityId can use, each once: its own grants, its applied parts', then its spawn blueprint's.</summary>
+    /// <summary>Fills destination with every action entityId can use, each once: its own grants, its applied parts', its spawn blueprint's, then for a crawler the Core actions.</summary>
     /// <remarks>Ids only; TryGetEffectiveAction gives the definition each resolves to. destination is cleared first.</remarks>
     public void CopyActionIds(int entityId, List<Guid> destination)
     {
@@ -86,14 +88,33 @@ public sealed class EntityActions(
             }
         }
 
-        if (spawnRecords.TryGetReadonly(entityId, out var record) && creatures.TryResolve(record.BlueprintId, out var blueprint))
+        if (!spawnRecords.TryGetReadonly(entityId, out var record))
+        {
+            return;
+        }
+
+        if (creatures.TryResolve(record.BlueprintId, out var blueprint))
         {
             foreach (var grant in blueprint.Actions)
             {
                 AddOnce(destination, grant.ActionId);
             }
         }
+
+        if (IsCrawler(record))
+        {
+            foreach (var coreActionId in actionCatalog.CoreActionIds)
+            {
+                AddOnce(destination, coreActionId);
+            }
+        }
     }
+
+    /// <summary>Whether actionId is a Core action, which a crawler has whatever it was built from.</summary>
+    public bool IsCore(Guid actionId) => actionCatalog.IsCore(actionId);
+
+    /// <summary>A number that changes whenever what the entity itself was granted or applied changes -- what CopyActionIds reads beyond its fixed spawn blueprint.</summary>
+    public uint GetActionSetVersion(int entityId) => unchecked(instances.GetEntityVersion(entityId) + appliedParts.GetEntityVersion(entityId));
 
     private static void AddOnce(List<Guid> destination, Guid actionId)
     {
@@ -142,17 +163,23 @@ public sealed class EntityActions(
             return true;
         }
 
-        if (spawnRecords.TryGetReadonly(entityId, out var record)
-            && creatures.TryResolve(record.BlueprintId, out var blueprint)
-            && blueprint.TryGetAction(actionId, out var grant))
+        overrideDefinition = null;
+        if (!spawnRecords.TryGetReadonly(entityId, out var record))
+        {
+            return false;
+        }
+
+        if (creatures.TryResolve(record.BlueprintId, out var blueprint) && blueprint.TryGetAction(actionId, out var grant))
         {
             overrideDefinition = grant.ResolveOverride(actionCatalog);
             return true;
         }
 
-        overrideDefinition = null;
-        return false;
+        return IsCrawler(record) && actionCatalog.IsCore(actionId);
     }
+
+    /// <summary>Whether the entity was spawned as a crawler and still is one: the flag is cleared from a crawler built after the session's crawler numbers ran out.</summary>
+    private static bool IsCrawler(in SpawnRecordComponent record) => record.Flags.HasFlag(SpawnFlags.Crawler);
 
     /// <summary>The grant of actionId made by the most recently applied part that makes one.</summary>
     private bool TryGetAppliedGrant(int entityId, Guid actionId, out ActionDefinition? overrideDefinition)

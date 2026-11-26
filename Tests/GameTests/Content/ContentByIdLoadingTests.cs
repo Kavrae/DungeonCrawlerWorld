@@ -188,4 +188,16 @@ public sealed class ContentByIdLoadingTests
         items.Register(TestContent.Item(BuiltInItemIds.ManaPotion) with { Id = Guid.NewGuid(), Name = "Registered beside the content" });
         Assert.Contains("Registered beside the content", items.Summaries.Select(summary => summary.Name));
     }
+
+    [TestMethod]
+    public void TheCoreActions_AreReadFromTheSummaries_AndRegisteredAtStartup()
+    {
+        var pass = BuildById(new MapBounds(0, 0, 40, 40, 3));
+        var actions = pass.Context.Actions;
+        Guid[] master = [BuiltInActionIds.Dodge, BuiltInActionIds.PowerAttack, BuiltInActionIds.QuickAttack];
+
+        CollectionAssert.AreEquivalent(master, actions.CoreActionIds.ToArray());
+        Assert.IsTrue(master.All(id => IsRegistered(actions, id)), "Every crawler has them, so none is decoded on the spot.");
+        Assert.IsFalse(pass.Context.Content.ItemSummaries.Any(summary => summary.IsCore));
+    }
 }

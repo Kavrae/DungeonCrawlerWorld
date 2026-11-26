@@ -5,8 +5,8 @@ namespace Presentation.UI.Chrome;
 /// <summary>Position/sizing constants for NotificationCenter's own summary Folder and active
 /// notification popups -- see HudChrome's own doc comment for why these are plain mutable fields
 /// rather than readonly. FolderPosition/FolderMaximumSize are the head of a cross-controller
-/// layout chain: HealthWindowChrome.ButtonPosition sits directly beneath FolderMaximumSize's
-/// bottom edge, and InventoryChrome.FolderPosition in turn sits beneath that.</summary>
+/// layout chain: MenuSidebarChrome.Position sits directly beneath FolderMaximumSize's
+/// bottom edge.</summary>
 public static class NotificationChrome
 {
     public static Vector2 FolderPosition = HudChrome.Margin;

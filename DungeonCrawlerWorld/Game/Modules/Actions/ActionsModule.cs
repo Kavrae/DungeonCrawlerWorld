@@ -74,6 +74,8 @@ public sealed class ActionsModule : IGameModule
             static (ref PendingActionActivationComponent existing, PendingActionActivationComponent incoming) => existing = incoming, initialCapacity: 64);
         // Player-only, 24 hotkey slots total -- dense capacity matches the slot count.
         componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>(initialCapacity: 24);
+        // Player-only, the menu sidebar's five commands and any the player binds elsewhere.
+        componentManager.RegisterMultiPool<MenuCommandHotkeyBindingComponent>(initialCapacity: 8);
         // Player-only, only 4 expansions exist.
         componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(
             static (ref existing, incoming) => existing = incoming, initialCapacity: 4);

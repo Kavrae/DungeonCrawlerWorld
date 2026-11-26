@@ -143,6 +143,7 @@ public static class GameBuildPass
         if (context.LoadsContentById)
         {
             context.ContentCatalogLoader.LoadSaveLayers();
+            context.ContentCatalogLoader.LoadCoreActions();
         }
 
         AuraContentRegistration.RegisterAll(context);

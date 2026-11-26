@@ -11,7 +11,7 @@ using UIEngine.UI;
 namespace Presentation.UI.Content;
 
 /// <summary>
-/// The shop-mode item cell -- sprite (left, a CellSize.Y square) + truncated item name (top-right)
+/// The Card view item cell (GridView.Card), in a shop with its price -- sprite (left, a CellSize.Y square) + truncated item name (top-right)
 /// + a stack-count/total-cost row (bottom-right, quantity flush left, "{total}G" flush right)
 /// instead of InventoryItemStackCell's own icon+quantity-badge layout. The per-unit price and any
 /// band breakdown live in the hover tooltip's own band table/receipt now (see InventoryGridContent.
@@ -77,7 +77,19 @@ public class ShopItemStackCell(ElementServices services, SpriteSheetService spri
     {
         _totalPrice = totalPrice;
         _quantity = quantity;
+        ShowsPrice = true;
     }
+
+    /// <summary>Card view outside a shop: the name and quantity, with no price.</summary>
+    public void SetQuantityWithoutPrice(int quantity)
+    {
+        _totalPrice = 0;
+        _quantity = quantity;
+        ShowsPrice = false;
+    }
+
+    /// <summary>Whether the bottom row ends with the total price: in a shop (SetPrice), not in Card view elsewhere (SetQuantityWithoutPrice).</summary>
+    public bool ShowsPrice { get; private set; }
 
     /// <summary>Public for testability, same reasoning as StockStatus below -- what SetPrice last set, the real bulk-priced total for this cell's whole stack (see InventoryGridContent.ComputeShopTotalPrice).</summary>
     public int TotalPrice => _totalPrice;
@@ -114,6 +126,7 @@ public class ShopItemStackCell(ElementServices services, SpriteSheetService spri
         var spriteSize = new Vector2(ContentSize.Y, ContentSize.Y);
 
         var isGreyedOut = DrawBaseAndIcon(spriteBatch, bounds, spriteSize);
+        DrawKeyLabel(spriteBatch, new Rectangle(bounds.X, bounds.Y, (int)spriteSize.X, (int)spriteSize.Y));
 
         var textColor = isGreyedOut ? Color.Gray : Color.White;
         var textLeft = spriteSize.X + TextPadding;
@@ -132,6 +145,11 @@ public class ShopItemStackCell(ElementServices services, SpriteSheetService spri
         if (_quantity > 1)
         {
             LabelRenderer.DrawLeftAligned(spriteBatch, priceFont, _quantityText.Get(_quantity, static quantity => quantity.ToString()), priceRowPosition, priceRowSize, textColor);
+        }
+
+        if (!ShowsPrice)
+        {
+            return;
         }
 
         // Inset from the cell's own right edge by the eligibility glow's own width -- flush against

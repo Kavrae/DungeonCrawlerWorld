@@ -43,13 +43,18 @@ public static class PreviewedValueText
         return ($"({string.Join(", ", differences)})", isBuff);
     }
 
-    /// <summary>The tooltip over a line whose values changed: for each, "Base: 6", one line per step ("Intelligence: +13", "Draught of Venom (Item): x2"), "Total: 13" -- headed by its label when several changed. Null when none did.</summary>
+    /// <summary>The tooltip over a line whose values changed: for each, "Base: 6", one line per step ("Intelligence: +13", "Draught of Venom (Item): x2"), with no total (the line shows it) -- headed by its label when several changed; a range changed by the same steps is one list (RangeTooltip). Null when none did.</summary>
     public static string? Tooltip(IReadOnlyList<ShownValue> values, EffectTextNames names)
     {
         var changed = Changed(values);
         if (changed.Count == 0)
         {
             return null;
+        }
+
+        if (RangeTooltip(values, names) is { } rangeTooltip)
+        {
+            return rangeTooltip;
         }
 
         var lines = new List<string>();
@@ -65,8 +70,23 @@ public static class PreviewedValueText
             {
                 lines.Add(ContributionText(contribution, names));
             }
+        }
 
-            lines.Add($"Total: {shown.Format(shown.Value.Value)}");
+        return string.Join('\n', lines);
+    }
+
+    /// <summary>A range's tooltip -- its lowest and highest values changed by the same steps -- as one list: "Base: 10-14", then each step once, with no total (the line shows it). Null for anything else.</summary>
+    private static string? RangeTooltip(IReadOnlyList<ShownValue> values, EffectTextNames names)
+    {
+        if (values.Count != 2 || values[0].Value.Base == values[1].Value.Base || !values[0].Value.Contributions.SequenceEqual(values[1].Value.Contributions))
+        {
+            return null;
+        }
+
+        var lines = new List<string> { $"Base: {values[0].Format(values[0].Value.Base)}-{values[1].Format(values[1].Value.Base)}" };
+        foreach (var contribution in values[0].Value.Contributions)
+        {
+            lines.Add(ContributionText(contribution, names));
         }
 
         return string.Join('\n', lines);

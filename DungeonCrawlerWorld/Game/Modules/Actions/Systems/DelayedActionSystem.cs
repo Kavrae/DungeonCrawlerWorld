@@ -123,7 +123,7 @@ public sealed class DelayedActionSystem : ISystem
             if (!_toggles.IsOn(entityId, owner))
             {
                 _effectServices.EventBus.Publish(new ActivationUsedEvent(entityId, ActivatableKind.Action, action.Id, action.Tags));
-                _toggles.TurnOn(entityId, owner, action, now, placesAtHolderTile: pending.Selection.Mode == TargetingMode.Ground);
+                _toggles.TurnOn(entityId, owner, action, now, placedAt: pending.Selection.Mode == TargetingMode.Ground ? pending.Selection.AimedTile : null);
             }
 
             return true;

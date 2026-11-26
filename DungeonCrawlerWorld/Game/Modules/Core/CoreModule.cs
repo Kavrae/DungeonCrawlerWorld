@@ -34,6 +34,7 @@ public sealed class CoreModule : IGameModule
 
         tags.DeclareDomain(GameTagDomains.Activation, "What a use of something is, and what a condition on one names.", extensible: true, [.. GameTags.Roots.Select(root => root.Root)]);
         tags.DeclareDomain(GameTagDomains.ItemCategory, "The categories an item falls in.", extensible: false, [GameTags.Item]);
+        tags.DeclareDomain(GameTagDomains.ActionCategory, "The categories an action falls in.", extensible: false, [GameTags.Action, GameTags.Spell]);
         tags.DeclareDomain(GameTagDomains.AbilityScore, "The ability score a use scales with.", extensible: false, [GameTags.StatsAbilityScore]);
     }
 

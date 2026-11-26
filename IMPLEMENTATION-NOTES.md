@@ -2094,7 +2094,7 @@ Level Up and Skill Up join later as new `FloatingTextKind` values.
 
 - Inventory grids have no hover summary (the hotbar keeps its own). A grid reports its hovered cell to
   `ItemHoverDetails` every update: the item's name shows at once above the cursor (`CursorLabelContent`,
-  UIEngine, owner-checked like `TooltipController`), and after 1.5s (`DetailsDelayFrames`) Item Details
+  UIEngine, owner-checked like `TooltipController`), and after 1s (`DetailsDelayFrames`) Item Details
   opens 16px below and right of the cursor -- clear of a double-click on the item. No title bar, no
   Close button (Escape still closes it, `CanUserClose`), not movable. It closes once the pointer has
   been off both its item's cell and itself for 0.3s (time to cross that gap); a context menu over it
@@ -2168,8 +2168,8 @@ FF14 and WoW.
 **Modes:**
 - Item Details is **Simple** by default, and the mode button on the name row switches it to **Advanced**. The button
   is labelled with the mode it switches to.
-- The choice is `ItemWindowCoordinator.ItemDetailsMode` (`ItemDetailsModeSetting`), shared by both Item Details
-  popups for the session; a user setting is a TODO.
+- The choice is `ShellServices.DetailsMode` (`ItemDetailsModeSetting`), shared by both Item Details popups and Action Details
+  for the session; a user setting is a TODO.
 - Comparison is always simple: `ItemDetailsWindow.ShownMode` is Simple while comparing, and the comparison popup is
   `AlwaysSimple`.
 - The Workshop's details are always advanced.
@@ -2200,7 +2200,7 @@ from `EffectFormatting.FormatEntry(entry, EffectTextNames, DetailsMode, previews
   when the player's modifiers or ability scores change.
 - Advanced mode shows a changed value's change after it, "(+7)" or "(x2)", green for a rise and red for a fall,
   drawn as its own element (`LineStyle`, `ActivatableDetailsSections.AddStatLine`).
-- Its tooltip is "Base", each step, then "Total" (`PreviewedValueText`).
+- Its tooltip is "Base" and each step, with no total, which the line already shows; a damage range changed by the same steps is one list, "Base: 10-14" then each step (`PreviewedValueText`).
 
 **Comparison.** A better line shows its difference from the best of the others ("(+25%)", in its `StatUnit`). Worse,
 tied and exclusive lines show none.
@@ -2224,6 +2224,72 @@ tied and exclusive lines show none.
 
 **One screen.** Every built-in item fits a 1600x900 window with about half to spare (tallest 456 px). A stacked
 comparison of two Wands of Fireball is about 886 px. Side-by-side comparison panes are the fix if that ever overflows.
+
+### Actions window, menu commands and the sidebar (2026-11-25)
+
+PLAN-actions-window.md has the decisions and each phase as built. The Actions window is the Inventory window's shape
+for the player's actions, and the precursor to the Workshop's Actions editor.
+
+**The window and its tabs:**
+- Opened by the Actions menu command (U by default), cascading left of the Inventory window. `ActionsWindow` is a
+  `TabbedContent` over `ActionGridContent`: Menu, Core, a gap (`TabDefinition.StartsGroup`), All, then a tab per
+  Action category tag (`GameTagDomains.ActionCategory`). All excludes Menu and Core.
+- **Core** is a field on the action (`ActionDefinition.Core`, codec key `core`), not a tag: Dodge, Quick Attack and
+  Power Attack. Every crawler (`SpawnFlags.Crawler`) has them, resolved last by `EntityActions` after its own grants,
+  applied parts and spawn blueprint; `ActionCatalog.CoreActionIds` comes from the summaries, never a whole-catalog
+  enumeration.
+- One `GridControlToolbar` is shared by every tab (sort, "Card view", search), so a tab switch keeps the search text
+  and the search box's focus. The grid rebuilds on `ActionStateView.GetActionSetVersion` and draws blocker, cooldown
+  wedge, costs, the toggle marker and the bound key each frame without a rebuild.
+- A cell double-click or its menu option arms an action as a first hotbar press would
+  (`ActionTargetingController.ArmActionFromWindow`) or runs a menu command; the option's Enabled is that path's own
+  answer. A cell drags only onto a hotbar slot (`ActionCellDropRefusal`). A click only selects, as an item cell's
+  does; `MapViewState.SelectedActionId`/`SelectedMenuCommandId` glow the cell and every slot bound to it until another
+  is selected or the window closes.
+
+**Menu commands -- the third bindable:**
+- Commands are Presentation's alone (`MenuCommandCatalog`, `BuiltInMenuCommands`: Health, Actions, Inventory, Ability
+  Scores, Switch targeting mode). Game stores only the binding (`MenuCommandHotkeyBindingComponent`, an opaque Guid) and
+  never knows what a command does; `HotkeyBindingCommands.ClearSlot` clears all three kinds.
+- The four HUD buttons are replaced by a sidebar of five slots (Menu1-Menu5, Y U I O P) beside the hotbar. **Both bars
+  work the same**: one key handler (`HotbarKeyInputHandler`, which also flushes a buffered press every frame), and any
+  slot holds an action, an item or a command. Whether a press works while paused is the bound thing's: a command runs,
+  an action or item may be armed but not activated ("Denied while Paused", `PausedActivationCursorText`); a drop --
+  armed or dragged -- lands, since dropping is inventory management, not an activation. F-key
+  commands are never bindable.
+
+**Action Details and Compare:** one lifecycle for both details popups, extracted from Item Details:
+- `DetailsPopupController<TWindow>` (placement, the pointer-away grace, pinning, light dismiss), with
+  `ItemDetailsWindowController` and `ActionDetailsWindowController` thin subclasses.
+- `HoverDetails<TTarget, TContext, TPopup>`: the name at once, the popup after `HoverDetailsTiming.DetailsDelayFrames`
+  (1 s), held back during a drag. `ItemHoverDetails` and `ActionHoverDetails` derive from it.
+- `ComparisonLineStyles` colours lines and shape tiles for both windows; `ComparisonInputHandler` over
+  `IComparisonMode` ends either compare mode.
+- `ActionComparisonController` mirrors `ItemComparisonController` with its own
+  `MapViewState.CompareRequiredActionActivatorType`, so an action comparison never greys items; starting either compare
+  mode ends the other. `ActionDetailsCoordinator` wires them.
+- `ActionDetailsWindow` takes an optional `ActionDetailsUser`: with one (the game) it shows the Active line, blocker,
+  cooldown and values as used; without one (the Workshop) it is the definition alone, always Advanced. A menu command
+  shows its description and the keys of the slots holding it.
+
+**Comparison rules** (`ItemComparisonStat.ValueWhenAbsent`): a shorter cooldown or windup is better and none is best;
+a cost compares only with a cost of the same resource at the same point (use or upkeep), less being better and none
+best. Costs are one line per entry, as the player would pay them (`ItemComparisonStatExtraction.ExtractCostStats`). A
+Delayed activation's lock reads "Windup: 3s" and compares only with windups. A cooldown as long as the action lock
+(Dodge) shows the user's lock in seconds, with its reason in Advanced mode's tooltip.
+
+**Icon and Card views** (`GridView`, `GridViewSetting`, one per window kind in `GridViewSettings`, held for the
+session): the "Card view" checkbox on the Inventory and Actions toolbars. While a shop is open the player's Inventory
+window's checkbox switches the shop's view (`InventoryManagementWindow.ViewSettingInEffect`), which both sides show;
+the shop window has no checkbox of its own. A card outside a shop shows no price (`ShopItemStackCell.ShowsPrice`). The
+loot window and the trade columns don't change. The Inventory and Actions windows are `InventoryChrome.WindowWidth`
+(613 px: 15 icons or 4 cards a row, scrollbar or not); the shop is two cards and a scrollbar wide, 7 icons in Icon view.
+
+**Root causes found on the way:** a raise to front raised a child rather than its window (an icon drawn over a key
+label); focus kept on an element returned to its pool (`UiInputController.ReleaseFocusIfPooled`); `TabbedContent`
+updated its active tab twice a frame (every tabbed window's hover delay ran at double speed); a confirm after a mode
+swap of a self-centred action always resolved in Ground mode rather than the current one; a toggle aura carried by a large entity was
+centred on its anchor tile rather than its footprint's middle (`AuraSystem.SourceTileOf`).
 
 ### Inventory tabs/search/sort/GridControl/Toggle
 
@@ -3537,7 +3603,7 @@ FontStashSharp; Presentation, the exe and Tests reference it.
   resolver chain, unchanged inside) and `HotbarBindingDropHandler`.
 - **Everything else the game does with raw input is an `IUiInputHandler`**, one small handler per concern with only
   required dependencies: a `KeyPressInputHandler` (UIEngine) per hotkey -- U/I/O/F3 and Left Alt --,
-  `AdminModeInputHandler` (F12), `ItemComparisonInputHandler`, `HotbarInputHandler` (the hotbar's hover summary) and
+  `AdminModeInputHandler` (F12), `ComparisonInputHandler` (items' and actions' compare modes), `HotbarInputHandler` (the hotbar's hover summary) and
   `ActivationRefusalInputHandler` (the refusal cursor). It started as one `GameInputHandler` with every controller
   optional, which existed only so tests could leave them out; split, a test registers only the handlers it exercises
   (`TestUiInputController`) and nothing is nullable. Handlers receive an `Element`, never the internal

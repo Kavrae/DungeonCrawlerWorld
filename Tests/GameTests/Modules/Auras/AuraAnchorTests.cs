@@ -53,9 +53,9 @@ public sealed class AuraAnchorTests
             RunFrames(1);
         }
 
-        public void PressLantern(TargetingMode mode)
+        public void PressLantern(TargetingMode mode, Vector3Int? aimedTile = null)
         {
-            var selection = Build.Context.TargetResolution.Select(CasterId, TestContent.Action(BuiltInActionIds.Lantern).Activator, mode, CasterPosition, Build.Context.SimulationClock.CurrentFrame);
+            var selection = Build.Context.TargetResolution.Select(CasterId, TestContent.Action(BuiltInActionIds.Lantern).Activator, mode, aimedTile ?? CasterPosition, Build.Context.SimulationClock.CurrentFrame);
             Components.Merge(CasterId, new PendingActionActivationComponent(BuiltInActionIds.Lantern, selection));
             RunFrames(1);
         }
@@ -194,6 +194,59 @@ public sealed class AuraAnchorTests
         Assert.AreEqual(0, session.PowerAt(CasterPosition, TestContent.Aura(BuiltInAuraIds.Lantern)));
     }
 
+
+    [TestMethod]
+    public void Lantern_SetDownInGroundMode_IsTurnedOffByAPressInTargetMode_AndOnAgain()
+    {
+        var session = BuildSession();
+        session.PressLantern(TargetingMode.Ground);
+        session.RunFrames(FramesPerSecond);
+
+        session.PressLantern(TargetingMode.Target);
+        session.RunFrames(1);
+        Assert.IsFalse(session.LanternIsOn);
+        Assert.IsEmpty(session.AnchorIds);
+
+        session.RunFrames(FramesPerSecond);
+        session.PressLantern(TargetingMode.Target);
+        session.RunFrames(1);
+        Assert.IsTrue(session.LanternIsOn);
+    }
+
+    [TestMethod]
+    public void Lantern_CarriedFromTargetMode_IsTurnedOffByAPressInGroundMode_AndSetDownAgain()
+    {
+        var session = BuildSession();
+        session.PressLantern(TargetingMode.Target);
+        session.RunFrames(FramesPerSecond);
+
+        session.PressLantern(TargetingMode.Ground);
+        session.RunFrames(1);
+        Assert.IsFalse(session.LanternIsOn);
+        Assert.IsFalse(session.Components.GetMultiPool<AuraSourceComponent>().Has(session.CasterId));
+
+        session.RunFrames(FramesPerSecond);
+        session.PressLantern(TargetingMode.Ground);
+        session.RunFrames(1);
+        Assert.IsTrue(session.LanternIsOn);
+        Assert.AreEqual(CasterPosition, session.Components.GetDirectPool<TransformComponent>().GetReadonly(session.AnchorIds.Single()).Position);
+    }
+
+    [TestMethod]
+    public void Lantern_GroundMode_IsSetDownOnTheAimedTileBesideTheHolder_AndOnTheHoldersTileWhenAimedFurther()
+    {
+        var session = BuildSession();
+        var besideTheHolder = CasterPosition + new Vector3Int(-1, 1, 0);
+        session.PressLantern(TargetingMode.Ground, besideTheHolder);
+        Assert.AreEqual(besideTheHolder, session.Components.GetDirectPool<TransformComponent>().GetReadonly(session.AnchorIds.Single()).Position);
+
+        session.RunFrames(FramesPerSecond);
+        session.PressLantern(TargetingMode.Ground, besideTheHolder);
+        session.RunFrames(FramesPerSecond);
+        session.PressLantern(TargetingMode.Ground, AimedTile);
+
+        Assert.AreEqual(CasterPosition, session.Components.GetDirectPool<TransformComponent>().GetReadonly(session.AnchorIds.Single()).Position, "Three tiles away is out of reach: the holder's own tile.");
+    }
     /// <summary>What its neighborhood unloading does: the streamer destroys the anchor, and the toggle holding it is switched off with it.</summary>
     [TestMethod]
     public void Lantern_AnchorDestroyed_SwitchesTheToggleOff()

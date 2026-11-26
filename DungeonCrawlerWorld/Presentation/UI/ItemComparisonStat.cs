@@ -26,6 +26,7 @@ public enum StatUnit : byte
 /// <param name="ChangeText">Advanced mode's total change from the line's base values, shown after it ("(+7)"); null when nothing changed them.</param>
 /// <param name="ChangeIsBuff">Whether ChangeText is to the user's advantage (green) or not (red).</param>
 /// <param name="Unit">What ComparableValue counts in.</param>
+/// <param name="ValueWhenAbsent">The value a compared definition with no such line has -- 0 for a cooldown or a cost, so having none is best; null when lacking the line is the other's loss (an effect it doesn't have).</param>
 public readonly record struct ItemComparisonStat(
     string Key,
     string DisplayText,
@@ -34,4 +35,5 @@ public readonly record struct ItemComparisonStat(
     string? TooltipText = null,
     string? ChangeText = null,
     bool ChangeIsBuff = true,
-    StatUnit Unit = StatUnit.Number);
+    StatUnit Unit = StatUnit.Number,
+    double? ValueWhenAbsent = null);

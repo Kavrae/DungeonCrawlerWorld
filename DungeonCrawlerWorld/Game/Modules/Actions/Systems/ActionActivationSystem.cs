@@ -108,7 +108,7 @@ public sealed class ActionActivationSystem : ISystem
 
         if (turnOn)
         {
-            _toggles.TurnOn(entityId, ActivatableReference.Action(action.Id), action, now, placesAtHolderTile: selection.Mode == TargetingMode.Ground);
+            _toggles.TurnOn(entityId, ActivatableReference.Action(action.Id), action, now, placedAt: selection.Mode == TargetingMode.Ground ? selection.AimedTile : null);
         }
         else
         {

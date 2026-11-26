@@ -9,7 +9,7 @@ using UIEngine.UI;
 
 namespace Tests.Presentation;
 
-/// <summary>The cell a right-click menu is open for is highlighted while the menu is open, follows its stack when the grid rebuilds its cells, and ends with the menu.</summary>
+/// <summary>The cell a right-click menu is open for is highlighted while the menu is open, follows its stack when the grid rebuilds its cells, and ends with the menu; a cell bound to a hotbar slot shows its key.</summary>
 [TestClass]
 [DoNotParallelize]
 public sealed class InventoryGridContextMenuTargetTests
@@ -171,5 +171,22 @@ public sealed class InventoryGridContextMenuTargetTests
         fixture.Grid.Update(new GameTime());
 
         Assert.IsEmpty(Targets(fixture));
+    }
+
+    [TestMethod]
+    public void ACellWhoseStackIsBoundToAKeyedSlot_ShowsTheKey_AndLosesItWhenUnbound()
+    {
+        var fixture = Build();
+        var apple = CellOf(fixture, FirstItemId);
+        var bindings = fixture.ComponentManager.GetMultiPool<Game.Modules.Inventory.Components.ItemHotkeyBindingComponent>();
+        bindings.Add(PlayerEntityId, new Game.Modules.Inventory.Components.ItemHotkeyBindingComponent(Game.Modules.Actions.HotkeySlot.Base2, apple.StackInstanceId!.Value));
+
+        fixture.Grid.Update(new GameTime());
+        Assert.AreEqual("E", apple.KeyLabel);
+        Assert.IsNull(CellOf(fixture, SecondItemId).KeyLabel);
+
+        bindings.Remove(PlayerEntityId);
+        fixture.Grid.Update(new GameTime());
+        Assert.IsNull(apple.KeyLabel);
     }
 }

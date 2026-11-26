@@ -3,11 +3,14 @@ using Game.Bootstrap;
 using Presentation.MapRendering;
 using Presentation.UI;
 using Presentation.UI.AbilityScores;
+using Presentation.UI.Actions;
 using Presentation.UI.Characteristics;
 using Presentation.UI.Content;
+using Presentation.UI.Details;
 using Presentation.UI.FloatingText;
 using Presentation.UI.Inventory;
 using Presentation.UI.Looting;
+using Presentation.UI.Menus;
 using Presentation.UI.Shops;
 using Presentation.UI.Trade;
 using UIEngine.Bootstrap;
@@ -24,7 +27,9 @@ public static class ElementFactoryRegistry
         ShellServices shellServices,
         ActionTargetingController actionTargetingController,
         PlayerMovementController playerMovementController,
-        PlayerItemDrops playerItemDrops)
+        PlayerItemDrops playerItemDrops,
+        MenuCommandCatalog menuCommands,
+        ActionHoverDetails actionHoverDetails)
     {
         var elementPool = uiEngineContext.ElementPoolService;
         var mapViewState = shellServices.MapViewState;
@@ -41,7 +46,8 @@ public static class ElementFactoryRegistry
         var views = gameSession.Views;
         var mapView = views.MapView;
         var commands = gameSession.Commands;
-        var inventoryServices = new InventoryServices(itemCatalog, views.InventoryView, views.ShopView, views.CurrencyView, views.ActionStateView, commands.InventoryCommands, commands.ShopCommands, commands.CurrencyCommands, catalogs.GameplayTags, shellServices.ItemHoverDetails, playerItemDrops, commands.LootCommands);
+        var gridViews = GridViewSettings.CreateDefault();
+        var inventoryServices = new InventoryServices(itemCatalog, views.InventoryView, views.ShopView, views.CurrencyView, views.ActionStateView, views.HotkeyBindingView, commands.InventoryCommands, commands.ShopCommands, commands.CurrencyCommands, catalogs.GameplayTags, shellServices.ItemHoverDetails, playerItemDrops, commands.LootCommands, gridViews);
 
         uiEngineContext.RegisterFrameworkElementFactories(contextMenuController, cursorTextContent);
 
@@ -71,6 +77,9 @@ public static class ElementFactoryRegistry
             services, inventoryServices, world, contextMenuController, mapViewState));
         elementPool.RegisterFactory(() => new InventoryItemStackCell(services, sprites));
         elementPool.RegisterFactory(() => new HotbarSlotElement(services));
+        elementPool.RegisterFactory(() => new ActionsWindow(services, new ActionsWindowServices(views.ActionStateView, views.HotkeyBindingView, views.EntityActions, menuCommands, catalogs.GameplayTags, gameSession.SimulationClock, actionTargetingController, mapViewState, contextMenuController, actionHoverDetails, gridViews.Actions)));
+        elementPool.RegisterFactory(() => new ActionDetailsWindow(services, actionCatalog, EffectTextNames.Of(catalogs, views.ActionSourceNaming), views.ActivationPreviews, new ActionDetailsUser(views.ActionStateView, world)));
+        elementPool.RegisterFactory(() => new ActionCell(services, sprites));
         elementPool.RegisterFactory(() => new ShopItemStackCell(services, sprites));
         elementPool.RegisterFactory(() => new TradeItemStackCell(services, sprites));
         elementPool.RegisterFactory(() => new EmptyTradeSlotCell(services));

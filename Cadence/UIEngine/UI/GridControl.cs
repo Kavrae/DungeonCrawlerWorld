@@ -35,7 +35,7 @@ public sealed class GridControl(ElementServices services)
     private static readonly int SearchDebounceFrames = GameTiming.FramesForSeconds(0.3f);
 
     private static readonly Color ControlColor = WindowPalette.ControlBackground;
-    private static readonly Color ToggleOnColor = new(80, 68, 30);
+    public static readonly Color ToggleOnColor = new(80, 68, 30);
 
     /// <summary>Fires with the newly-selected option's index into the labels Configure was given -- GridControl never knows what any index means.</summary>
     public event Action<int>? SortOptionCycled;
@@ -43,10 +43,19 @@ public sealed class GridControl(ElementServices services)
     /// <summary>Fires with the debounced, applied search text -- see DebouncedTextFilter.</summary>
     public event Action<string>? SearchFilterChanged;
 
+    /// <summary>The index of the sort option shown, into the labels Configure was given.</summary>
+    public int SortOptionIndex => _sortOptionIndex;
+
+    /// <summary>The search text as last applied (SearchFilterChanged); empty for none.</summary>
+    public string AppliedSearchText => _searchFilter.AppliedText;
+
     private readonly DebouncedTextFilter _searchFilter = new(SearchDebounceFrames);
 
     private IReadOnlyList<string> _sortOptionLabels = [];
     private IReadOnlyList<(string Label, bool DefaultOn, Action<bool> OnToggled)> _toggleDefinitions = [];
+
+    /// <summary>The toggles built, in the order of _toggleDefinitions.</summary>
+    private readonly List<Toggle> _toggles = [];
     private string _searchGhostText = string.Empty;
     private int _sortOptionIndex;
 
@@ -84,6 +93,7 @@ public sealed class GridControl(ElementServices services)
         _sortOptionLabels = sortOptionLabels;
         _sortOptionIndex = 0;
         _toggleDefinitions = toggles;
+        _toggles.Clear();
         _searchGhostText = searchGhostText;
     }
 
@@ -143,6 +153,7 @@ public sealed class GridControl(ElementServices services)
             toggle.Configure(defaultOn, ToggleOnColor, ControlColor, onToggled);
             toggle.SetLabel(label, _font, WindowPalette.ControlLabelTextColor);
             AddChild(toggle);
+            _toggles.Add(toggle);
             x += toggleWidth + ControlGap;
         }
 
@@ -180,6 +191,15 @@ public sealed class GridControl(ElementServices services)
 
     /// <summary>Updates the count display in place -- fixed-width (see WidestCountText), so this never shifts the sort/toggle/search controls to its right.</summary>
     public void SetItemCount(int count) => UpdateCountLabelText(count);
+
+    /// <summary>Shows the toggle at index as isOn without notifying its onToggled -- for a setting something else can change too.</summary>
+    public void SetToggleOn(int index, bool isOn)
+    {
+        if (index < _toggles.Count && _toggles[index].IsOn != isOn)
+        {
+            _toggles[index].SetIsOn(isOn);
+        }
+    }
 
     private void UpdateCountLabelText(int count) => _countLabel.UpdateText($"{count} items");
 

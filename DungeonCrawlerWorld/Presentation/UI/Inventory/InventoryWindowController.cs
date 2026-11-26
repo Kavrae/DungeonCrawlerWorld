@@ -8,12 +8,8 @@ using UIEngine.UI.ColorPalettes;
 namespace Presentation.UI.Inventory;
 
 /// <summary>
-/// Owns the Inventory button and the InventoryManagementWindow it opens/closes -- the same
-/// single-button shape HealthWindowController already established. Folders have been proven out
-/// (NotificationCenter's own summary folder) and are no longer needed for a control that only
-/// ever opens one thing -- there's nothing to expand into, so a plain Button replaces the Folder
-/// this controller used to own jointly with the Ability Score window (see
-/// AbilityScoreWindowController, its own sibling now that the two no longer share a Folder).
+/// Owns the player's InventoryManagementWindow: opened and closed by the Inventory menu command (BuiltInMenuCommands), from
+/// whichever hotkey slot holds it, and opened by anything else that shows the player's items (looting a corpse).
 /// </summary>
 public sealed class InventoryWindowController(
     ElementPoolService elementPoolService,
@@ -23,8 +19,6 @@ public sealed class InventoryWindowController(
     ContextMenuController contextMenuController,
     ElementGroup itemWindows)
 {
-
-    private Button _button = null!;
     private WindowLifecycle<InventoryManagementWindow> _windowLifecycle = null!;
     private UiLayerStack _uiLayers = null!;
 
@@ -56,43 +50,22 @@ public sealed class InventoryWindowController(
     /// <summary>Settable late-bound notification fired when the player's Inventory window closes.</summary>
     public Action? OnClosed { get; set; }
 
-    /// <summary>Opens the player's own Inventory window if it isn't already -- idempotent, same as WindowLifecycle.Open itself. Lets a non-button trigger (e.g. clicking a corpse to loot it) reuse this window instead of the button being the only way to open it.</summary>
+    /// <summary>Opens the player's own Inventory window if it isn't already -- idempotent, same as WindowLifecycle.Open itself. Lets something other than the Inventory menu command (clicking a corpse to loot it) open it too.</summary>
     public void OpenInventoryWindow() => _windowLifecycle.Open();
 
-    /// <summary>Lets a global keyboard hotkey (I -- a KeyPressInputHandler registered in ShellBootstrapper) reuse the same open/close behavior the button's own Clicked handler already has, without exposing _windowLifecycle itself.</summary>
+    /// <summary>Opens the Inventory window, or closes it if it is open -- the Inventory menu command.</summary>
     public void ToggleInventoryWindow() => _windowLifecycle.Toggle();
 
     public void Initialize(UiLayerStack layers)
     {
         _uiLayers = layers;
         _windowLifecycle = new WindowLifecycle<InventoryManagementWindow>(CreateInventoryWindow, IsInventoryDisabled, layers, () => OnClosed?.Invoke(), itemWindows);
-
-        _button = elementPoolService.CreateElement<Button>(null, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = InventoryChrome.ButtonPosition, Size = InventoryChrome.ButtonSize, DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
-        });
-        _button.SetIcon("Inventory", "I");
-        _button.ShowKeyLabel("I");
-        _button.Initialize();
-        _button.TooltipText = "Inventory";
-        _button.Clicked += _ => _windowLifecycle.Toggle();
-        layers.Add(UiLayer.DynamicHud, _button);
-
-        // Opening Inventory from this button while another menu window is already open is a
-        // normal part of the workflow menu mode exists to support, not something it should block
-        // (see UiLayerStack.MarkMenuModeExempt's own doc comment).
-        layers.MarkMenuModeExempt(_button);
     }
 
-    /// <summary>Reflects InventoryDisabledComponent on the button itself -- Enabled false both grays the icon (IconElement inside a disabled control) and excludes it from hit-testing (PressableElement.IsHitTestable), so a disabled inventory reads as genuinely unclickable rather than clickable-but-silently-refused the way WindowLifecycle's own isDisabled check alone would leave it.</summary>
-    public void Update() =>
-        _button.Enabled = !IsInventoryDisabled();
+    /// <summary>Whether the player's inventory is disabled (InventoryDisabledComponent): its window won't open, and the Inventory menu command greys.</summary>
+    public bool IsInventoryDisabled() => inventoryView.IsInventoryDisabled(world.PlayerEntityId);
 
-    private bool IsInventoryDisabled() => inventoryView.IsInventoryDisabled(world.PlayerEntityId);
-
-    /// <summary>AbilityScoreWindowController computes the identical formula for its own cascading window -- see InventoryChrome.WindowWidthFraction's own doc comment for why the two share the constant rather than each hardcoding their own fraction.</summary>
-    private float WindowWidth => mapWindow.CurrentSize.X * InventoryChrome.WindowWidthFraction;
+    private static float WindowWidth => InventoryChrome.WindowWidth;
 
     private InventoryManagementWindow CreateInventoryWindow()
     {

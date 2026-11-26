@@ -77,11 +77,26 @@ public sealed class MapViewState
     /// <remarks>Turned on and off by the inspector's Edit title button; it ends with the Admin inspection it belongs to (InspectionWindowContent).</remarks>
     public bool IsEditingComponents;
 
+    /// <summary>The player's own pause, toggled by Space while the map holds focus (MapWindow.OnHotkeysAction).</summary>
+    public bool IsPausedByPlayer;
+
+    /// <summary>Whether the simulation is held: the player's own pause or the inspector's Edit mode. Gameplay a hotbar slot holds (an action, an item) waits for it to end; a menu command doesn't.</summary>
+    public bool IsGamePaused => IsPausedByPlayer || IsEditingComponents;
+
     /// <summary>The inventory item stack currently shown in the Item Details window, if any -- drives the selection glow on both InventoryGridContent's matching cell and HotbarContent's matching bound slot (see GlowRenderer.Draw, the same primitive ArmedSlot's own glow already uses). By StackInstanceId, not ItemDefinitionId -- same reasoning as ArmedItemStackInstanceId above. Set/cleared by ItemDetailsWindowController.Open/Close.</summary>
     public uint? SelectedItemStackInstanceId;
 
+    /// <summary>The action a click in the Actions window selected -- its Actions cell and every hotbar slot bound to it glow, as an item's do, until another is selected or the Actions window closes (ActionGridContent, ActionsWindowController).</summary>
+    public Guid? SelectedActionId;
+
+    /// <summary>The menu command a click in the Actions window selected, as SelectedActionId is for an action.</summary>
+    public Guid? SelectedMenuCommandId;
+
     /// <summary>Non-null while Item Details Comparison is armed (see ItemComparisonController.Arm/Disarm/ClearComparison) -- the anchor item's own Activator concrete type, the eligibility gate every other item must match to be added. InventoryGridContent reads this every frame to grey out ineligible cells and highlight eligible ones (see InventoryItemStackCell.CompareState).</summary>
     public Type? CompareRequiredActivatorType;
+
+    /// <summary>Non-null while action compare mode lasts (ActionComparisonController): the anchor action's activator type, which every other action must share to be compared -- the Actions window greys the rest. Its own field, so an action comparison never greys inventory items.</summary>
+    public Type? CompareRequiredActionActivatorType;
 
     /// <summary>The currently-open shop's own entity id, if any -- set/cleared by ShopWindowController.OpenShop/its own Closed handler, the same shared cross-window flag CompareRequiredActivatorType above already is. Not yet read by anything (a future pass switches both the shop's own grid and the player's own inventory grid to the wider, price-showing ShopItemStackCell layout while this is set).</summary>
     public int? OpenShopEntityId;

@@ -1,4 +1,5 @@
 using System.Text;
+using Engine.Utilities;
 
 namespace Workshop.Editing;
 
@@ -66,7 +67,7 @@ public sealed class ContentFileWrites
                 }
 
                 var temporaryPath = path + TemporarySuffix;
-                File.Move(temporaryPath, path, overwrite: true);
+                FileReplacement.Replace(temporaryPath, path);
                 _staged.Remove(temporaryPath);
             }
         }

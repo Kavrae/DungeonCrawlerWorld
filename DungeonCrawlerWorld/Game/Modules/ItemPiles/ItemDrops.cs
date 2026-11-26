@@ -39,7 +39,7 @@ public sealed class ItemDrops(
     SimulationClock simulationClock)
 {
     /// <summary>Where a drop onto the ground can land: one tile, the dropper's own or one touching its footprint, diagonals included.</summary>
-    public static TargetingSpec Targeting { get; } = new(TargetShape.SingleTarget, MaximumRange: 1, Modes: TargetingModes.GroundOnly);
+    public static TargetingSpec Targeting => TargetingSpec.FootprintOrAdjacent;
 
     private readonly PackedComponentPool<ItemPileComponent> _piles = componentManager.GetPackedPool<ItemPileComponent>();
     private readonly ItemDropRefusals _refusals = new(componentManager, itemCatalog);

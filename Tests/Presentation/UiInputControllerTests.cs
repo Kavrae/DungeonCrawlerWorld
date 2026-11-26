@@ -19,6 +19,7 @@ using Microsoft.Xna.Framework.Input;
 using Presentation.UI;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
+using Presentation.UI.Menus;
 using Tests.UIEngine;
 using UIEngine.Fonts;
 using UIEngine.Input;
@@ -2308,7 +2309,7 @@ public sealed class UiInputControllerTests
 
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, itemCatalog: itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), itemCatalog,
-            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: new SimulationClock());
+            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: new SimulationClock(), menuCommands: new MenuCommandCatalog());
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
@@ -2349,7 +2350,7 @@ public sealed class UiInputControllerTests
 
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, itemCatalog: itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), itemCatalog,
-            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: new SimulationClock());
+            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: new SimulationClock(), menuCommands: new MenuCommandCatalog());
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
@@ -3668,7 +3669,7 @@ public sealed class UiInputControllerTests
 
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, new ItemCatalog()), TestActionStateViews.Over(componentManager, actionCatalog), new HotkeyBindingCommands(componentManager, new ItemCatalog(), new EventBus()), new ItemCatalog(),
-            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: new SimulationClock());
+            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: new SimulationClock(), menuCommands: new MenuCommandCatalog());
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },

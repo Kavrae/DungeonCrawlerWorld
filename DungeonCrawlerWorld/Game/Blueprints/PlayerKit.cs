@@ -153,6 +153,12 @@ public static class PlayerKit
 
         // TEMPORARY, like the ones above: Battle Fury (a self-targeted outgoing damage buff) on Slot14. Remove once a rebind UI exists.
         componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot14, BuiltInActionIds.BattleFury));
+
+        componentManager.Merge(entityId, new MenuCommandHotkeyBindingComponent(HotkeySlot.Menu1, BuiltInMenuCommandIds.Health));
+        componentManager.Merge(entityId, new MenuCommandHotkeyBindingComponent(HotkeySlot.Menu2, BuiltInMenuCommandIds.Actions));
+        componentManager.Merge(entityId, new MenuCommandHotkeyBindingComponent(HotkeySlot.Menu3, BuiltInMenuCommandIds.Inventory));
+        componentManager.Merge(entityId, new MenuCommandHotkeyBindingComponent(HotkeySlot.Menu4, BuiltInMenuCommandIds.AbilityScores));
+        componentManager.Merge(entityId, new MenuCommandHotkeyBindingComponent(HotkeySlot.Menu5, BuiltInMenuCommandIds.SwitchTargetingMode));
         componentManager.Merge(entityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: DefaultUnlockedExpansionSlots));
 
         StartingCurrencyGrant.GrantFixedStartingGold(componentManager, entityId);

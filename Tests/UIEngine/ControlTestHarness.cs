@@ -29,7 +29,8 @@ internal sealed class ControlTestHarness
         Pool.RegisterFactory(() => new ModalDialog(TestElementServices.For(Pool, fontService)));
         Pool.RegisterFactory(() => new global::UIEngine.UI.Filtering.ListFilterButton(TestElementServices.For(Pool, fontService), Dropdowns));
         Pool.RegisterFactory(() => new global::UIEngine.UI.Filtering.ListFilterChips(TestElementServices.For(Pool, fontService)));
-        Input = new UiInputController(Layers, ScreenSize, new PointerState(), [], [], Dropdowns) { StartTextInput = static () => { }, StopTextInput = static () => { } };
+        Pointer = new PointerState();
+        Input = new UiInputController(Layers, ScreenSize, Pointer, [], [], Dropdowns) { StartTextInput = static () => { }, StopTextInput = static () => { } };
     }
 
     public ElementPoolService Pool { get; }
@@ -39,6 +40,9 @@ internal sealed class ControlTestHarness
     public DropdownController Dropdowns { get; }
 
     public UiInputController Input { get; }
+
+    /// <summary>What the input controller publishes each frame for content drawn at the cursor.</summary>
+    public PointerState Pointer { get; }
 
     public static Rectangle ScreenBounds => new(0, 0, (int)ScreenSize.X, (int)ScreenSize.Y);
 

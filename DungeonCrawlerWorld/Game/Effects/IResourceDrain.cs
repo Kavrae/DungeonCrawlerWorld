@@ -13,6 +13,9 @@ public interface IResourceDrain : IEffectEntry
 {
     DrainedResource Resource { get; }
 
+    /// <summary>What it takes as declared, before any modifier.</summary>
+    ushort Amount { get; }
+
     /// <summary>What this takes from context.TargetEntityId, through its modifiers on both ends, never rounded.</summary>
     float AmountFor(in EffectContext context);
 }

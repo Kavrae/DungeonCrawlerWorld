@@ -48,6 +48,9 @@ public sealed record TargetingSpec(
     /// <summary>The ProjectileHitCount that is never reached: the projectile hits every entity on its way.</summary>
     public const ushort AllEntitiesOnPath = ushort.MaxValue;
 
+    /// <summary>One tile, the user's own or one touching its footprint, diagonals included, aimed in Ground mode: where a drop lands (ItemDrops.Targeting) and where a toggle turned on in Ground mode puts what it places (Toggles.TurnOn).</summary>
+    public static TargetingSpec FootprintOrAdjacent { get; } = new(TargetShape.SingleTarget, MaximumRange: 1, Modes: TargetingModes.GroundOnly);
+
     /// <summary>The shape resolves around the caster alone, whatever is aimed at: a Self shape anchored on the caster.</summary>
     public bool IsSelfOnly => Shape == TargetShape.Self && Anchor == TargetAnchor.Caster;
 

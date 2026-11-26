@@ -9,6 +9,9 @@ public enum HotkeyCategory : byte
     Base,
     DefaultAttack,
     Expansion,
+
+    /// <summary>The menu sidebar: Menu1-Menu5, one column, never locked -- slots like any other, which hold anything a slot can.</summary>
+    Menu,
 }
 
 /// <summary>
@@ -24,19 +27,21 @@ public readonly record struct HotkeySlotLayoutEntry(HotkeySlot Slot, HotkeyCateg
 /// <summary>
 /// Default slot-to-physical-key mapping and category/grid layout -- deliberately separate from
 /// the HotkeySlot enum itself (Game layer, no FNA/XNA dependency) so slot identity, physical key,
-/// and display layout stay three independently-changeable concerns. Three fixed categories (see
+/// and display layout stay three independently-changeable concerns. Four fixed categories (see
 /// HotkeyCategory): Base (Base1-3, always exactly 3, Q/E/R) and DefaultAttack (always exactly 1,
 /// F) never grow or shrink; Expansion (Slot1-20) is the one that grows, as two 2x5 pages placed
 /// side by side (page 1 on the left, page 2 to its right -- not stacked below) -- page 0 row 0 is
 /// 1/2/3/4/5, page 0 row 1 is Z/X/C/V/B, page 1 row 0 is Shift+1..5, page 1 row 1 is
 /// Shift+Z/X/C/V/B. How many of the 20 Expansion slots are actually unlocked for a given entity
 /// lives on HotkeyExpansionUnlockComponent, not here -- this table is the static default layout
-/// for all 24 slots regardless of how many any one entity currently has unlocked.
+/// for all 29 slots regardless of how many any one entity currently has unlocked. Menu (Menu1-5, Y/U/I/O/P) is the
+/// menu sidebar's column, never locked.
 /// </summary>
 public static class HotkeySlotLayout
 {
     private static readonly Keys[] ExpansionRowKeys = [Keys.D1, Keys.D2, Keys.D3, Keys.D4, Keys.D5];
     private static readonly Keys[] ExpansionRowTwoKeys = [Keys.Z, Keys.X, Keys.C, Keys.V, Keys.B];
+    private static readonly Keys[] MenuSidebarKeys = [Keys.Y, Keys.U, Keys.I, Keys.O, Keys.P];
 
     private const int ExpansionColumnsPerRow = 5;
     private const int ExpansionRowsPerPage = 2;
@@ -61,6 +66,11 @@ public static class HotkeySlotLayout
         AddExpansionRow(entries, HotkeySlot.Slot6, ExpansionRowTwoKeys, requiresShift: false, page: 0, row: 1);
         AddExpansionRow(entries, HotkeySlot.Slot11, ExpansionRowKeys, requiresShift: true, page: 1, row: 0);
         AddExpansionRow(entries, HotkeySlot.Slot16, ExpansionRowTwoKeys, requiresShift: true, page: 1, row: 1);
+
+        for (var row = 0; row < MenuSidebarKeys.Length; row++)
+        {
+            entries.Add(new HotkeySlotLayoutEntry((HotkeySlot)((int)HotkeySlot.Menu1 + row), HotkeyCategory.Menu, MenuSidebarKeys[row], RequiresShift: false, Page: 0, Row: row, Column: 0));
+        }
 
         return entries;
     }

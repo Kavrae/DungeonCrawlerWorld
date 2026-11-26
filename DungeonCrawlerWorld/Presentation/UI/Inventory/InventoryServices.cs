@@ -5,6 +5,8 @@ using Game.Modules.Inventory;
 using Game.Modules.Shops;
 using Game.Views;
 
+using Presentation.UI.Content;
+
 namespace Presentation.UI.Inventory;
 
 /// <summary>What every item window and its contents reads and does -- grids, currency rows, and the windows that host them.</summary>
@@ -15,10 +17,12 @@ public sealed record InventoryServices(
     ShopView ShopView,
     CurrencyView CurrencyView,
     ActionStateView ActionStateView,
+    HotkeyBindingView HotkeyBindingView,
     InventoryCommands InventoryCommands,
     ShopCommands ShopCommands,
     CurrencyCommands CurrencyCommands,
     GameplayTagRegistry GameplayTags,
     ItemHoverDetails ItemHoverDetails,
     IPlayerItemDrops PlayerItemDrops,
-    LootCommands LootCommands);
+    LootCommands LootCommands,
+    GridViewSettings GridViews);

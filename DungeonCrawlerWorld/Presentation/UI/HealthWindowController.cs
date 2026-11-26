@@ -6,51 +6,22 @@ using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI;
 
-/// <summary>
-/// Owns the Health button and the HealthWindow it opens/closes -- the original template for the
-/// single-button-per-window shape InventoryWindowController and AbilityScoreWindowController now
-/// both follow too (Folders have been proven out and removed from both -- see
-/// InventoryWindowController's own doc comment). A plain Button, not a Folder -- there's only
-/// ever one thing to open, so there's nothing to expand into.
-/// </summary>
+/// <summary>Owns the HealthWindow: opened and closed by the Health menu command (BuiltInMenuCommands), from whichever hotkey slot holds it.</summary>
 public sealed class HealthWindowController(
     ElementPoolService elementPoolService,
     World world,
     ContextMenuController contextMenuController)
 {
-    /// <summary>♥ (U+2665, "black heart suit") -- renders via the default DroidSans font with no Symbola-Emoji fallback needed, unlike Burning/Poison/Paralysis's own emoji glyphs (see FontService).</summary>
-    private const string HeartGlyph = "♥";
-
-    private Button _button = null!;
     private WindowLifecycle<HealthWindow> _slot = null!;
     private UiLayerStack _layers = null!;
 
-    /// <summary>Lets a global keyboard hotkey (U -- a KeyPressInputHandler registered in ShellBootstrapper) reuse the same open/close behavior the button's own Clicked handler already has, without exposing _windowLifecycle itself.</summary>
+    /// <summary>Opens the Health window, or closes it if it is open -- the Health menu command.</summary>
     public void ToggleHealthWindow() => _slot.Toggle();
 
     public void Initialize(UiLayerStack layers)
     {
         _layers = layers;
         _slot = new WindowLifecycle<HealthWindow>(CreateHealthWindow, () => false, layers, () => { });
-
-        _button = elementPoolService.CreateElement<Button>(null, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = HealthWindowChrome.ButtonPosition, Size = HealthWindowChrome.ButtonSize, DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
-            Text = new TextOptions { TextColor = GameWindowPalette.HeartGlyphColor },
-        });
-        _button.SetText(HeartGlyph);
-        _button.ShowKeyLabel("U");
-        _button.Initialize();
-        _button.TooltipText = "Health";
-        _button.Clicked += _ => _slot.Toggle();
-        layers.Add(UiLayer.DynamicHud, _button);
-
-        // Same reasoning as InventoryWindowController's own button -- opening the Health
-        // window from this button while another menu window is already open is a normal part of
-        // the workflow menu mode exists to support, not something it should block (see
-        // UiLayerStack.MarkMenuModeExempt's own doc comment).
-        layers.MarkMenuModeExempt(_button);
     }
 
     private HealthWindow CreateHealthWindow()

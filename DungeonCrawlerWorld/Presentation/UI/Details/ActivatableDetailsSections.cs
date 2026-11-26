@@ -101,6 +101,47 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
         return row;
     }
 
+    /// <summary>Height of a button on the name row.</summary>
+    private const float NameRowButtonHeight = 20f;
+
+    /// <summary>Space around a name-row button's label, and between two buttons.</summary>
+    private const float NameRowButtonGap = 6f;
+
+    /// <summary>The name row with buttons right-aligned at its top, left to right, the name shortened to leave them room -- Item Details' and Action Details' Compare, Stop Comparison and mode buttons.</summary>
+    public Window BuildNameRowWithButtons(Window host, string? spriteName, string glyph, Color glyphColor, string name, float width, IReadOnlyList<(string Label, Action OnClicked)> buttons)
+    {
+        var buttonWidths = new float[buttons.Count];
+        var buttonsWidth = 0f;
+        for (var index = 0; index < buttons.Count; index++)
+        {
+            buttonWidths[index] = BodyFont.MeasureString(buttons[index].Label).X + NameRowButtonGap * 2;
+            buttonsWidth += buttonWidths[index] + NameRowButtonGap;
+        }
+
+        var row = BuildNameRow(host, spriteName, glyph, glyphColor, name, width, reservedRightWidth: buttonsWidth);
+
+        var buttonX = width - host.ContentPadding.X * 2;
+        for (var index = buttons.Count - 1; index >= 0; index--)
+        {
+            buttonX -= buttonWidths[index];
+            var (label, onClicked) = buttons[index];
+            var button = elementPoolService.CreateElement<Button>(row, new ElementOptions
+            {
+                Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+                Layout = new ElementLayoutOptions { RelativePosition = new Vector2(buttonX, 0), Size = new Vector2(buttonWidths[index], NameRowButtonHeight), DisplayMode = ElementDisplayMode.Fixed },
+                Chrome = new ElementChromeOptions { ShowBorder = true },
+                Content = new ElementContentOptions { ContentColor = WindowPalette.ControlBackground },
+                Text = new TextOptions { TextColor = WindowPalette.ControlLabelTextColor },
+            });
+            button.SetText(label);
+            button.Clicked += _ => onClicked();
+            row.AddChild(button);
+            buttonX -= NameRowButtonGap;
+        }
+
+        return row;
+    }
+
     /// <summary>An icon beside one line of body text, as tall as the icon -- the name row's shape without the doubled font (Item Details' gold value).</summary>
     public void BuildIconTextRow(Window host, string? spriteName, string glyph, Color glyphColor, string text, float width)
     {
@@ -274,18 +315,19 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
         AddStatLine(row, Vector2.Zero, width, stat, style);
     }
 
-    /// <summary>"Cost" and one line per cost -- nothing at all when using it costs nothing.</summary>
-    public void BuildCostSection(Window host, ActivatableDefinition definition, float width)
+    /// <summary>"Cost" and one line per cost entry (ItemComparisonStatExtraction.ExtractCostStats), coloured by lineStyle against what it is compared with -- nothing at all when using it costs nothing.</summary>
+    public void BuildCostSection(Window host, ActivatableDefinition definition, float width, Func<ItemComparisonStat, LineStyle> lineStyle, ActivatablePreview? preview = null)
     {
-        if (CostText.Lines(definition, names).ToList() is not { Count: > 0 } costLines)
+        var stats = ItemComparisonStatExtraction.ExtractCostStats(definition, names, preview);
+        if (stats.Count == 0)
         {
             return;
         }
 
         BuildDivider(host, width, "Cost", 0.125f);
-        foreach (var line in costLines)
+        foreach (var stat in stats)
         {
-            BuildFixedTextLine(host, width, line, BodyTextColor);
+            BuildStatRow(host, width, stat, lineStyle(stat));
         }
     }
 

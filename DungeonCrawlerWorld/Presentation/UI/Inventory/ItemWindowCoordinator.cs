@@ -53,6 +53,7 @@ public sealed class ItemWindowCoordinator
         LootboxCommands lootboxCommands,
         ReservedEntityIds reservedEntityIds)
     {
+        ItemDetailsMode = shellServices.DetailsMode;
         var layers = shellServices.Layers;
         var contextMenuController = shellServices.ContextMenuController;
         var tooltipController = shellServices.TooltipController;
@@ -128,8 +129,8 @@ public sealed class ItemWindowCoordinator
 
     public ItemDetailsWindowController ItemDetails { get; }
 
-    /// <summary>The mode the player chose for Item Details, shared by Item Details and the comparison popup for the session.</summary>
-    public ItemDetailsModeSetting ItemDetailsMode { get; } = new();
+    /// <summary>The mode the player chose for Item Details, shared by Item Details, the comparison popup and Action Details for the session (ShellServices.DetailsMode).</summary>
+    public ItemDetailsModeSetting ItemDetailsMode { get; }
 
     public ItemComparisonController ItemComparison { get; }
 

@@ -18,6 +18,8 @@ public sealed class ActionCatalog() : Catalog<ActionDefinition>(static definitio
     private readonly List<IActionDefinitionSource> _actionDefinitionSources = [];
     private readonly CachedDefinitionSummaries _summaries = new();
     private Func<IReadOnlyList<DefinitionSummary>>? _summarySource;
+    private IReadOnlyList<Guid> _coreActionIds = [];
+    private IReadOnlyList<DefinitionSummary>? _coreActionIdsBuiltFrom;
 
     /// <summary>The definition key names: derive applied to the action registered as baseActionId, made the first time it's asked for and the same instance every time after.</summary>
     /// <remarks>
@@ -50,6 +52,36 @@ public sealed class ActionCatalog() : Catalog<ActionDefinition>(static definitio
     /// <summary>Every action this session can name, by Guid: the content's summaries, if the catalog has a source of them, and every registered definition beside them.</summary>
     /// <remarks>For a whole-catalog question, which must never depend on what happens to have been loaded.</remarks>
     public IReadOnlyList<DefinitionSummary> Summaries => _summaries.Get(Version, () => DefinitionSummaries.Of(_summarySource, Definitions, static action => DefinitionSummaries.Of(action)));
+
+    /// <summary>Every Core action this session can name, by Guid, from Summaries.</summary>
+    public IReadOnlyList<Guid> CoreActionIds
+    {
+        get
+        {
+            var summaries = Summaries;
+            if (!ReferenceEquals(summaries, _coreActionIdsBuiltFrom))
+            {
+                _coreActionIds = [.. summaries.Where(static summary => summary.IsCore).Select(static summary => summary.Id)];
+                _coreActionIdsBuiltFrom = summaries;
+            }
+
+            return _coreActionIds;
+        }
+    }
+
+    /// <summary>Whether actionId is a Core action (CoreActionIds).</summary>
+    public bool IsCore(Guid actionId)
+    {
+        foreach (var coreActionId in CoreActionIds)
+        {
+            if (coreActionId == actionId)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     public override bool TryGet(Guid id, out ActionDefinition definition)
     {

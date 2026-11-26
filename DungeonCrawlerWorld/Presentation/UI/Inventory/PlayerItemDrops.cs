@@ -8,9 +8,9 @@ namespace Presentation.UI.Inventory;
 /// <remarks>
 /// One rule (Game's ItemDrops) for every way to put something down, so a menu Drop confirmed on a tile and a drag released
 /// there do the same thing: into a corpse or a container on any of its footprint tiles, onto the ground otherwise. A drop
-/// takes no action lock and lands at once, even with the simulation paused behind an open inventory: putting things down is
+/// takes no action lock and lands at once, even with the simulation held behind an open inventory: putting things down is
 /// inventory management, which a lock would only make tedious. A confirmed armed drop (ActionTargetingController) and a drag
-/// onto the map (TryDropAt) both land through the same placement. Nothing is dropped while a shop is open: a trade decides
+/// onto the map (TryDropAt) both land through the same placement, and both land while the game is paused. Nothing is dropped while a shop is open: a trade decides
 /// where items go until it closes.
 /// </remarks>
 public sealed class PlayerItemDrops(IItemDropPlacement placement, ActionTargetingController actionTargeting) : IPlayerItemDrops

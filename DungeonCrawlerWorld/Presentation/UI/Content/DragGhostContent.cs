@@ -9,6 +9,7 @@ using Microsoft.Xna.Framework;
 using Presentation.Input.DragDrop;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
+using Presentation.UI.Menus;
 using UIEngine.Fonts;
 using UIEngine.Input;
 using UIEngine.Rendering;
@@ -17,7 +18,7 @@ using UIEngine.UI;
 namespace Presentation.UI.Content;
 
 /// <summary>
-/// A cursor-following copy of a dragged item's or action's icon while a content drag
+/// A cursor-following copy of a dragged item's, action's or menu command's icon while a content drag
 /// carrying a DragPayload is in progress (see PointerState.ContentDrag) -- purely visual feedback, no gameplay state of its own. Sized to the dragged
 /// element's own on-screen size (see ContentDragState.SourceSize) -- rather than one fixed size for
 /// every drag, so the ghost doesn't visibly jump in scale relative to wherever it was picked up
@@ -34,7 +35,8 @@ public sealed class DragGhostContent(
     ItemCatalog itemCatalog,
     InventoryView inventoryView,
     FontService fontService,
-    SpriteSheetService spriteSheetService) : IElementContent
+    SpriteSheetService spriteSheetService,
+    MenuCommandCatalog menuCommands) : IElementContent
 {
     private Window _hostWindow = null!;
 
@@ -78,6 +80,10 @@ public sealed class DragGhostContent(
         else if (drag.ActionId is { } actionId && actionCatalog.TryGet(actionId, out var action))
         {
             (spriteName, glyph, glyphColor) = (action.SpriteName, action.Glyph, action.GlyphColor);
+        }
+        else if (drag.MenuCommandId is { } menuCommandId && menuCommands.TryGet(menuCommandId, out var command))
+        {
+            (spriteName, glyph, glyphColor) = (command.SpriteName, command.Glyph, command.GlyphColor);
         }
         else if (drag.CurrencyType is { } currencyType)
         {

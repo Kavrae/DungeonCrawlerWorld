@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
+using Engine.Tags;
 using Game.Effects;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
@@ -58,6 +59,18 @@ public sealed class ActionStateView(ComponentManager componentManager, EntityAct
     /// <remarks>False for an action the entity doesn't have, whatever the catalog holds.</remarks>
     public bool TryGetEffectiveAction(int entityId, Guid actionId, out ActionDefinition action) => entityActions.TryGetEffectiveAction(entityId, actionId, out action);
 
+    /// <inheritdoc cref="EntityActions.CopyActionIds"/>
+    public void CopyActionIds(int entityId, List<Guid> destination) => entityActions.CopyActionIds(entityId, destination);
+
+    /// <inheritdoc cref="EntityActions.IsCore"/>
+    public bool IsCoreAction(Guid actionId) => entityActions.IsCore(actionId);
+
+    /// <inheritdoc cref="EntityActions.GetActionSetVersion"/>
+    public uint GetActionSetVersion(int entityId) => entityActions.GetActionSetVersion(entityId);
+
+    /// <inheritdoc cref="ActionTagQueries.GetActionCategoryCounts"/>
+    public List<(GameplayTag Tag, int Count)> GetActionCategoryCounts(int entityId, GameplayTagRegistry gameplayTags) => ActionTagQueries.GetActionCategoryCounts(entityActions, gameplayTags, entityId);
+
     /// <inheritdoc cref="ActivationQueries.GetBlocker"/>
     /// <remarks>Reads the entity's effective action. An action the entity doesn't have is None: a binding problem, not a reason to show.</remarks>
     public ActivationBlocker GetActionBlocker(int entityId, Guid actionId) =>
@@ -109,6 +122,9 @@ public sealed class ActionStateView(ComponentManager componentManager, EntityAct
     /// <summary>The cooldown a use of something timed by timing would start for entityId now; null when it has none.</summary>
     public ushort? CooldownFramesFor(int entityId, ActionTiming timing) =>
         timing.ResolveCooldownFrames(effectServices.AbilityScores, effectServices.StatModifiers, entityId);
+
+    /// <summary>Frames until entityId's own cooldown on actionId ends; 0 when it isn't cooling down. The action lock is not counted (FramesUntilReady counts both).</summary>
+    public int ActionCooldownFramesRemaining(int entityId, Guid actionId) => entityActions.CooldownFramesRemaining(entityId, actionId, Now);
 
     /// <summary>Frames until the unit in entityId's stack stackInstanceId ends its own cooldown; 0 when it isn't cooling down or the entity doesn't hold the stack.</summary>
     public int ItemCooldownFramesRemaining(int entityId, uint stackInstanceId) =>

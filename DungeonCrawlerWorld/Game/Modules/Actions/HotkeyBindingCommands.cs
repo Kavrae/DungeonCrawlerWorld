@@ -10,8 +10,8 @@ namespace Game.Modules.Actions;
 
 /// <summary>Binds and unbinds an entity's hotkey slots, publishing the bound events a player action raises.</summary>
 /// <remarks>
-/// A slot binds to at most one of {action, item} at a time (see IHotkeySlotBinding), so binding either kind clears
-/// both first. Binding an item is a reference, not a transfer. Whether a slot is unlocked is the caller's rule, not
+/// A slot binds to at most one of {action, item, menu command} at a time (see IHotkeySlotBinding), so binding any kind clears
+/// them all first. Binding an item is a reference, not a transfer. Whether a slot is unlocked is the caller's rule, not
 /// this one's: the hotbar refuses a locked slot as a drop target before it gets here. Spawn-time setup (PlayerKit's
 /// starting binds) writes the pools directly and publishes nothing, since it isn't a player action.
 /// </remarks>
@@ -19,6 +19,7 @@ public sealed class HotkeyBindingCommands(ComponentManager componentManager, Ite
 {
     private readonly MultiComponentPool<ActionHotkeyBindingComponent> _actionHotkeyBindings = componentManager.GetMultiPool<ActionHotkeyBindingComponent>();
     private readonly MultiComponentPool<ItemHotkeyBindingComponent> _itemHotkeyBindings = componentManager.GetMultiPool<ItemHotkeyBindingComponent>();
+    private readonly MultiComponentPool<MenuCommandHotkeyBindingComponent> _menuCommandHotkeyBindings = componentManager.GetMultiPool<MenuCommandHotkeyBindingComponent>();
     private readonly MultiComponentPool<InventoryItemStackComponent> _inventoryStacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
 
     /// <summary>Binds slot to entityId's stack stackInstanceId and publishes ItemHotkeyBoundEvent; false, changing nothing, when the item can never be bound (ItemHotkeyBindingQueries.CanBind).</summary>
@@ -51,16 +52,29 @@ public sealed class HotkeyBindingCommands(ComponentManager componentManager, Ite
         eventBus.Publish(new ActionHotkeyBoundEvent(entityId, slot, actionId));
     }
 
+    /// <summary>Binds slot to menu command menuCommandId and publishes MenuCommandHotkeyBoundEvent.</summary>
+    public void BindMenuCommand(int entityId, HotkeySlot slot, Guid menuCommandId)
+    {
+        ClearSlot(entityId, slot);
+        _menuCommandHotkeyBindings.Add(entityId, new MenuCommandHotkeyBindingComponent(slot, menuCommandId));
+        eventBus.Publish(new MenuCommandHotkeyBoundEvent(entityId, slot, menuCommandId));
+    }
+
+    /// <summary>Removes slot's menu command binding, if any.</summary>
+    public void UnbindMenuCommand(int entityId, HotkeySlot slot) =>
+        HotkeySlotBindingQueries.Unbind<MenuCommandHotkeyBindingComponent, Guid>(_menuCommandHotkeyBindings, entityId, slot);
+
     /// <summary>Removes slot's item binding, if any.</summary>
     public void UnbindItem(int entityId, HotkeySlot slot) => ItemHotkeyBindingQueries.Unbind(_itemHotkeyBindings, entityId, slot);
 
     /// <summary>Removes slot's action binding, if any.</summary>
     public void UnbindAction(int entityId, HotkeySlot slot) => ActionHotkeyBindingQueries.Unbind(_actionHotkeyBindings, entityId, slot);
 
-    /// <summary>Removes slot's binding of either kind.</summary>
+    /// <summary>Removes slot's binding of any kind.</summary>
     public void ClearSlot(int entityId, HotkeySlot slot)
     {
         UnbindAction(entityId, slot);
         UnbindItem(entityId, slot);
+        UnbindMenuCommand(entityId, slot);
     }
 }
