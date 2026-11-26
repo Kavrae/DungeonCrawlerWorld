@@ -37,7 +37,7 @@ namespace Presentation.UI.Content;
 public sealed class PlayerStatusEffectsContent(World world, ActionStateView actionStateView, ItemCatalog itemCatalog, FontService fontService, StatusEffectDisplayRegistry statusEffectDisplays, SimulationClock simulationClock, ActionSourceNaming actionSourceNaming, TooltipController tooltipController, PointerState pointerState) : IElementContent
 {
 
-    public static readonly Vector2 Size = new(PlayerHealthBarContent.Size.X, HudChrome.EntrySize.Y / 2f * 1.5f);
+    public static readonly Vector2 Size = new(PlayerResourceBarContent.Size.X, HudChrome.EntrySize.Y / 2f * 1.5f);
 
     private const float IconSpacing = 1f;
 

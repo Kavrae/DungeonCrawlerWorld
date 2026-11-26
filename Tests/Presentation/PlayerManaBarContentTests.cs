@@ -23,7 +23,7 @@ public sealed class PlayerManaBarContentTests
 {
     private const int PlayerEntityId = 1;
 
-    private static (PlayerManaBarContent Content, ComponentManager ComponentManager) Build(ManaComponent? mana)
+    private static (PlayerResourceBarContent Content, ComponentManager ComponentManager) Build(ManaComponent? mana)
     {
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(20, 20, 1)), playerEntityId: PlayerEntityId);
         var fontService = TestFonts.Shared;
@@ -35,13 +35,13 @@ public sealed class PlayerManaBarContentTests
             componentManager.Merge(PlayerEntityId, playerMana);
         }
 
-        var content = new PlayerManaBarContent(world, TestActionStateViews.Over(componentManager), fontService, new UiLayerStack());
+        var content = PlayerResourceBarContent.ForMana(world, TestActionStateViews.Over(componentManager), fontService, new UiLayerStack());
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions
             {
                 RelativePosition = new Vector2(1700, 60),
-                Size = PlayerManaBarContent.Size,
+                Size = PlayerResourceBarContent.Size,
                 DisplayMode = ElementDisplayMode.Fixed,
             },
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = false, CanUserFocus = false },

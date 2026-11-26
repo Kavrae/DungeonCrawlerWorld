@@ -12,7 +12,7 @@ using UIEngine.UI;
 
 namespace Presentation.UI.Content;
 
-/// <summary>PlayerManaBarContent's hover popup: the player's natural mana regeneration rate.</summary>
+/// <summary>The HUD mana bar's hover popup (PlayerResourceBarContent.ForMana): the player's natural mana regeneration rate.</summary>
 public sealed class PlayerManaHoverContent(World world, ActionStateView actionStateView, FontService fontService) : IElementContent
 {
     private const float RowHeight = 16f;

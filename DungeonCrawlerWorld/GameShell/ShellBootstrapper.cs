@@ -216,14 +216,14 @@ public static class ShellBootstrapper
             Layout = new ElementLayoutOptions
             {
                 RelativePosition = HudChrome.PlayerHealthBarPosition,
-                Size = PlayerHealthBarContent.Size,
+                Size = PlayerResourceBarContent.Size,
                 DisplayMode = ElementDisplayMode.Fixed,
                 IsTransparent = true,
             },
             // BorderSize left at the default (1,1) -- a thinner outset reads as a subtle bevel rather than a heavy frame.
             Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
         });
-        playerHealthBarWindow.SetContent(new PlayerHealthBarContent(world, gameSession.Views.HealthView, gameSession.Views.EntityBodyParts, gameSession.Views.StatModifierView, uiEngine.FontService, layers));
+        playerHealthBarWindow.SetContent(PlayerResourceBarContent.ForHealth(world, gameSession.Views.HealthView, gameSession.Views.EntityBodyParts, gameSession.Views.StatModifierView, uiEngine.FontService, layers));
         playerHealthBarWindow.Initialize();
         layers.Add(UiLayer.StaticHud, playerHealthBarWindow);
 
@@ -232,13 +232,13 @@ public static class ShellBootstrapper
             Layout = new ElementLayoutOptions
             {
                 RelativePosition = HudChrome.PlayerManaBarPosition,
-                Size = PlayerManaBarContent.Size,
+                Size = PlayerResourceBarContent.Size,
                 DisplayMode = ElementDisplayMode.Fixed,
                 IsTransparent = true,
             },
             Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
         });
-        playerManaBarWindow.SetContent(new PlayerManaBarContent(world, gameSession.Views.ActionStateView, uiEngine.FontService, layers));
+        playerManaBarWindow.SetContent(PlayerResourceBarContent.ForMana(world, gameSession.Views.ActionStateView, uiEngine.FontService, layers));
         playerManaBarWindow.Initialize();
         layers.Add(UiLayer.StaticHud, playerManaBarWindow);
 

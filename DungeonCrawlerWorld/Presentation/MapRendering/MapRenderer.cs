@@ -634,21 +634,15 @@ public sealed class MapRenderer : IDisposable
         }
     }
 
-    /// <summary>Thin bar at cueTop -- the top of the drawn sprite, or of the footprint if that is higher -- only drawn below full health (EntityStatusView.HealthFraction is null otherwise). Black backdrop doubles as the outline and the "missing health" portion; the fill rect insets 1px and its width (not the outline's) scales with the health fraction.</summary>
+    /// <summary>Thin bar at cueTop -- the top of the drawn sprite, or of the footprint if that is higher -- only drawn below full health (EntityStatusView.HealthFraction is null otherwise): the HUD bar's shape without its ticks (ResourceBarRenderer.DrawFill).</summary>
     private static void DrawHealthBar(SpriteEffectBatch batch, float healthFraction, Vector2 footprintTopLeft, Vector2 footprintSize, float cueTop)
     {
         var barWidth = footprintSize.X * HealthBarWidthFraction;
         var barX = footprintTopLeft.X + (footprintSize.X - barWidth) / 2f;
         var barY = cueTop;
 
-        var outerRectangle = new Rectangle((int)barX, (int)barY, (int)barWidth, HealthBarHeightPixels);
-        batch.FillRectangle(outerRectangle, HealthBarPalette.OutlineColor);
-
-        var innerWidth = (int)((outerRectangle.Width - 2) * healthFraction);
-        if (innerWidth > 0)
-        {
-            batch.FillRectangle(new Rectangle(outerRectangle.X + 1, outerRectangle.Y + 1, innerWidth, HealthBarHeightPixels - 2), HealthBarPalette.FractionColor(healthFraction));
-        }
+        var bar = new Rectangle((int)barX, (int)barY, (int)barWidth, HealthBarHeightPixels);
+        ResourceBarRenderer.DrawFill(batch, bar, healthFraction, HealthBarPalette.OutlineColor, HealthBarPalette.FractionColor(healthFraction));
     }
 
     /// <summary>The shadow piece for linkMask over its tile, translucent so it darkens whatever is drawn there and cancelled by the glow under it (SpriteDrawMode.Shadow); a plain dark square when the manifest has no Shadows set. The set's one variant is always used, so a moving shadow never changes look.</summary>

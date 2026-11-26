@@ -3626,6 +3626,11 @@ FontStashSharp; Presentation, the exe and Tests reference it.
 - **Mixed tables split by reader.** A field the framework reads stayed in `WindowPalette`/`FontChrome`; the rest moved to
   `GameWindowPalette`/`GameFontChrome`. `ResourceBarValueText` (the "cur / max" text a `FractionBarElement` draws, kept
   in a `KeyedCache` by each bar) is UIEngine's; how health and mana round before it is the game's (`ResourceBarRounding`).
+  One resource bar, three hosts (2026-11-25): `ResourceBarRenderer.Draw` is the outline, inset fill and ticks, and
+  `DrawFill` the same without ticks (the map's per-entity bars); `ResourceBarValueLabel` holds the centred text with its
+  text, size and font caches, used by `FractionBarElement` and the HUD bars. The HUD health and mana bars are one
+  content, `PlayerResourceBarContent` (`ForHealth`/`ForMana`), differing only by a private source (totals, how current
+  rounds, palette, hover content and its size); a third resource (Soul Essence) is another source.
 - **Subclasses outside UIEngine get hooks, not state.** `InspectionWindow` sized its minimized bar by writing `Element`'s
   internal state objects; it now calls `Window.ApplyMinimizedSize(headerWidth, windowWidth)`, which `Window`'s own
   `RecalculateMinimizedSize` uses too. Members Presentation already used became `public` (`Element.FontService`,

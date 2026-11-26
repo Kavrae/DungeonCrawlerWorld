@@ -4,7 +4,6 @@ using Game.Modules.StatModifiers;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
@@ -17,12 +16,12 @@ using UIEngine.UI;
 namespace Presentation.UI.Content;
 
 /// <summary>
-/// PlayerHealthBarContent's hover popup: the player's natural regeneration rate, then one row per
+/// The HUD health bar's hover popup (PlayerResourceBarContent.ForHealth): the player's natural regeneration rate, then one row per
 /// body part, name plus its own live pixel-drawn bar via ResourceBarRenderer, the same renderer the
 /// big HUD bar itself uses. No Total row -- redundant with the big bar it's popped up from.
 /// </summary>
 /// <remarks>
-/// Sized/shown/hidden externally by PlayerHealthBarContent -- this only draws whatever the host
+/// Sized/shown/hidden externally by PlayerResourceBarContent -- this only draws whatever the host
 /// popup window's own resolved ContentSize currently is, recomputed fresh every DrawContent call
 /// rather than cached, since health can change (regen/damage/heals) while the popup is being hovered.
 /// </remarks>

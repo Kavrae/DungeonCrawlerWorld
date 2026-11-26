@@ -68,6 +68,8 @@ a `phase-performance-testing` A/B.
 
 #### Workshop: edit Actions
 
+Planned in `PLAN-workshop-edit-actions.md` (2026-11-25, decisions awaiting confirmation).
+
 On the Items tab's machinery (IMPLEMENTATION-NOTES "Workshop content editing", "Adding an editing tab"): a
 `ContentEditingTable<ActionDefinition>` and an Actions tab deriving `ContentEditingTab`, replacing today's read-only one,
 plus the custom pieces: a spell's mana (a
@@ -2740,6 +2742,7 @@ Infra landed (`IMPLEMENTATION-NOTES.md`). Remaining:
   runs at about 30 frames until this lands. Anything outside the Dex curve -- a race slower than
   Dex 1 allows -- is a `StatModifierTarget.ActionLockFrames` modifier, as Engineer's is.
 - Level-up modifies Core scores (Hidden excluded). See the matching Presentation stats item.
+- Once luck affects item drops, item drops and other improvements that are gained via luck should be indicated as being "lucky" in some way.
 
 #### Item weight and carry capacity scaling with Strength
 
@@ -4279,15 +4282,6 @@ brackets instead of a full perimeter. No corner-mark geometry worked out for (2)
 A third option once "Sprite shaders and tinting" (Medium) exists: outline the highlighted *sprite*
 rather than the tile (the common Godot approach, a `canvas_item` outline shader on the selected
 sprite), which also stays correct for tall sprites that overhang their tile.
-
-#### Extract a shared tick-fraction HUD bar element
-
-`PlayerHealthBarContent`/`PlayerManaBarContent` are near-duplicates (same outline+inset-fill+tick-mark
-shape and centred "current / maximum" value text via `ResourceBarValueText`, differing only in
-backing component, palette and how the current value rounds). Tolerable at two copies -- abstract into one
-generic element if a third shows up (e.g. Soul Essence). `MapRenderer.DrawHealthBar` is arguably a lighter
-third instance already (same fraction math, no ticks, per-any-entity) -- include it in scope if this is
-ever picked up.
 
 #### Hotbar insufficient-mana indicator
 

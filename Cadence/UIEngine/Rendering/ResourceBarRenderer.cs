@@ -1,12 +1,12 @@
 using FontStashSharp;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 
 namespace UIEngine.Rendering;
 
 /// <summary>
 /// Shared outline+fill+tick-mark rendering for any current/maximum resource bar -- health, mana,
-/// and any other resource that follows the same shape. FractionBarElement wraps it as an element.
+/// and any other resource that follows the same shape. FractionBarElement wraps it as an element;
+/// the map's per-entity bars draw DrawFill, the same bar without ticks.
 /// The one thing that differs per resource -- its palette (outline + fraction-to-color mapping) --
 /// is the caller's own to supply, so this stays resource-agnostic. A caller that hides a full bar
 /// decides that before calling Draw -- this only draws whatever rectangle/fraction it's given.
@@ -24,17 +24,22 @@ public static class ResourceBarRenderer
     public static void Draw<TTarget>(TTarget spriteBatch, Rectangle bar, float fraction, bool hasResource, Color outlineColor, Func<float, Color> fractionColor)
         where TTarget : ISpriteDrawTarget
     {
-        spriteBatch.FillRectangle(bar, outlineColor);
+        DrawFill(spriteBatch, bar, fraction, outlineColor, hasResource ? fractionColor(fraction) : NoResourceColor);
+        DrawTicks(spriteBatch, bar, outlineColor);
+    }
 
-        var fillColor = hasResource ? fractionColor(fraction) : NoResourceColor;
+    /// <summary>The bar without its tick marks: the outline colour behind the whole bar, standing for what is missing, and fillColor inset 1px across fraction of the inside.</summary>
+    /// <param name="fraction">Current/effective-maximum, clamped [0,1] by the caller.</param>
+    public static void DrawFill<TTarget>(TTarget spriteBatch, Rectangle bar, float fraction, Color outlineColor, Color fillColor)
+        where TTarget : ISpriteDrawTarget
+    {
+        spriteBatch.FillRectangle(bar, outlineColor);
 
         var innerWidth = (int)((bar.Width - 2) * fraction);
         if (innerWidth > 0)
         {
             spriteBatch.FillRectangle(new Rectangle(bar.X + 1, bar.Y + 1, innerWidth, bar.Height - 2), fillColor);
         }
-
-        DrawTicks(spriteBatch, bar, outlineColor);
     }
 
     /// <summary>Draws valueText centred on bar in outlined white, on top of whatever Draw put there.</summary>

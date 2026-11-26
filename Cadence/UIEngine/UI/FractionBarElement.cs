@@ -1,8 +1,5 @@
-using FontStashSharp;
 using Microsoft.Xna.Framework;
-using UIEngine.Fonts;
 using UIEngine.Rendering;
-using UIEngine.UI.Chrome;
 
 namespace UIEngine.UI;
 
@@ -18,15 +15,10 @@ public sealed class FractionBarElement(ElementServices services)
     private bool _hasResource;
     private Color _outlineColor;
     private Func<float, Color> _fractionColor = null!;
-    /// <summary>The "current / maximum" text drawn, rebuilt only when either number changes.</summary>
-    private readonly KeyedCache<(int Current, int Maximum), string> _valueTextCache = new();
-    private string _valueText = string.Empty;
-    private readonly TextSizeCache _valueTextSize = new();
-    private readonly KeyedCache<int, SpriteFontBase> _valueFont = new();
-    private bool _showValueText;
+    private readonly ResourceBarValueLabel _valueLabel = new();
 
     /// <summary>The "current / maximum" text the bar draws, or null when Configure was given no displayedValues.</summary>
-    internal string? ValueText => _showValueText ? _valueText : null;
+    internal string? ValueText => _valueLabel.Text;
 
     /// <param name="displayedValues">Already-rounded current and maximum to draw centred on the bar (rounded by the caller's own rules); null draws no text.</param>
     public void Configure(float fraction, bool hasResource, Color outlineColor, Func<float, Color> fractionColor, (int Current, int Maximum)? displayedValues = null)
@@ -36,11 +28,13 @@ public sealed class FractionBarElement(ElementServices services)
         _outlineColor = outlineColor;
         _fractionColor = fractionColor;
 
-        _showValueText = displayedValues is not null;
         if (displayedValues is { } values)
         {
-            _valueText = _valueTextCache.Get(values, static key => ResourceBarValueText.Format(key.Current, key.Maximum));
+            _valueLabel.Show(values);
+            return;
         }
+
+        _valueLabel.Hide();
     }
 
     public override void DrawContent(GameTime gameTime)
@@ -48,11 +42,6 @@ public sealed class FractionBarElement(ElementServices services)
         var bar = LocalContentRectangle;
 
         ResourceBarRenderer.Draw(Render.Batch, bar, _fraction, _hasResource, _outlineColor, _fractionColor);
-
-        if (_showValueText)
-        {
-            var valueFont = _valueFont.Get(bar.Height, FontService, static (barHeight, fontService) => fontService.GetFont((int)(barHeight * FontChrome.ResourceBarValueFontFraction)));
-            ResourceBarRenderer.DrawCenteredValueText(Render.Batch, valueFont, bar, _valueText, _valueTextSize.SizeOf(valueFont, _valueText).X);
-        }
+        _valueLabel.Draw(Render.Batch, FontService, bar);
     }
 }

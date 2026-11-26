@@ -23,7 +23,7 @@ namespace Tests.Presentation;
 
 /// <summary>
 /// HotbarContent's Draw/Update logic needs a real GraphicsDevice to exercise (the sprite effect batch,
-/// RadialFillRenderer) -- the same reason ActionLockContent/PlayerHealthBarContent/
+/// RadialFillRenderer) -- the same reason ActionLockContent/PlayerResourceBarContent/
 /// PlayerStatusEffectsContent have no test coverage either; verified by running the game
 /// instead (see CLAUDE.md's UI-change rule). Size is the one piece of this class that's pure
 /// arithmetic with no rendering dependency, so it's worth covering directly. The bind/unbind/

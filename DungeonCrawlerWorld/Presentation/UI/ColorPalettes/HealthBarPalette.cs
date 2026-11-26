@@ -2,7 +2,7 @@ using Microsoft.Xna.Framework;
 
 namespace Presentation.UI.ColorPalettes;
 
-/// <summary>Health-bar color logic shared by MapWindow's per-tile bars and PlayerHealthBarContent's HUD bar, so both render identically.</summary>
+/// <summary>Health-bar color logic shared by MapRenderer's per-entity bars and the HUD health bar (PlayerResourceBarContent), so both render identically.</summary>
 internal static class HealthBarPalette
 {
     public static readonly Color OutlineColor = Color.Black;

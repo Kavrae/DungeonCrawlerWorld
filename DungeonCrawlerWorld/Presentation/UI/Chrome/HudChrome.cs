@@ -44,15 +44,15 @@ public static class HudChrome
         MapWindowPosition = Vector2.Zero;
         MapWindowSize = screenSize;
 
-        PlayerHealthBarPosition = new Vector2(screenSize.X - PlayerHealthBarContent.Size.X - Margin.X, Margin.Y);
-        PlayerManaBarPosition = new Vector2(screenSize.X - PlayerManaBarContent.Size.X - Margin.X, Margin.Y + PlayerHealthBarContent.Size.Y + ManaBarGap);
-        ActionLockPosition = new Vector2(screenSize.X - PlayerHealthBarContent.Size.X - Margin.X - ActionLockContent.Size.X - ActionLockGap, Margin.Y);
-        PlayerStatusEffectsPosition = new Vector2(screenSize.X - PlayerHealthBarContent.Size.X - Margin.X, Margin.Y + PlayerHealthBarContent.Size.Y + ManaBarGap + PlayerManaBarContent.Size.Y);
+        PlayerHealthBarPosition = new Vector2(screenSize.X - PlayerResourceBarContent.Size.X - Margin.X, Margin.Y);
+        PlayerManaBarPosition = new Vector2(screenSize.X - PlayerResourceBarContent.Size.X - Margin.X, Margin.Y + PlayerResourceBarContent.Size.Y + ManaBarGap);
+        ActionLockPosition = new Vector2(screenSize.X - PlayerResourceBarContent.Size.X - Margin.X - ActionLockContent.Size.X - ActionLockGap, Margin.Y);
+        PlayerStatusEffectsPosition = new Vector2(screenSize.X - PlayerResourceBarContent.Size.X - Margin.X, Margin.Y + PlayerResourceBarContent.Size.Y + ManaBarGap + PlayerResourceBarContent.Size.Y);
 
-        var inspectionWindowTop = Margin.Y + PlayerHealthBarContent.Size.Y + ManaBarGap + PlayerManaBarContent.Size.Y + PlayerStatusEffectsContent.Size.Y + StatusEffectCountClearance + InspectionWindowGap;
+        var inspectionWindowTop = Margin.Y + PlayerResourceBarContent.Size.Y + ManaBarGap + PlayerResourceBarContent.Size.Y + PlayerStatusEffectsContent.Size.Y + StatusEffectCountClearance + InspectionWindowGap;
         var hotbarClearanceTop = screenSize.Y - HotbarContent.MaximumSize.Y - Margin.Y * 1.5f;
         var inspectionWindowBottom = hotbarClearanceTop - InspectionWindowGap - MinimapReserve;
-        InspectionWindowSize = new Vector2(System.Math.Max(PlayerHealthBarContent.Size.X, InspectionWindowWidth), System.Math.Max(0f, inspectionWindowBottom - inspectionWindowTop));
+        InspectionWindowSize = new Vector2(System.Math.Max(PlayerResourceBarContent.Size.X, InspectionWindowWidth), System.Math.Max(0f, inspectionWindowBottom - inspectionWindowTop));
         InspectionWindowPosition = new Vector2(screenSize.X - Margin.X - InspectionWindowSize.X, inspectionWindowTop);
 
         QuestTriggerWindowPosition = new Vector2(Margin.X, 800);

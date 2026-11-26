@@ -24,7 +24,7 @@ using UIEngine.UI.Chrome;
 namespace Tests.Presentation;
 
 /// <summary>
-/// Drives the real Update/hover pipeline (a UiInputController hit-tests the cursor, then PlayerHealthBarContent's internal
+/// Drives the real Update/hover pipeline (a UiInputController hit-tests the cursor, then PlayerResourceBarContent's internal
 /// screenBounds-seamed Update overload reads it -- see its own doc comment) rather than calling a private
 /// hover method directly, per this repo's own "live testing catches what code review misses"
 /// lesson for hit-test/popup work. screenBounds is passed in as a synthetic Rectangle instead of
@@ -39,7 +39,7 @@ public sealed class PlayerHealthBarContentTests
     private const int PlayerEntityId = 1;
     private static readonly Rectangle ScreenBounds = new(0, 0, 1920, 1080);
 
-    private static (PlayerHealthBarContent Content, Window HostWindow, UiInputController Input) Build(bool complexHealth, bool hasHealth = true)
+    private static (PlayerResourceBarContent Content, Window HostWindow, UiInputController Input) Build(bool complexHealth, bool hasHealth = true)
     {
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(20, 20, 1)), playerEntityId: PlayerEntityId);
         var fontService = TestFonts.Shared;
@@ -59,13 +59,13 @@ public sealed class PlayerHealthBarContentTests
             componentManager.Merge(PlayerEntityId, new SimpleHealthComponent(50, 100));
         }
 
-        var content = new PlayerHealthBarContent(world, new HealthView(componentManager, BodyPartTestWorld.PartsOf(componentManager)), BodyPartTestWorld.PartsOf(componentManager), new StatModifierView(componentManager), fontService, layers);
+        var content = PlayerResourceBarContent.ForHealth(world, new HealthView(componentManager, BodyPartTestWorld.PartsOf(componentManager)), BodyPartTestWorld.PartsOf(componentManager), new StatModifierView(componentManager), fontService, layers);
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions
             {
                 RelativePosition = new Vector2(1700, 30),
-                Size = PlayerHealthBarContent.Size,
+                Size = PlayerResourceBarContent.Size,
                 DisplayMode = ElementDisplayMode.Fixed,
             },
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = false, CanUserFocus = false },
@@ -81,7 +81,7 @@ public sealed class PlayerHealthBarContentTests
     private static MouseState MouseAt(Point position) => new(position.X, position.Y, 0, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released);
 
     /// <summary>One frame with the cursor at position: the input controller hit-tests it, then the bar reads what it found.</summary>
-    private static void Frame(UiInputController input, PlayerHealthBarContent content, Point position)
+    private static void Frame(UiInputController input, PlayerResourceBarContent content, Point position)
     {
         input.Update(new KeyboardState(), MouseAt(position));
         content.Update(ScreenBounds);
