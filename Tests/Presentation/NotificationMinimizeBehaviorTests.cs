@@ -11,7 +11,7 @@ namespace Tests.Presentation;
 /// <summary>
 /// Covers NotificationMinimizeBehavior in isolation (attached directly to a plain Window,
 /// the same way WindowChromeButtonTests exercises WindowCloseBehavior/
-/// WindowMinimizeRestoreBehavior) -- confirming it adds a standard-looking "_" button to the
+/// WindowMinimizeRestoreBehavior) -- confirming it adds a standard-looking "—" button to the
 /// left of Close, and that clicking it invokes the supplied callback instead of changing the
 /// window's own WindowDisplayMode the way the generic minimize/restore behavior would.
 /// </summary>
@@ -46,7 +46,7 @@ public sealed class NotificationMinimizeBehaviorTests
         var closeButton = window.TitleButtons[0];
         var dismissButton = window.TitleButtons[1];
         Assert.IsLessThan(closeButton.RelativePosition.X, dismissButton.RelativePosition.X);
-        Assert.AreEqual("_", ButtonContent.TextOf(dismissButton));
+        Assert.AreEqual("—", ButtonContent.GlyphOf(dismissButton));
     }
 
     [TestMethod]

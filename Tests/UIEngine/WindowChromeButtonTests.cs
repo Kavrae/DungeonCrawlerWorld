@@ -68,12 +68,21 @@ public sealed class WindowChromeButtonTests
     }
 
     [TestMethod]
+    public void TitleButtonText_CentresItsOwnInk()
+    {
+        var window = CreateWindowWithCloseAndMinimize(CreateWindowService());
+
+        var closeLabel = window.TitleButtons[0].ChildElements.OfType<Label>().Single();
+        Assert.AreEqual(LabelVerticalCentering.TextInk, closeLabel.VerticalCentering);
+    }
+
+    [TestMethod]
     public void RestoredWindow_MinimizeRestoreButton_StartsAsMinimizeGlyph()
     {
         var window = CreateWindowWithCloseAndMinimize(CreateWindowService());
 
         var minimizeRestoreButton = window.TitleButtons[1];
-        Assert.AreEqual("_", ButtonContent.TextOf(minimizeRestoreButton));
+        Assert.AreEqual("—", ButtonContent.GlyphOf(minimizeRestoreButton));
     }
 
     /// <summary>
@@ -94,13 +103,13 @@ public sealed class WindowChromeButtonTests
         window.HandleClick(minimizeRestoreButton.Rectangle.Center);
 
         Assert.AreEqual(ElementDisplayMode.Minimized, window.DisplayMode);
-        Assert.AreEqual("O", ButtonContent.TextOf(minimizeRestoreButton));
+        Assert.AreEqual("O", ButtonContent.GlyphOf(minimizeRestoreButton));
         Assert.HasCount(2, window.TitleButtons);
 
         window.HandleClick(minimizeRestoreButton.Rectangle.Center);
 
         Assert.AreEqual(ElementDisplayMode.Fixed, window.DisplayMode);
-        Assert.AreEqual("_", ButtonContent.TextOf(minimizeRestoreButton));
+        Assert.AreEqual("—", ButtonContent.GlyphOf(minimizeRestoreButton));
     }
 
     /// <summary>
@@ -172,7 +181,7 @@ public sealed class WindowChromeButtonTests
             var minimizeRestoreButton = window.TitleButtons[1];
 
             window.SetDisplayMode(ElementDisplayMode.Minimized);
-            Assert.AreEqual("O", ButtonContent.TextOf(minimizeRestoreButton));
+            Assert.AreEqual("O", ButtonContent.GlyphOf(minimizeRestoreButton));
 
             window.Close();
         }
@@ -182,6 +191,6 @@ public sealed class WindowChromeButtonTests
 
         finalWindow.SetDisplayMode(ElementDisplayMode.Minimized);
 
-        Assert.AreEqual("O", ButtonContent.TextOf(finalButton));
+        Assert.AreEqual("O", ButtonContent.GlyphOf(finalButton));
     }
 }

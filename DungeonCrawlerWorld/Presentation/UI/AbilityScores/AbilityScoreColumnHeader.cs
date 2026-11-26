@@ -48,7 +48,7 @@ public sealed class AbilityScoreColumnHeader(ElementServices services)
 
         var stripSize = new Vector2(ContentSize.X, ContentSize.Y / 2f);
 
-        LabelRenderer.DrawCentered(spriteBatch, _nameFontMeasurer, _name, Vector2.Zero, stripSize, TextColor);
-        LabelRenderer.DrawCentered(spriteBatch, _totalFontMeasurer, _totalText, new Vector2(0, stripSize.Y), stripSize, TextColor);
+        LabelRenderer.DrawTextCentered(spriteBatch, _nameFontMeasurer, _name, Vector2.Zero, stripSize, TextColor);
+        LabelRenderer.DrawTextCentered(spriteBatch, _totalFontMeasurer, _totalText, new Vector2(0, stripSize.Y), stripSize, TextColor);
     }
 }

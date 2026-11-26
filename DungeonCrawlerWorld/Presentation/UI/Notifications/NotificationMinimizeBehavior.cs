@@ -3,7 +3,7 @@
 namespace Presentation.UI.Notifications;
 
 /// <summary>
-/// Notification popups show the same "_" minimize-look button as any other window, but
+/// Notification popups show the same "—" minimize-look button as any other window, but
 /// clicking it doesn't shrink the window in place the way WindowMinimizeRestoreBehavior
 /// does elsewhere -- it dismisses the popup and returns the notification to its category's
 /// unread queue (via the supplied callback) so it can be reopened later from the summary
@@ -15,7 +15,8 @@ public sealed class NotificationMinimizeBehavior(Action onMinimize) : IChromeBeh
 {
     public void Attach(Window window)
     {
-        var button = Window.BuildTitleButton(window, "_");
+        var button = Window.BuildTitleButton(window);
+        button.SetIcon(null, "—");
 
         button.TooltipText = "Minimize";
         button.Clicked += _ => onMinimize();

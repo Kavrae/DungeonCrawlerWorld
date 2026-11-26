@@ -133,9 +133,16 @@ public sealed class Button(ElementServices services)
         return label;
     }
 
-    /// <summary>Shows spriteName's sprite filling the button, or glyph centred in ContentFont and TextColor when the manifest has no such sprite; greyed while disabled.</summary>
+    /// <summary>Shows spriteName's sprite filling the button, or glyph centred on its ink in ContentFont and TextColor when the manifest has no such sprite; greyed while disabled; a later call changes what it shows.</summary>
     public IconElement SetIcon(string? spriteName, string glyph)
     {
+        if (_icon is { } existing)
+        {
+            existing.Icon.Configure(spriteName, glyph, TextColor, ContentFont);
+            _icon = (existing.Icon, spriteName, glyph);
+            return existing.Icon;
+        }
+
         var icon = ElementPoolService.CreateElement<IconElement>(this, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, DisplayMode = ElementDisplayMode.Fill, IsTransparent = true },

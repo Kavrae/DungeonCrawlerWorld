@@ -411,7 +411,7 @@ public class Window : Element
         button.ContentFont = window.TitleFont;
         if (text is not null)
         {
-            button.SetText(text);
+            button.SetText(text).VerticalCentering = LabelVerticalCentering.TextInk;
         }
 
         return button;

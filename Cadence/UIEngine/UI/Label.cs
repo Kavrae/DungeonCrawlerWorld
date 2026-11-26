@@ -38,8 +38,11 @@ public sealed class Label(ElementServices services) : Element(services)
     /// <summary>The colour the text is drawn in while the control holding the label is disabled; grey unless set.</summary>
     public Color DisabledTextColor { get; set; }
 
-    /// <summary>Whether the text's ink is centred in the label both ways (a button's label filling its space), rather than its line drawn from the left.</summary>
+    /// <summary>Whether the text's ink is centred across the label and its line down it (a button's label filling its space), rather than its line drawn from the left.</summary>
     public bool IsCentered { get; set; }
+
+    /// <summary>How a centred label places its text down its height; FontInkBand unless set.</summary>
+    public LabelVerticalCentering VerticalCentering { get; set; }
 
     /// <summary>Whether the text is outlined to read over any background (a key label over an icon); faded rather than recoloured while its control is disabled.</summary>
     public bool IsOutlined { get; set; }
@@ -74,6 +77,7 @@ public sealed class Label(ElementServices services) : Element(services)
         TextColor = options.Text?.TextColor ?? WindowPalette.BodyTextColor;
         DisabledTextColor = Color.Gray;
         IsCentered = false;
+        VerticalCentering = LabelVerticalCentering.FontInkBand;
         IsOutlined = false;
         IsBold = false;
         ShowsFullTextWhenCut = false;
@@ -152,7 +156,7 @@ public sealed class Label(ElementServices services) : Element(services)
         var alphaMultiplier = isDisabled && IsOutlined ? DisabledOutlineOpacity : 1f;
         if (IsCentered)
         {
-            LabelRenderer.DrawCentered(Render.Batch, FontService.GetTextMeasurer(_font), shownText, Vector2.Zero, ContentSize, color, IsOutlined, alphaMultiplier);
+            LabelRenderer.Draw(Render.Batch, _font, shownText, GetCenteredPosition(shownText), color, IsOutlined, alphaMultiplier);
             return;
         }
 
@@ -180,12 +184,23 @@ public sealed class Label(ElementServices services) : Element(services)
                 (shownText, _font),
                 FontService,
                 static (key, fontService) => fontService.GetTextMeasurer(key.Font).MeasureWidth(key.Text)) + (IsBold ? 1f : 0f);
-            var lineTop = MathF.Floor((ContentSize.Y - _font.LineHeight) / 2f);
             var localEnd = IsCentered
-                ? new Vector2((ContentSize.X + textWidth) / 2f, lineTop)
-                : new Vector2(textWidth, System.Math.Max(0f, lineTop));
+                ? new Vector2((ContentSize.X + textWidth) / 2f, GetCenteredPosition(shownText).Y)
+                : new Vector2(textWidth, System.Math.Max(0f, MathF.Floor((ContentSize.Y - _font.LineHeight) / 2f)));
             return ContentDrawOrigin + localEnd;
         }
+    }
+
+    /// <summary>Where a centred label draws shownText: its ink centred across, and down it as VerticalCentering says.</summary>
+    private Vector2 GetCenteredPosition(string shownText)
+    {
+        var fontMeasurer = FontService.GetTextMeasurer(_font);
+        if (VerticalCentering == LabelVerticalCentering.TextInk)
+        {
+            return LabelRenderer.GetCenteredPosition(fontMeasurer, shownText, Vector2.Zero, ContentSize);
+        }
+
+        return LabelRenderer.GetTextCenteredPosition(fontMeasurer, shownText, Vector2.Zero, ContentSize);
     }
 
     /// <summary>How opaque an outlined label is while its control is disabled.</summary>

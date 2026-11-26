@@ -99,8 +99,9 @@ public sealed class TargetShapePreviewElement(ElementServices services)
     private void DrawPlayerMarker(SpriteEffectBatch spriteBatch)
     {
         var cellOrigin = new Vector2((0 - _minX) * _cellSize, (0 - _minY) * _cellSize);
-        var center = cellOrigin + new Vector2(_cellSize / 2f, _cellSize / 2f);
-        var radius = _cellSize / 2f - PlayerMarkerInset;
+        var outerSize = _cellSize - CellGap;
+        var center = cellOrigin + new Vector2(outerSize / 2f, outerSize / 2f);
+        var radius = outerSize / 2f - PlayerMarkerInset;
         if (radius <= 0)
         {
             return;

@@ -53,6 +53,17 @@ public static class LabelRenderer
         where TTarget : ISpriteDrawTarget =>
         Draw(target, fontMeasurer.Font, glyph, GetCenteredPosition(fontMeasurer, glyph, footprintTopLeft, footprintSize), color, outline, alphaMultiplier, style);
 
+    /// <summary>Where text must be drawn so its ink is centred across footprintSize and its font's ink band -- ascenders to descenders -- centred down it.</summary>
+    /// <remarks>For words read as text (a button's caption, a column heading): the band is the font's, not the word's, so "Toggle" keeps "Scroll"'s baseline where GetCenteredPosition would lift it, and its descenders stay as far inside the footprint as its ascenders, where the line box would let them drop onto the border.</remarks>
+    public static Vector2 GetTextCenteredPosition(FontStashTextMeasurer fontMeasurer, string text, Vector2 footprintTopLeft, Vector2 footprintSize) =>
+        footprintTopLeft + footprintSize / 2f - new Vector2(fontMeasurer.GetInkCenterAtOrigin(text).X, fontMeasurer.LineInkCenterYAtOrigin);
+
+    /// <param name="fontMeasurer">The font to draw in, measured -- see GetTextCenteredPosition.</param>
+    /// <param name="alphaMultiplier">See Draw.</param>
+    public static void DrawTextCentered<TTarget>(TTarget target, FontStashTextMeasurer fontMeasurer, string text, Vector2 footprintTopLeft, Vector2 footprintSize, Color color, bool outline = false, float alphaMultiplier = 1f, SpriteDrawStyle style = default)
+        where TTarget : ISpriteDrawTarget =>
+        Draw(target, fontMeasurer.Font, text, GetTextCenteredPosition(fontMeasurer, text, footprintTopLeft, footprintSize), color, outline, alphaMultiplier, style);
+
     /// <summary>
     /// Where text must be drawn so it's flush against footprintSize's right edge and vertically centered within it.
     /// </summary>

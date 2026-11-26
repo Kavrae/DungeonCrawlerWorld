@@ -105,6 +105,33 @@ public sealed class LabelRendererTests
         Assert.AreEqual(first, second);
     }
 
+    [TestMethod]
+    public void GetTextCenteredPosition_WordsWithAndWithoutDescenders_ShareABaseline()
+    {
+        var fontMeasurer = TestFonts.Shared.GetTextMeasurer(TestFonts.Shared.GetFont(16));
+        var footprintSize = new Vector2(80, 24);
+
+        var scroll = LabelRenderer.GetTextCenteredPosition(fontMeasurer, "Scroll", Vector2.Zero, footprintSize);
+        var toggle = LabelRenderer.GetTextCenteredPosition(fontMeasurer, "Toggle", Vector2.Zero, footprintSize);
+
+        Assert.AreEqual(scroll.Y, toggle.Y);
+    }
+
+    [TestMethod]
+    public void GetTextCenteredPosition_DescendersStayInsideTheFootprint()
+    {
+        var font = TestFonts.Shared.GetFont(16);
+        var fontMeasurer = TestFonts.Shared.GetTextMeasurer(font);
+        var inkHeight = font.TextBounds("Hbdfghjklpqy", Vector2.Zero, null, 0f, 0f);
+        var footprintSize = new Vector2(120, MathF.Ceiling(inkHeight.Y2 - inkHeight.Y) + 2);
+
+        var position = LabelRenderer.GetTextCenteredPosition(fontMeasurer, "Toggle", Vector2.Zero, footprintSize);
+        var ink = font.TextBounds("Toggle", position, null, 0f, 0f);
+
+        Assert.IsGreaterThanOrEqualTo(0f, ink.Y);
+        Assert.IsLessThanOrEqualTo(footprintSize.Y, ink.Y2);
+    }
+
     /// <summary>
     /// Regression: GetLeftAlignedPosition/GetRightAlignedPosition used to center vertically against
     /// MeasureString(text).Y -- the same "generic line box" GetCenteredPosition's own doc comment

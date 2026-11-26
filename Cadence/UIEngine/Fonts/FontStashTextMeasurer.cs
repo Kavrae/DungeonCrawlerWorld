@@ -42,6 +42,12 @@ public sealed class FontStashTextMeasurer(SpriteFontBase font) : ITextMeasurer
         return Font.MeasureString(_measuredText).X;
     }
 
+    /// <summary>Letters reaching the font's highest ascender and lowest descender, whose ink spans every line of text in it.</summary>
+    private const string LineInkReference = "Hbdfghjklpqy";
+
+    /// <summary>The vertical centre of the band any line in this font inks, ascenders to descenders, if drawn at (0,0) -- one value per font, so text centred on it keeps one baseline whichever letters it holds.</summary>
+    public float LineInkCenterYAtOrigin => GetInkCenterAtOrigin(LineInkReference).Y;
+
     /// <summary>The centre of glyph's tight ink bounding box if drawn at (0,0) -- TextBounds translates linearly with position, so this alone is enough to centre it in any footprint.</summary>
     public Vector2 GetInkCenterAtOrigin(string glyph)
     {

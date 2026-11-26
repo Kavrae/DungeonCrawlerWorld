@@ -1,7 +1,7 @@
 namespace UIEngine.UI.ChromeBehaviors;
 
 /// <summary>
-/// Adds a single title button that toggles between minimize ("_") and restore ("O") --
+/// Adds a single title button that toggles between minimize ("—") and restore ("O") --
 /// minimize is only ever valid on a restored window and restore only ever valid on a
 /// minimized one, so this is one button whose label tracks the window's current state,
 /// rather than two independently-attached behaviors that would otherwise both be visible at
@@ -30,9 +30,9 @@ public sealed class MinimizeRestoreBehavior : IChromeBehavior
     private static void UpdateButtonLabel(Window window, Button button)
     {
         var isMinimized = window.DisplayMode == ElementDisplayMode.Minimized;
-        button.SetText(isMinimized
+        button.SetIcon(null, isMinimized
             ? "O"
-            : "_");
+            : "—");
         button.TooltipText = isMinimized
             ? "Restore"
             : "Minimize";

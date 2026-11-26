@@ -292,7 +292,7 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
         var reach = elementPoolService.CreateElement<TargetShapePreviewElement>(row, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(availableWidth - gridWidth, (rowHeight - gridHeight) / 2f), Size = new Vector2(gridWidth, gridHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(MathF.Floor(availableWidth - gridWidth), MathF.Floor((rowHeight - gridHeight) / 2f)), Size = new Vector2(gridWidth, gridHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
@@ -385,11 +385,11 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
             AddStatLine(row, new Vector2(0, i * RowHeight), zoneWidth, stats[i], lineStyle(stats[i]));
         }
 
-        var gridX = zoneWidth + (zoneWidth - gridWidth) / 2f;
+        var gridX = MathF.Floor(zoneWidth + (zoneWidth - gridWidth) / 2f);
         var shapePreview = elementPoolService.CreateElement<TargetShapePreviewElement>(row, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(gridX, (rowHeight - gridHeight) / 2f), Size = new Vector2(gridWidth, gridHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(gridX, MathF.Floor((rowHeight - gridHeight) / 2f)), Size = new Vector2(gridWidth, gridHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });

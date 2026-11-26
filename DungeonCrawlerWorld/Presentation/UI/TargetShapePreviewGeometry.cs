@@ -73,7 +73,7 @@ public static class TargetShapePreviewGeometry
     {
         var fitWidth = maxWidth / System.Math.Max(1, columns);
         var fitHeight = maxHeightBudget / System.Math.Max(1, rows);
-        return System.Math.Clamp(System.Math.Min(fitWidth, fitHeight), MinCellSize, MaxCellSize);
+        return MathF.Floor(System.Math.Clamp(System.Math.Min(fitWidth, fitHeight), MinCellSize, MaxCellSize));
     }
 
     /// <summary>The grid's own bounding box, in the same relative-offset space ComputeOffsets returns -- always includes (0,0), the caster's own cell, even for a shape that doesn't target it (Line/Cone), so the player marker always has a cell to sit in.</summary>

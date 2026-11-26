@@ -321,9 +321,7 @@ public sealed class TradeWindow(
     /// The two header labels ("Player Value"/"Shop Value" plus each one's own value line) are
     /// drawn directly here, not as child TextWindow elements -- TextWindow.DrawContent always
     /// flushes left against LinePadding, with no centered-text mode, and these need to read
-    /// centered over their own column. LabelRenderer.DrawCentered (already used to center map
-    /// glyphs) works for an arbitrary string just as well, and already gets the same whole-pixel
-    /// rounding fix every other UI text draw does (see its own doc comment).
+    /// centered over their own column, which LabelRenderer.DrawTextCentered does.
     /// </summary>
     public override void DrawContent(GameTime gameTime)
     {
@@ -342,8 +340,8 @@ public sealed class TradeWindow(
         var labelFootprint = new Vector2(ColumnSize.X, HeaderLabelLineHeight);
         var valueFootprint = new Vector2(ColumnSize.X, HeaderHeight - HeaderLabelLineHeight);
 
-        LabelRenderer.DrawCentered(spriteBatch, fontMeasurer, label, columnTopLeft, labelFootprint, Color.White);
-        LabelRenderer.DrawCentered(spriteBatch, fontMeasurer, valueText, columnTopLeft + new Vector2(0, HeaderLabelLineHeight), valueFootprint, Color.White);
+        LabelRenderer.DrawTextCentered(spriteBatch, fontMeasurer, label, columnTopLeft, labelFootprint, Color.White);
+        LabelRenderer.DrawTextCentered(spriteBatch, fontMeasurer, valueText, columnTopLeft + new Vector2(0, HeaderLabelLineHeight), valueFootprint, Color.White);
     }
 
     private void BuildColumn(float x, int entityId, bool isShopSide)

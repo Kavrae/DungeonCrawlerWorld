@@ -889,6 +889,36 @@ developer and are tracked in one place.
 
 ### High Priority
 
+#### Damage mitigation (armor)
+
+Armor reduces the damage an entity takes by a share that grows with armor, never reaches 100%, and never makes a weak
+attack useless. Most major games use this shape (WoW, League of Legends, Genshin Impact). Reference: Candlesan's YouTube
+videos on damage formulas. Research more before implementation.
+
+**The formula:**
+
+`PercentageOfDamageMitigated = armor / (armor + (K + J * attackerLevel))`
+
+- **K** sets how mitigation scales in this game. A smaller K means less armor makes a large difference in damage taken.
+- **J** is the level multiplier: how much the level difference matters. Multiplying by the attacker's level means
+  stronger foes hit harder and weaker foes hit softer, just by levelling up.
+- **The total never reaches 100%.** The denominator always exceeds armor.
+- **Each point of armor is worth the same.** Effective health is `health * (1 + armor / (K + J * attackerLevel))`, which
+  grows linearly with armor. That is why the shape is popular: no diminishing returns per point, and no cap to hit.
+
+**Values.** Player and enemy levels don't exist yet and will be added later, so estimate for now: K = 50, J = 5. Then
+100 armor against a level 10 attacker mitigates 50%, 300 armor mitigates 75%, and 100 armor against a level 50 attacker
+mitigates 25%. The real values depend on equipment scaling and balance preferences, set against the 1-300 ability score
+system.
+
+**Open questions:**
+- **Where it applies.** Presumably at `HealthDamage`, with Incoming modifiers, so DoTs share it. Health costs
+  (`HealthDrain`) are never reduced by damage reduction and stay that way.
+- **Damage with no attacker.** Terrain and auras have no source entity and so no level. Use K alone, or an area level.
+- **How it relates to "Damage types".** One armor value, or a resistance per type on the same formula.
+- **How it relates to "Defensive buff spell -- damage reduction + healing over time".** Whether that buff grants armor
+  or a flat Incoming modifier.
+
 #### Buffs and debuffs from the same source don't stack
 
 A second buff or debuff from the same source refreshes the first instead of adding beside it. This rewards using
@@ -2835,6 +2865,14 @@ Author the tables as data ("Data tables for content", Medium): one row per entry
 stack range, rarity), a table per box type, and mods adding rows or overriding a table by key. Unreal
 projects typically do drop tables as a `UDataTable` of weighted rows, with a `UCompositeDataTable` to
 layer expansion or mod rows over the base table.
+
+**Research before building:**
+- **A drop hierarchy.** Roll rarity, then type, then the individual item, each as its own sub-table in that order,
+  rather than one flat weighted list.
+- **Drops shaped by who, where and what.** What drops can be modified by:
+  - **The player.** Push towards items they can use with their build.
+  - **The area.** A goblin area might drop more explosive crafting materials and more common items.
+  - **The AI's behavior at the time.**
 
 #### Advanced boss loot box awards
 
