@@ -36,9 +36,9 @@ public sealed class DetailsWindowsTests
 
         elementPool.RegisterFactory(() => new TextDivider(TestElementServices.For(elementPool, fontService)));
         elementPool.RegisterFactory(() => new TargetShapePreviewElement(TestElementServices.For(elementPool, fontService)));
-        elementPool.RegisterFactory(() => new ItemDetailsWindow(TestElementServices.For(elementPool, fontService), context.Actions, NamesOf(context), actionStateView, new ActivationPreviews(context.EffectServices, context.SimulationClock), TestPlayerQuery.NoPlayer));
-        elementPool.RegisterFactory(() => new ActionDetailsWindow(TestElementServices.For(elementPool, fontService), context.Actions, NamesOf(context)));
-        elementPool.RegisterFactory(() => new AuraDetailsWindow(TestElementServices.For(elementPool, fontService), context.Actions, NamesOf(context)));
+        elementPool.RegisterFactory(() => new ItemDetailsWindow(TestElementServices.For(elementPool, fontService), NamesOf(context), actionStateView, new ActivationPreviews(context.EffectServices, context.SimulationClock), TestPlayerQuery.NoPlayer));
+        elementPool.RegisterFactory(() => new ActionDetailsWindow(TestElementServices.For(elementPool, fontService), NamesOf(context)));
+        elementPool.RegisterFactory(() => new AuraDetailsWindow(TestElementServices.For(elementPool, fontService), NamesOf(context)));
         return elementPool;
     }
 
@@ -88,7 +88,7 @@ public sealed class DetailsWindowsTests
 
         if (activator is not null)
         {
-            expected.AddRange(ItemComparisonStatExtraction.ExtractActivatorStats(activator, context.Actions, preview: null, detailsMode, showsTargeting: definition.Toggle is null).Select(stat => stat.DisplayText));
+            expected.AddRange(ItemComparisonStatExtraction.ExtractActivatorStats(activator, preview: null, detailsMode, showsTargeting: definition.Toggle is null).Select(stat => stat.DisplayText));
         }
 
         if (!string.IsNullOrWhiteSpace(definition.Description))

@@ -404,17 +404,33 @@ public sealed class TargetResolutionTests
     }
 
     [TestMethod]
-    public void ScrollSelection_CarriesItsRangeAndAreaScaledByTheCastersIntelligence()
+    public void SpellSelection_CarriesItsRangeAndAreaScaledByTheCastersIntelligence_CastOrFromAScroll()
     {
         var session = BuildSession();
         AbilityScoreEffects.Grant(session.Components, session.CasterId, AbilityScoreType.Intelligence, baseValue: 150);
-        var scroll = new ScrollActivator(new TargetingSpec(TargetShape.Circle, MaximumRange: 5, AreaSize: 3), new ActionTiming(ActionTimingCategory.Immediate), Guid.NewGuid());
-        var expected = ScrollScalingEffects.ScaleTargeting(scroll.Targeting, ScrollScalingEffects.ComputeScaleMultiplier(150));
+        var spell = TestActivatables.Spell(new TargetingSpec(TargetShape.Circle, MaximumRange: 5, AreaSize: 3));
+        var expected = SpellScalingEffects.ScaleTargeting(spell.Activator.Targeting, SpellScalingEffects.ComputeScaleMultiplier(150));
 
-        var selection = session.Resolution.Select(session.CasterId, scroll, TargetingMode.Ground, TargetPosition, Now);
+        var cast = session.Resolution.Select(session.CasterId, spell.Activator, TargetingMode.Ground, TargetPosition, Now);
+        var read = session.Resolution.Select(session.CasterId, TestActivatables.Scroll(spell), TargetingMode.Ground, TargetPosition, Now);
 
-        Assert.IsGreaterThan(5, expected.MaximumRange, "Precondition: Intelligence 150 scales the scroll.");
-        Assert.AreEqual(expected.MaximumRange, selection.MaximumRange);
-        Assert.AreEqual(expected.AreaSize, selection.AreaSize);
+        Assert.IsGreaterThan(5, expected.MaximumRange, "Precondition: Intelligence 150 scales the spell.");
+        Assert.AreEqual(expected.MaximumRange, cast.MaximumRange);
+        Assert.AreEqual(expected.AreaSize, cast.AreaSize);
+        Assert.AreEqual(expected.MaximumRange, read.MaximumRange);
+        Assert.AreEqual(expected.AreaSize, read.AreaSize);
+    }
+
+    [TestMethod]
+    public void AbilitySelection_IsNotScaledByTheCastersIntelligence()
+    {
+        var session = BuildSession();
+        AbilityScoreEffects.Grant(session.Components, session.CasterId, AbilityScoreType.Intelligence, baseValue: 300);
+        var ability = new DirectAction(new TargetingSpec(TargetShape.Circle, MaximumRange: 5, AreaSize: 3), new ActionTiming(ActionTimingCategory.Immediate));
+
+        var selection = session.Resolution.Select(session.CasterId, ability, TargetingMode.Ground, TargetPosition, Now);
+
+        Assert.AreEqual(5, selection.MaximumRange);
+        Assert.AreEqual(3, selection.AreaSize);
     }
 }

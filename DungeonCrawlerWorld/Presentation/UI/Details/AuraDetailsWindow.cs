@@ -16,13 +16,12 @@ namespace Presentation.UI.Details;
 /// </remarks>
 public sealed class AuraDetailsWindow(
     ElementServices services,
-    ActionCatalog actionCatalog,
     EffectTextNames names)
     : Window(services)
 {
     private const string GlowSwatchGlyph = "●";
 
-    private readonly ActivatableDetailsSections _sections = new(services.ElementPoolService, services.FontService, actionCatalog, names);
+    private readonly ActivatableDetailsSections _sections = new(services.ElementPoolService, services.FontService, names);
 
     private AuraDefinition? _definition;
     private float _contentWidth;

@@ -109,9 +109,12 @@ public static class ContentSession
         }
     }
 
-    /// <summary>The tab that shows records of file, for a failure to open them: the Map tab for an area, palette or placement, the Items tab for an item.</summary>
+    /// <summary>The tab that shows records of file, for a failure to open them: the Map tab for an area, palette or placement, the Items tab for an item, the Actions tab for an action.</summary>
     private static string? TabTitleOf(string file) =>
-        IsAreaFile(file) ? MapTab.TabTitle : file == GameContent.ItemsFileName ? Builders.Items.ItemsTab.TabTitle : null;
+        IsAreaFile(file) ? MapTab.TabTitle
+        : file == GameContent.ItemsFileName ? Builders.Items.ItemsTab.TabTitle
+        : file == GameContent.ActionsFileName ? Builders.Actions.ActionsTab.TabTitle
+        : null;
 
     private static bool IsAreaFile(string file) =>
         file.StartsWith($"{GameContent.AreasDirectoryName}/", StringComparison.Ordinal)

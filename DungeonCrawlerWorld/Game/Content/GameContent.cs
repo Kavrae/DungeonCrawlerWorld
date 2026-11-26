@@ -643,7 +643,8 @@ public sealed class GameContent
         }
     }
 
-    /// <summary>An action's, item's or aura's auras, resolved by Guid through the content itself: each decoded with whatever names it.</summary>
+    /// <summary>What a record names and holds decoded, resolved by Guid through the content itself, each decoded with whatever names it: an action's, item's or aura's auras, and a scroll's spell.</summary>
+    /// <remarks>A spell resolves as the action catalog will hold it: a disabled one to the end of its replacements, a save's that failed its checks to the record beneath (ContentCatalogLoader settles those before any item decodes).</remarks>
     private sealed class AuraReferences(GameContent content) : IContentReferences
     {
         public bool TryResolve<T>(Guid id, out T value)
@@ -652,6 +653,12 @@ public sealed class GameContent
             if (typeof(T) == typeof(AuraDefinition) && content.TryLoadAura(id, out var aura))
             {
                 value = (T)(object)aura;
+                return true;
+            }
+
+            if (typeof(T) == typeof(ActionDefinition) && content.TryLoadAction(id, out var action))
+            {
+                value = (T)(object)action;
                 return true;
             }
 

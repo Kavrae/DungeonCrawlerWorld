@@ -5,8 +5,6 @@ using Engine.Tiles;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Inventory;
-using Game.Tags;
 using Game.World;
 using Microsoft.Xna.Framework;
 
@@ -18,17 +16,14 @@ public sealed class ScrollMasteryEffectsTests
     private const int EntityId = 1;
     private static readonly Guid SpellId = Guid.NewGuid();
 
-    private static (ComponentManager ComponentManager, EventBus EventBus, ActionCatalog ActionCatalog, ItemDefinition Scroll) Build()
+    private static (ComponentManager ComponentManager, EventBus EventBus, ActionCatalog ActionCatalog) Build()
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
-
-        var scroll = new ItemDefinition(
-            Guid.NewGuid(), "Test Scroll", "Scroll", "s", Color.White,
-            Tags: [GameTags.ItemConsumableScroll, GameTags.ItemConsumable],
-            Effects: [Effect.None],
-            Activator: new ScrollActivator(new TargetingSpec(TargetShape.Adjacent, MaximumRange: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Immediate, 30, null), SpellId));
-
-        return (componentManager, new EventBus(), new ActionCatalog(), scroll);
+        var actionCatalog = new ActionCatalog();
+        actionCatalog.Register(new ActionDefinition(
+            SpellId, "Test Spell", null, "e", Color.Red, Tags: [], Effects: [Effect.None],
+            Activator: new SpellActivator(new TargetingSpec(TargetShape.Self, MaximumRange: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Immediate, 30, null))));
+        return (componentManager, new EventBus(), actionCatalog);
     }
 
     private static bool HasActionInstance(ComponentManager componentManager, int entityId, Guid actionId)
@@ -48,31 +43,26 @@ public sealed class ScrollMasteryEffectsTests
     [TestMethod]
     public void RecordUsage_BelowThreshold_DoesNotGrantSpell()
     {
-        var (componentManager, eventBus, actionCatalog, scroll) = Build();
+        var (componentManager, eventBus, actionCatalog) = Build();
 
         for (var i = 0; i < ScrollMasteryEffects.MasteryThreshold - 1; i++)
         {
-            ScrollMasteryEffects.RecordUsage(componentManager, eventBus, actionCatalog, scroll, EntityId, SpellId);
+            ScrollMasteryEffects.RecordUsage(componentManager, eventBus, actionCatalog, EntityId, SpellId);
         }
 
         Assert.IsFalse(HasActionInstance(componentManager, EntityId, SpellId));
     }
 
     [TestMethod]
-    public void RecordUsage_ReachesThreshold_LooksUpExistingSpellAndGrantsIt()
+    public void RecordUsage_ReachesThreshold_GrantsTheSpellAndPublishesOnce()
     {
-        var (componentManager, eventBus, actionCatalog, scroll) = Build();
-        var existingSpell = new ActionDefinition(
-            SpellId, "Existing Spell", null, "e", Color.Red, Tags: [], Effects: [Effect.None],
-            Activator: new SpellActivator(new TargetingSpec(TargetShape.Self, MaximumRange: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Immediate, 30, null)));
-        actionCatalog.Register(existingSpell);
-
+        var (componentManager, eventBus, actionCatalog) = Build();
         var masteredCount = 0;
         eventBus.Subscribe<ScrollMasteredEvent>(_ => masteredCount++);
 
         for (var i = 0; i < ScrollMasteryEffects.MasteryThreshold; i++)
         {
-            ScrollMasteryEffects.RecordUsage(componentManager, eventBus, actionCatalog, scroll, EntityId, SpellId);
+            ScrollMasteryEffects.RecordUsage(componentManager, eventBus, actionCatalog, EntityId, SpellId);
         }
 
         Assert.IsTrue(HasActionInstance(componentManager, EntityId, SpellId));
@@ -80,31 +70,30 @@ public sealed class ScrollMasteryEffectsTests
     }
 
     [TestMethod]
-    public void RecordUsage_NoExistingSpell_SynthesizesRegistersAndGrantsIt()
+    public void RecordUsage_ReachesThreshold_RegistersNothingNew()
     {
-        var (componentManager, eventBus, actionCatalog, scroll) = Build();
+        var (componentManager, eventBus, actionCatalog) = Build();
+        var countBefore = actionCatalog.Count;
 
         for (var i = 0; i < ScrollMasteryEffects.MasteryThreshold; i++)
         {
-            ScrollMasteryEffects.RecordUsage(componentManager, eventBus, actionCatalog, scroll, EntityId, SpellId);
+            ScrollMasteryEffects.RecordUsage(componentManager, eventBus, actionCatalog, EntityId, SpellId);
         }
 
-        Assert.IsTrue(actionCatalog.TryGet(SpellId, out var synthesized));
-        Assert.AreEqual(scroll.Name, synthesized.Name);
-        Assert.IsTrue(HasActionInstance(componentManager, EntityId, SpellId));
+        Assert.AreEqual(countBefore, actionCatalog.Count);
     }
 
     [TestMethod]
     public void RecordUsage_PastThreshold_DoesNotPublishAgain()
     {
-        var (componentManager, eventBus, actionCatalog, scroll) = Build();
+        var (componentManager, eventBus, actionCatalog) = Build();
 
         var masteredCount = 0;
         eventBus.Subscribe<ScrollMasteredEvent>(_ => masteredCount++);
 
         for (var i = 0; i < ScrollMasteryEffects.MasteryThreshold + 5; i++)
         {
-            ScrollMasteryEffects.RecordUsage(componentManager, eventBus, actionCatalog, scroll, EntityId, SpellId);
+            ScrollMasteryEffects.RecordUsage(componentManager, eventBus, actionCatalog, EntityId, SpellId);
         }
 
         Assert.AreEqual(1, masteredCount);
@@ -113,33 +102,17 @@ public sealed class ScrollMasteryEffectsTests
     [TestMethod]
     public void RecordUsage_DifferentSpellIds_TrackIndependentCounts()
     {
-        var (componentManager, eventBus, actionCatalog, scroll) = Build();
+        var (componentManager, eventBus, actionCatalog) = Build();
         var otherSpellId = Guid.NewGuid();
 
         for (var i = 0; i < ScrollMasteryEffects.MasteryThreshold - 1; i++)
         {
-            ScrollMasteryEffects.RecordUsage(componentManager, eventBus, actionCatalog, scroll, EntityId, SpellId);
+            ScrollMasteryEffects.RecordUsage(componentManager, eventBus, actionCatalog, EntityId, SpellId);
         }
 
-        ScrollMasteryEffects.RecordUsage(componentManager, eventBus, actionCatalog, scroll, EntityId, otherSpellId);
+        ScrollMasteryEffects.RecordUsage(componentManager, eventBus, actionCatalog, EntityId, otherSpellId);
 
         Assert.IsFalse(HasActionInstance(componentManager, EntityId, SpellId));
         Assert.IsFalse(HasActionInstance(componentManager, EntityId, otherSpellId));
-    }
-
-    [TestMethod]
-    public void RecordUsage_ReachesThreshold_SynthesizedSpellIsASpell_NotAnItem()
-    {
-        var (componentManager, eventBus, actionCatalog, scroll) = Build();
-
-        for (var i = 0; i < ScrollMasteryEffects.MasteryThreshold; i++)
-        {
-            ScrollMasteryEffects.RecordUsage(componentManager, eventBus, actionCatalog, scroll, EntityId, SpellId);
-        }
-
-        Assert.IsTrue(actionCatalog.TryGet(SpellId, out var spell));
-        Assert.IsTrue(spell.Tags.HasExact(GameTags.Spell));
-        Assert.IsTrue(spell.Tags.HasExact(GameTags.Magic));
-        Assert.IsFalse(spell.Tags.Has(GameTags.Item), $"A spell is not an item, but has {spell.Tags}.");
     }
 }

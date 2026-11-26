@@ -21,9 +21,9 @@ namespace Game.Effects;
 /// </para>
 /// <para>
 /// ChainDepth is only ever incremented by ChainedEffect, guarding against a proc that (directly or
-/// via a longer cycle) triggers itself. DurationScaleMultiplier is 1 except for a scroll, which
-/// scales by the caster's Intelligence (ScrollScalingEffects); a duration-bearing entry multiplies
-/// its own base duration by it.
+/// via a longer cycle) triggers itself. DurationScaleMultiplier is 1 except for a spell's use, cast
+/// or read from a scroll, which scales by the caster's Intelligence (SpellScalingEffects); a
+/// duration-bearing entry multiplies its own base duration by it.
 /// </para>
 /// </remarks>
 /// <param name="Services">The session's pools and services.</param>

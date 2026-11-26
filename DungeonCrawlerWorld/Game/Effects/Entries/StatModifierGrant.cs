@@ -23,8 +23,8 @@ public enum StatModifierStacking : byte
 /// action) does so via a Self-shaped TargetingSpec, which already resolves TargetEntityId to the
 /// caster, the same way every other effect entry reads "who this lands on" (see AuraSourceGrant's
 /// own doc comment for the identical reasoning).
-/// DurationFrames is scaled by context.DurationScaleMultiplier (a ScrollActivator activation sets
-/// this off the caster's Intelligence -- see ScrollScalingEffects; every other activator leaves
+/// DurationFrames is scaled by context.DurationScaleMultiplier (a spell's use, cast or read from a
+/// scroll, sets this off the caster's Intelligence -- see SpellScalingEffects; every other use leaves
 /// it at the default 1.0, a no-op) -- guarded so a permanent (null) duration is never multiplied
 /// into a meaningless number. Then, still guarded the same way, scaled through StatModifierMath
 /// against the caster's own Outgoing{Buff,Debuff}Duration (context.SourceEntityId) and then the

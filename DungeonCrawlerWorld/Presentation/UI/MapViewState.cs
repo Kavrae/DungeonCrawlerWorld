@@ -33,6 +33,9 @@ public sealed class MapViewState
     /// <summary>The action currently armed (a hotkey pressed once, awaiting a target), if any -- paired with ArmedSlot so the Hotbar UI (a later phase) can highlight which slot it came from. Cleared on disarm (pressing the same slot again) or, once built, on cancel/activation. Mutually exclusive with ArmedItemStackInstanceId -- only one of {action, item} is ever armed at once.</summary>
     public Guid? ArmedActionId;
 
+    /// <summary>Whether the armed action is a dodge (Game's Dodges.IsDodge over the player's effective definition): its step tiles, its WASD confirm and their hints. Written only with ArmedActionId, by ActionTargetingController.SetArmedAction; false while nothing, or an item, is armed.</summary>
+    public bool ArmedActionIsDodge;
+
     /// <summary>The consumable item stack currently armed, if any -- see ArmedActionId, which this mirrors exactly for the item-hotkey path (Game.Modules.Inventory.Components.ItemHotkeyBindingComponent) instead of the action one. By StackInstanceId, not ItemDefinitionId -- see that component's own doc comment for why.</summary>
     public uint? ArmedItemStackInstanceId;
 

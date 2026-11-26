@@ -5,7 +5,6 @@ using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
 using Presentation.UI;
 using Presentation.UI.Details;
-using UIEngine.Fonts;
 using UIEngine.UI;
 
 namespace Builders.MapAreas;
@@ -17,7 +16,7 @@ public sealed class MapDetailsWindow(ElementServices services, GameCatalogs cata
 {
     private const float RowHeight = ActivatableDetailsSections.RowHeight;
 
-    private readonly ActivatableDetailsSections _sections = new(services.ElementPoolService, services.FontService, catalogs.ActionCatalog, EffectTextNames.Of(catalogs));
+    private readonly ActivatableDetailsSections _sections = new(services.ElementPoolService, services.FontService, EffectTextNames.Of(catalogs));
 
     private MapContentRecord? _record;
     private float _contentWidth;

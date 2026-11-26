@@ -37,6 +37,9 @@ public abstract record ActivatableDefinition(
     string Summary = "",
     ToggleSpec? Toggle = null)
 {
+    /// <summary>What using it does to its targets; what a toggle holds while on.</summary>
+    public virtual IReadOnlyList<Effect> Effects { get; init; } = Effects;
+
     /// <summary>What using this does to whoever uses it, applied before anything else it does: a cost (ManaDrain), or anything else an effect can do to the user.</summary>
     /// <remarks>
     /// Asked first and all or nothing (ActivationEffectsApplier): a use whose activation effects can't all be

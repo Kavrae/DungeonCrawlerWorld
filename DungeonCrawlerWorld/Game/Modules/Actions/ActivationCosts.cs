@@ -47,4 +47,33 @@ public static class ActivationCosts
 
         return new ActivationCostTotals(mana, health);
     }
+
+    /// <summary>What using definition takes as content declares it, before anyone's modifiers -- what a tool shows of a definition alone.</summary>
+    /// <remarks>The same entries Of counts: only those the activation effects hold directly.</remarks>
+    public static ActivationCostTotals Declared(ActivatableDefinition definition)
+    {
+        var mana = 0f;
+        var health = 0f;
+        foreach (var effect in definition.ActivationEffects)
+        {
+            foreach (var entry in effect.Entries)
+            {
+                if (entry is not IResourceDrain drain)
+                {
+                    continue;
+                }
+
+                if (drain.Resource == DrainedResource.Mana)
+                {
+                    mana += drain.Amount;
+                }
+                else
+                {
+                    health += drain.Amount;
+                }
+            }
+        }
+
+        return new ActivationCostTotals(mana, health);
+    }
 }

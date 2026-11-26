@@ -101,12 +101,31 @@ public sealed class FieldRow(ElementServices services)
         _labelColor = LabelColorFor(problem: null, isWarning: false);
     }
 
-    /// <summary>Cuts the label to the room it has, with "..." only when it doesn't fit, and puts the whole label in the tooltip when it is cut.</summary>
+    /// <summary>Cuts the label to the room it has, with "..." only when it doesn't fit, and puts the whole label in the tooltip when it is cut; the tooltip mark's room is kept only when the row will have a tooltip, so a label with none uses the whole column.</summary>
     private void FitLabel()
     {
-        _drawnLabel = StringUtility.TruncateWithEllipsis(_labelMeasurer, _description.Label, LabelWidth);
+        var label = _description.Label;
+        var fitsWithoutMark = StringUtility.TruncateWithEllipsis(_labelMeasurer, label, LabelWidth) == label;
+        _drawnLabel = fitsWithoutMark && !HasTooltipBesideLabel
+            ? label
+            : StringUtility.TruncateWithEllipsis(_labelMeasurer, label, System.Math.Max(1f, LabelWidth - TooltipIndicatorRoom));
         TooltipText = ComposeTooltip();
     }
+
+    /// <summary>Fits the label again after what its tooltip holds changed, and moves a label-only row's revert button to the new end of the label when the drawn label changed.</summary>
+    private void RefitLabel()
+    {
+        var drawnBefore = _drawnLabel;
+        FitLabel();
+        if (_description.IsLabelOnly && _drawnLabel != drawnBefore && _revertButton is not null)
+        {
+            LayOut();
+        }
+    }
+
+    /// <summary>Whether the row has a tooltip whatever room its label has: a problem, a change note, a hint or what an unset value means.</summary>
+    private bool HasTooltipBesideLabel =>
+        !string.IsNullOrEmpty(_problem) || !string.IsNullOrEmpty(_changeNote) || !string.IsNullOrEmpty(_description.Hint) || !string.IsNullOrEmpty(_description.Tooltip);
 
     private string? _problem;
 
@@ -115,7 +134,7 @@ public sealed class FieldRow(ElementServices services)
     {
         _problem = problem;
         _labelColor = LabelColorFor(problem, isWarning);
-        TooltipText = ComposeTooltip();
+        RefitLabel();
     }
 
     /// <summary>Marks the row as differing (a bar at its left edge) with note in its tooltip, and shows the revert button with revertTooltip -- none for null; unmarks it for isMarked false.</summary>
@@ -123,7 +142,7 @@ public sealed class FieldRow(ElementServices services)
     {
         _isChangeMarked = isMarked;
         _changeNote = isMarked ? note : null;
-        TooltipText = ComposeTooltip();
+        RefitLabel();
         var showsRevert = isMarked && revertTooltip is not null;
         _revertButton.TooltipText = revertTooltip;
         if (_revertButton.IsVisible != showsRevert)
@@ -157,8 +176,11 @@ public sealed class FieldRow(ElementServices services)
     /// <summary>Where the label starts: the inset and one indent per level.</summary>
     private float LabelLeft => FieldSectionHeader.TextInset + _description.Depth * FieldSectionHeader.IndentWidth;
 
-    /// <summary>How wide the label may be drawn: the label column after its indent, less the gap before the control -- or, for a label-only row, the row after its indent, less room for its buttons.</summary>
+    /// <summary>How wide the label may be drawn: the label column after its indent, less the gap before the control -- or, for a label-only row, the row after its indent, less its buttons'. FitLabel keeps the tooltip mark's room inside it when the row has a tooltip, so the mark never lands on what follows.</summary>
     private float LabelWidth => System.Math.Max(1f, (_description.IsLabelOnly ? ContentSize.X - ButtonsWidth : LabelColumnWidth) - LabelLeft - Gap);
+
+    /// <summary>What the tooltip mark takes after the label: its gap and its own width.</summary>
+    private static float TooltipIndicatorRoom => WindowChrome.TooltipIndicatorGap + WindowChrome.TooltipIndicatorSize;
 
     /// <summary>The revert button's place, which is kept whether it is shown or not.</summary>
     private const float ButtonsWidth = FieldSectionHeader.ButtonWidth + Gap;
@@ -181,7 +203,7 @@ public sealed class FieldRow(ElementServices services)
 
         _description = _description with { IsSet = true, Tooltip = null };
         _problem = null;
-        TooltipText = ComposeTooltip();
+        RefitLabel();
         _labelColor = LabelColorFor(problem: null, isWarning: false);
     }
 
@@ -225,7 +247,7 @@ public sealed class FieldRow(ElementServices services)
         }
 
         _description = _description with { Hint = hint };
-        TooltipText = ComposeTooltip();
+        RefitLabel();
     }
 
     /// <summary>Shows a new value that came from outside (the owner's data changed), raising nothing; an editor that has focus keeps what is being typed.</summary>

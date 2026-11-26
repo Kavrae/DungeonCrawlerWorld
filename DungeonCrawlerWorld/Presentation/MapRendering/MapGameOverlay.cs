@@ -195,7 +195,7 @@ public sealed class MapGameOverlay : IDisposable
     /// </summary>
     private void DrawDodgeDirectionalHints(SpriteEffectBatch spriteBatch)
     {
-        if (_mapViewState.ArmedActionId != BuiltInActionIds.Dodge || _mapViewState.TargetableTiles is not { } targetableTiles || !_mapView.TryGetOccupant(_mapView.PlayerEntityId, out var player))
+        if (!_mapViewState.ArmedActionIsDodge || _mapViewState.TargetableTiles is not { } targetableTiles || !_mapView.TryGetOccupant(_mapView.PlayerEntityId, out var player))
         {
             return;
         }

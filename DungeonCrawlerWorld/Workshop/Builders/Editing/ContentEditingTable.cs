@@ -92,6 +92,10 @@ public interface IContentEditingTable
 
     /// <summary>Evaluates every record again -- after the session it is checked against was rebuilt.</summary>
     void EvaluateAll();
+
+    /// <summary>Evaluates again each of its records that names tableName's id, or a record whose replacements lead to it -- after that record changed, so one that decodes through it (a scroll through its spell) shows it as it is now.</summary>
+    /// <param name="namedTable">The held table tableName names, looked up once by the caller; null when it isn't held.</param>
+    void ReevaluateRecordsNaming(string tableName, Guid id, IContentEditingTable? namedTable);
 }
 
 /// <summary>How a record looks: its glyph and glyph colour, and its sprite, named for the warning that another record looks the same.</summary>
@@ -421,7 +425,35 @@ public sealed class ContentEditingTable<T> : IContentEditingTable
         var missingBefore = document.MissingPaths();
         EvaluateAlone(document);
         document.TrackNotFilledInYet(missingBefore);
+        _workspace.ReevaluateRecordsNaming(TableName, document.Id);
         _workspace.RefreshCrossRecordProblems();
+    }
+
+    public void ReevaluateRecordsNaming(string tableName, Guid id, IContentEditingTable? namedTable)
+    {
+        foreach (var document in _documents)
+        {
+            if ((tableName == TableName && document.Id == id) || !Names(document, tableName, id, namedTable))
+            {
+                continue;
+            }
+
+            EvaluateAlone(document);
+            DocumentChanged?.Invoke(document, false);
+        }
+    }
+
+    private bool Names(ContentRecordDocument<T> document, string tableName, Guid id, IContentEditingTable? namedTable)
+    {
+        foreach (var reference in document.ReferencesNamed(_workspace.Types))
+        {
+            if (reference.TableName == tableName && ContentWorkspace.NameReaches(namedTable, reference.Id, id))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Makes a new record holding json -- a step of its own in the workspace's log, undone by taking the record away -- and returns it; null when json doesn't decode.</summary>
@@ -524,7 +556,9 @@ public sealed class ContentEditingTable<T> : IContentEditingTable
 
         document.SaveProblems = [];
         Add(document);
-        Evaluate(document);
+        EvaluateAlone(document);
+        _workspace.ReevaluateRecordsNaming(TableName, document.Id);
+        _workspace.RefreshCrossRecordProblems();
         DocumentChanged?.Invoke(document, true);
     }
 
@@ -535,6 +569,7 @@ public sealed class ContentEditingTable<T> : IContentEditingTable
         _documents.Remove(document);
         _documentsById.Remove(document.Id);
         ProblemsVersion++;
+        _workspace.ReevaluateRecordsNaming(TableName, document.Id);
         _workspace.RefreshCrossRecordProblems();
         DocumentRemoved?.Invoke(document);
     }

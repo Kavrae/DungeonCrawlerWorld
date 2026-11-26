@@ -1,12 +1,13 @@
 using Engine.Content;
 using Game.Effects;
 using Game.Modules.Actions;
+using Game.Modules.Actions.Activators;
 using Game.Modules.Auras;
 using Game.Modules.Inventory;
 
 namespace Game.Content;
 
-/// <summary>Loads a by-id build's actions and items into its catalogs as they are needed: a record is decoded from the content, checked, and registered with its auras the first time its Guid is asked for.</summary>
+/// <summary>Loads a by-id build's actions and items into its catalogs as they are needed: a record is decoded from the content, checked, and registered with its auras (and a scroll with its spell) the first time its Guid is asked for.</summary>
 /// <remarks>
 /// <para>
 /// The catalogs' definition source (IActionDefinitionSource, IItemDefinitionSource), so whatever resolves an id through
@@ -76,7 +77,8 @@ public sealed class ContentCatalogLoader : IActionDefinitionSource, IItemDefinit
     /// <remarks>
     /// A master or mod record was checked by ModValidation's trial builds; a save's never was, and would otherwise be found
     /// failing only when first used, mid-session. Auras go first, so an action or item naming a failed one decodes with
-    /// the record left in its place. The actions and items are registered (they are few); the auras are not, so a save's
+    /// the record left in its place; actions go before items for the same reason, so a scroll holds the spell the catalog
+    /// does. The actions and items are registered (they are few); the auras are not, so a save's
     /// crafted auras take a catalog id only when something radiates them.
     /// </remarks>
     public void LoadSaveLayers()
@@ -95,9 +97,12 @@ public sealed class ContentCatalogLoader : IActionDefinitionSource, IItemDefinit
             }
 
             var actionIds = content.RecordIdsIn(layer, GameContent.ActionsTable);
+            content.Prefetch(actionIds, []);
+            Register(actionIds, []);
+
             var itemIds = content.RecordIdsIn(layer, GameContent.ItemsTable);
-            content.Prefetch(actionIds, itemIds);
-            Register(actionIds, itemIds);
+            content.Prefetch([], itemIds);
+            Register([], itemIds);
         }
     }
 
@@ -171,6 +176,11 @@ public sealed class ContentCatalogLoader : IActionDefinitionSource, IItemDefinit
 
         var item = definition;
         RegisterAuras(entry => EffectEntries.ForEach(item, entry));
+        if (item.Activator is ScrollActivator scroll)
+        {
+            _actions.TryGet(scroll.Spell.Id, out _);
+        }
+
         _items.Register(item);
         return true;
     }

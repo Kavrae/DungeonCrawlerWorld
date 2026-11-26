@@ -27,14 +27,13 @@ public sealed record ActionDetailsUser(ActionStateView ActionStateView, IPlayerQ
 /// </remarks>
 public sealed class ActionDetailsWindow(
     ElementServices services,
-    ActionCatalog actionCatalog,
     EffectTextNames names,
     ActivationPreviews? activationPreviews = null,
     ActionDetailsUser? user = null)
     : Window(services), IDetailsPopupWindow
 {
-    private readonly ActivatableDetailsSections _sections = new(services.ElementPoolService, services.FontService, actionCatalog, names);
-    private readonly ComparisonLineStyles _comparisonStyles = new(actionCatalog, names);
+    private readonly ActivatableDetailsSections _sections = new(services.ElementPoolService, services.FontService, names);
+    private readonly ComparisonLineStyles _comparisonStyles = new(names);
 
     private ActionDefinition? _definition;
     private IReadOnlyList<ActionDefinition> _comparedAgainst = [];

@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using UIEngine.UI;
+using UIEngine.UI.Chrome;
 using UIEngine.UI.Fields;
 
 namespace Tests.UIEngine;
@@ -101,5 +102,26 @@ public sealed class TooltipIndicatorTests
         Assert.IsTrue(row.ShowsTooltipIndicator);
         Assert.IsTrue(header.ShowsTooltipIndicator);
         Assert.AreEqual("What using it does", header.TooltipText);
+    }
+
+    /// <summary>The mark is drawn after the label, so the label leaves it room: a label cut to its column ends early enough that the mark stops before the control starts.</summary>
+    [TestMethod]
+    [DataRow(FieldValueKind.Number)]
+    [DataRow(FieldValueKind.Text)]
+    [DataRow(FieldValueKind.Boolean)]
+    public void AFieldRowsCutLabel_LeavesItsTooltipMarkClearOfTheControl(FieldValueKind kind)
+    {
+        var harness = new ControlTestHarness();
+        harness.Pool.RegisterFactory(() => new FieldRow(TestElementServices.For(harness.Pool)));
+        var row = harness.Pool.CreateElement<FieldRow>(null, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { Size = new Vector2(600, FieldRow.RowHeight), DisplayMode = ElementDisplayMode.Fixed },
+        });
+        row.Configure(new FieldEditorDescription("Percent of maximum health restored, before any modifier", kind), FieldValue.OfText("0.2"));
+
+        var labelEnd = row.TextEndPosition!.Value.X - row.ContentDrawOrigin.X;
+
+        StringAssert.EndsWith(row.DrawnLabel, "...", "Precondition: the label is cut, so its mark shows.");
+        Assert.IsLessThanOrEqualTo(FieldRow.LabelColumnWidth, labelEnd + WindowChrome.TooltipIndicatorGap + WindowChrome.TooltipIndicatorSize);
     }
 }

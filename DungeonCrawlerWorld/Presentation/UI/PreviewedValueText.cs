@@ -101,7 +101,7 @@ public static class PreviewedValueText
             ValueContributionKind.Modifier => $"{ModifierName(contribution, names)}: {amount}",
             ValueContributionKind.AbilityScore => $"{contribution.AbilityScore}: {amount}",
             ValueContributionKind.Strength => $"Aura strength: {amount}",
-            ValueContributionKind.ScrollIntelligence => $"Intelligence (scroll): {amount}",
+            ValueContributionKind.SpellIntelligence => $"Intelligence (spell): {amount}",
             _ => amount,
         };
     }

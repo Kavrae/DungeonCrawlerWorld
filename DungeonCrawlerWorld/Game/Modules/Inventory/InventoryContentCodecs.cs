@@ -2,6 +2,7 @@ using Engine.Content;
 using Game.Content;
 using Game.Effects;
 using Game.Modules.Actions;
+using Game.Modules.Actions.Activators;
 
 namespace Game.Modules.Inventory;
 
@@ -32,7 +33,7 @@ internal static class InventoryContentCodecs
 
         public override void WriteProperties(ContentWriter writer, ItemDefinition value)
         {
-            ActivatableContent.WriteLeading(writer, value);
+            ActivatableContent.WriteLeading(writer, value, writesEffects: value.Activator is not ScrollActivator);
             writer.Polymorphic(ActivatableContent.ActivatorKey, value.Activator);
             writer.Integer("gv", value.GoldValue);
             writer.OptionalInteger("ms", value.MaximumShopStock);
@@ -41,25 +42,36 @@ internal static class InventoryContentCodecs
             ActivatableContent.WriteTrailing(writer, value);
         }
 
-        public override ItemDefinition Read(ContentObject element) => new(
-            element.Guid(ContentTable.IdKey),
-            element.String(ActivatableContent.NameKey),
-            element.OptionalString(ActivatableContent.SpriteNameKey),
-            element.String(ActivatableContent.GlyphKey),
-            element.Color(ActivatableContent.GlyphColorKey),
-            element.Tags(ActivatableContent.TagsKey),
-            element.List<Effect>("fx"),
-            element.String("d"),
-            element.String("su"),
-            element.Polymorphic<IActionActivator>(ActivatableContent.ActivatorKey),
-            ContentNumbers.Int32(element.Integer("gv"), "gv"),
-            ContentNumbers.Int32(element.OptionalInteger("ms"), "ms"),
-            element.Polymorphic<IItemContents>("ct"),
-            element.Boolean("tr", defaultValue: true),
-            element.Object<ToggleSpec>("tog"))
+        /// <exception cref="ContentFormatException">A scroll holding effects of its own: a scroll's effects are its spell's.</exception>
+        public override ItemDefinition Read(ContentObject element)
         {
-            ActivationEffects = element.List<Effect>("ae"),
-        };
+            var activator = element.Polymorphic<IActionActivator>(ActivatableContent.ActivatorKey);
+            var effects = element.List<Effect>(ActivatableContent.EffectsKey);
+            if (activator is ScrollActivator && effects.Count > 0)
+            {
+                throw new ContentFormatException($"A scroll's effects are its spell's: an item with a Scroll activator holds no \"{ActivatableContent.EffectsKey}\" of its own.");
+            }
+
+            return new ItemDefinition(
+                element.Guid(ContentTable.IdKey),
+                element.String(ActivatableContent.NameKey),
+                element.OptionalString(ActivatableContent.SpriteNameKey),
+                element.String(ActivatableContent.GlyphKey),
+                element.Color(ActivatableContent.GlyphColorKey),
+                element.Tags(ActivatableContent.TagsKey),
+                effects,
+                element.String("d"),
+                element.String("su"),
+                activator,
+                ContentNumbers.Int32(element.Integer("gv"), "gv"),
+                ContentNumbers.Int32(element.OptionalInteger("ms"), "ms"),
+                element.Polymorphic<IItemContents>("ct"),
+                element.Boolean("tr", defaultValue: true),
+                element.Object<ToggleSpec>("tog"))
+            {
+                ActivationEffects = element.List<Effect>(ActivatableContent.ActivationEffectsKey),
+            };
+        }
     }
 
     /// <summary>The item is a Guid in the Items table; it may be one registered after this record (a box holding a later item), so it is never resolved here.</summary>

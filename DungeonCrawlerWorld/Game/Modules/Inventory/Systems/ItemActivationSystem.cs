@@ -50,9 +50,9 @@ namespace Game.Modules.Inventory.Systems;
 /// something with health, and its cooldown -- with the abuse Poison for drinking again too soon -- belongs to whoever
 /// it lands on, not whoever drank or threw it (PotionTargetRule). That stays this system's own rule rather than an
 /// IEffectEntry: it doesn't vary per potion, so every potion, a mod's included, gets it without its Effects having to
-/// remember it. A scroll scales range and area (already in its TargetSelection, see ScrollScalingEffects) and
-/// durations by its reader's Intelligence, then records the read toward mastering its spell (ScrollMasteryEffects). A
-/// wand or a consumable has no rule of its own (a tome is a consumable, its effect a SpellGrant).
+/// remember it. A scroll casts its spell, which scales with its reader's Intelligence as any spell does
+/// (SpellScalingEffects), then records the read toward mastering its spell (ScrollMasteryEffects). A wand or a
+/// consumable has no rule of its own (a tome is a consumable, its effect a SpellGrant).
 /// </para>
 /// <para>
 /// A toggle item spends nothing: using it flips one unit between lit and unlit (ToggleItemActions.TryLight, which also
@@ -207,8 +207,8 @@ public sealed class ItemActivationSystem : ISystem, IItemWindupResolver
 
             case ScrollActivator scrollActivator:
                 var scrollRule = default(EveryTargetRule);
-                ActivationEffectResolver.Apply(item, ActivatableKind.Item, entityId, _targetTilesScratch, resolved, _effectServices, _mapQuery, _now, _dodgingEntities, _processingTiers, _reachedScratch, ref scrollRule, ComputeScrollScaleMultiplier(entityId));
-                ScrollMasteryEffects.RecordUsage(_componentManager, _eventBus, _actionCatalog, item, entityId, scrollActivator.SpellId);
+                ActivationEffectResolver.Apply(item, ActivatableKind.Item, entityId, _targetTilesScratch, resolved, _effectServices, _mapQuery, _now, _dodgingEntities, _processingTiers, _reachedScratch, ref scrollRule);
+                ScrollMasteryEffects.RecordUsage(_componentManager, _eventBus, _actionCatalog, entityId, scrollActivator.Spell.Id);
                 break;
 
             case WandActivator or ConsumableActivator:
@@ -350,8 +350,6 @@ public sealed class ItemActivationSystem : ISystem, IItemWindupResolver
         public readonly void AfterEffects(int targetEntityId) =>
             PotionCooldownEffects.Reset(system._componentManager, targetEntityId, _cooldownFrames, system._now);
     }
-
-    private float ComputeScrollScaleMultiplier(int sourceEntityId) => ScrollScalingEffects.MultiplierFor(_abilityScores, sourceEntityId);
 
     /// <summary>
     /// Decrements this specific wand's own Charges by one, uniformly whether it's the first shot

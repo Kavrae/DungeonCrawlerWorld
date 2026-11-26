@@ -365,7 +365,7 @@ public sealed class ActionTargetingController(
     /// </summary>
     public void TryClaimDodgeDirectionalKey(KeyboardState keyboardState, KeyboardState previousKeyboardState, HashSet<Keys> claimedKeys)
     {
-        if (mapViewState.ArmedActionId != BuiltInActionIds.Dodge || !transformView.TryGetTransform(world.PlayerEntityId, out var transform))
+        if (!mapViewState.ArmedActionIsDodge || !transformView.TryGetTransform(world.PlayerEntityId, out var transform))
         {
             return;
         }
@@ -585,7 +585,7 @@ public sealed class ActionTargetingController(
     {
         uiLayers.CloseAllClosableWindows(ClosableWindowSweep.ForInput);
 
-        mapViewState.ArmedActionId = actionId;
+        SetArmedAction(actionId);
         mapViewState.ArmedItemStackInstanceId = null;
         SetArmedDrop(null);
         mapViewState.ArmedSlot = slot;
@@ -605,7 +605,7 @@ public sealed class ActionTargetingController(
         uiLayers.CloseAllClosableWindows(ClosableWindowSweep.ForInput); // See ArmAction's own doc comment -- same reasoning, covers ArmItemFromStack (Inventory's Activate/double-click) too, since it delegates here.
 
         mapViewState.ArmedItemStackInstanceId = stackInstanceId;
-        mapViewState.ArmedActionId = null;
+        SetArmedAction(null);
         SetArmedDrop(null);
         mapViewState.ArmedSlot = slot;
         _targetableTilesKey = null;
@@ -679,7 +679,7 @@ public sealed class ActionTargetingController(
         uiLayers.CloseAllClosableWindows(ClosableWindowSweep.ForInput);
 
         SetArmedDrop(drop);
-        mapViewState.ArmedActionId = null;
+        SetArmedAction(null);
         mapViewState.ArmedItemStackInstanceId = null;
         mapViewState.ArmedSlot = slot;
         _targetableTilesKey = null;
@@ -736,9 +736,20 @@ public sealed class ActionTargetingController(
         return false;
     }
 
+    /// <summary>Arms actionId (null: no action), and whether it is a dodge with it -- the one place either is written, so the two always agree.</summary>
+    private void SetArmedAction(Guid? actionId)
+    {
+        mapViewState.ArmedActionId = actionId;
+        mapViewState.ArmedActionIsDodge = actionId is { } armedActionId && IsDodge(world.PlayerEntityId, armedActionId);
+    }
+
+    /// <summary>Whether entityId's actionId, as that entity has it (its override included), is a dodge (Dodges.IsDodge) -- what it does, never its Guid, so an enhanced dodge counts.</summary>
+    private bool IsDodge(int entityId, Guid actionId) =>
+        actionStateView.TryGetEffectiveAction(entityId, actionId, out var action) && Dodges.IsDodge(action);
+
     private void Disarm()
     {
-        mapViewState.ArmedActionId = null;
+        SetArmedAction(null);
         mapViewState.ArmedItemStackInstanceId = null;
         SetArmedDrop(null);
         mapViewState.ArmedSlot = null;
@@ -829,7 +840,7 @@ public sealed class ActionTargetingController(
     /// </remarks>
     private void RefreshTargetableTiles(TargetingSpec targeting, Vector3Int currentPosition, Vector2Byte currentSize)
     {
-        var isDodgeArmed = mapViewState.ArmedActionId == BuiltInActionIds.Dodge;
+        var isDodgeArmed = mapViewState.ArmedActionIsDodge;
         var key = new ReachableAreaKey(targeting, currentPosition, currentSize, targetingView.SightVersion);
         if (_targetableTilesKey == key && !isDodgeArmed)
         {
@@ -1068,7 +1079,7 @@ public sealed class ActionTargetingController(
     {
         Vector3Int? stepDirectionOnActivation = null;
 
-        if (actionId == BuiltInActionIds.Dodge && transformView.TryGetTransform(entityId, out var casterTransform))
+        if (IsDodge(entityId, actionId) && transformView.TryGetTransform(entityId, out var casterTransform))
         {
             // DodgeActivation's own effect (DodgingComponent) always applies to the caster, not to
             // "whoever occupies the resolved target tile" -- for a directional dodge that tile is the

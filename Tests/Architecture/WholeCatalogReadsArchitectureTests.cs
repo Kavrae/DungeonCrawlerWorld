@@ -26,6 +26,8 @@ public sealed partial class WholeCatalogReadsArchitectureTests
         Path.Combine("DungeonCrawlerWorld", "Game", "Modules", "Actions", "ToggleContentValidation.cs"),
         Path.Combine("DungeonCrawlerWorld", "Game", "Modules", "Actions", "TargetingContentValidation.cs"),
         Path.Combine("DungeonCrawlerWorld", "Game", "Modules", "Inventory", "ItemCooldownContentValidation.cs"),
+        Path.Combine("DungeonCrawlerWorld", "Game", "Modules", "Inventory", "ScrollContentValidation.cs"),
+        Path.Combine("DungeonCrawlerWorld", "Game", "Modules", "Actions", "Dodges.cs"),
     ];
 
     [TestMethod]

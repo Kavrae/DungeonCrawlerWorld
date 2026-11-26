@@ -1,11 +1,9 @@
-using System.Text.Json.Nodes;
 using Builders.Browsing;
 using Builders.Editing;
-using Builders.References;
-using Engine.Content;
 using Game.Modules.Actions;
 using Game.Modules.Inventory;
 using Presentation.UI.Inventory;
+using System.Text.Json.Nodes;
 using UIEngine.UI;
 using UIEngine.UI.Filtering;
 using Workshop.Editing;
@@ -13,13 +11,12 @@ using Workshop.Editing;
 namespace Builders.Items;
 
 /// <summary>The Items tab: every item the Workshop holds, grouped by how it's used, edited in the inspector and shown in Item Details as it reads now (ContentEditingTab).</summary>
-/// <remarks>Item Details shows a definition with no stack behind it (ItemDetailsWindow.NoStackInstanceId), so it has no blocker and no Compare.</remarks>
+/// <remarks>Item Details shows a definition with no stack behind it (ItemDetailsWindow.NoStackInstanceId) and no player (NoWorkshopPlayer), so it has no blocker and no Compare, and every value is the definition's own.</remarks>
 public sealed class ItemsTab(ContentEditingTable<ItemDefinition> table, ContentEditing editing, IContentInspectorSource inspectorSource, ElementPoolService elementPool)
     : ContentEditingTab<ItemDefinition, ItemDetailsWindow>(table, editing, inspectorSource, elementPool)
 {
     public const string TabTitle = "Items";
 
-    private const string NewItemGlyph = "?";
     private const string ItemNameKey = ActivatableContent.NameKey;
     private const string GlyphKey = ActivatableContent.GlyphKey;
 
@@ -33,7 +30,7 @@ public sealed class ItemsTab(ContentEditingTable<ItemDefinition> table, ContentE
 
     protected override string NameKey => ItemNameKey;
 
-    protected override JsonObject NewRecordFields(string name) => new() { [ItemNameKey] = name, [GlyphKey] = NewItemGlyph };
+    protected override JsonObject NewRecordFields(string name) => new() { [ItemNameKey] = name, [GlyphKey] = ActivatablePlaceholder.Glyph };
 
     protected override IReadOnlyList<RecordBrowserSection<ItemDefinition>> SectionsOf(IEnumerable<ItemDefinition> definitions, string search) =>
         ItemBrowserSections.Build(definitions, search, Workspace.Session.Catalogs.GameplayTags);
@@ -45,18 +42,12 @@ public sealed class ItemsTab(ContentEditingTable<ItemDefinition> table, ContentE
     protected override RecordRowAppearance LookOf(ItemDefinition item) => new(item.Name, item.SpriteName, item.Glyph, item.GlyphColor);
 
     protected override void ShowDefinition(ItemDetailsWindow preview, ItemDefinition item, float contentWidth) =>
-        preview.Configure(Workspace.Session.World.PlayerEntityId, ItemDetailsWindow.NoStackInstanceId, item, contentWidth);
+        preview.Configure(NoWorkshopPlayer.NoPlayerEntityId, ItemDetailsWindow.NoStackInstanceId, item, contentWidth);
 
     /// <summary>Item Details' own comparison colouring: each line better or worse than the other versions'.</summary>
     protected override void ShowComparedDefinition(ItemDetailsWindow preview, ItemDefinition item, float contentWidth, IReadOnlyList<ItemDefinition> comparedAgainst) =>
-        preview.Configure(Workspace.Session.World.PlayerEntityId, ItemDetailsWindow.NoStackInstanceId, item, contentWidth, comparedAgainst);
+        preview.Configure(NoWorkshopPlayer.NoPlayerEntityId, ItemDetailsWindow.NoStackInstanceId, item, contentWidth, comparedAgainst);
 
     /// <summary>A record standing in for one that doesn't decode: its own name and glyph when it has them as text.</summary>
-    public static string PlaceholderJsonOf(EditableContentRecord record) =>
-        new JsonObject
-        {
-            [ContentTable.IdKey] = ContentGuid.Format(record.Id),
-            [ItemNameKey] = record.Root[ItemNameKey] is JsonValue name && name.TryGetValue<string>(out var nameText) && nameText.Length > 0 ? nameText : $"Item {ContentGuid.Format(record.Id)}",
-            [GlyphKey] = record.Root[GlyphKey] is JsonValue glyph && glyph.TryGetValue<string>(out var glyphText) && glyphText.Length > 0 ? glyphText : NewItemGlyph,
-        }.ToJsonString();
+    public static string PlaceholderJsonOf(EditableContentRecord record) => ActivatablePlaceholder.JsonOf(record, "Item", withActivator: false);
 }

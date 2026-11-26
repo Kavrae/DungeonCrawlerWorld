@@ -22,6 +22,10 @@ namespace Game.Modules.Actions;
 /// every Core action (ActionCatalog.CoreActionIds), found last, so any grant of one wins over the catalog's
 /// definition. A view over pools with no state of
 /// its own -- construct one wherever it is needed.
+///
+/// Every Guid is taken as the action it resolves to (ActionCatalog.ResolveId): a disabled action's grant is a grant of
+/// its replacement, so an entity granted both is granted one action, listed once, with one cooldown, and a hotkey bound
+/// to the old Guid uses the replacement. Among grants that resolve to one action, one naming it directly wins.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class EntityActions(
@@ -74,7 +78,7 @@ public sealed class EntityActions(
         destination.Clear();
         for (var denseIndex = instances.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = instances.GetNextDenseIndex(denseIndex))
         {
-            AddOnce(destination, instances.GetReadonlyByDenseIndex(denseIndex).ActionId);
+            AddOnce(destination, Resolve(instances.GetReadonlyByDenseIndex(denseIndex).ActionId));
         }
 
         for (var denseIndex = appliedParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = appliedParts.GetNextDenseIndex(denseIndex))
@@ -83,7 +87,7 @@ public sealed class EntityActions(
             {
                 foreach (var grant in part.Actions)
                 {
-                    AddOnce(destination, grant.ActionId);
+                    AddOnce(destination, Resolve(grant.ActionId));
                 }
             }
         }
@@ -97,7 +101,7 @@ public sealed class EntityActions(
         {
             foreach (var grant in blueprint.Actions)
             {
-                AddOnce(destination, grant.ActionId);
+                AddOnce(destination, Resolve(grant.ActionId));
             }
         }
 
@@ -105,10 +109,13 @@ public sealed class EntityActions(
         {
             foreach (var coreActionId in actionCatalog.CoreActionIds)
             {
-                AddOnce(destination, coreActionId);
+                AddOnce(destination, Resolve(coreActionId));
             }
         }
     }
+
+    /// <summary>The action actionId stands for: itself, or the end of a disabled action's replacements.</summary>
+    private Guid Resolve(Guid actionId) => actionCatalog.ResolveId(actionId);
 
     /// <summary>Whether actionId is a Core action, which a crawler has whatever it was built from.</summary>
     public bool IsCore(Guid actionId) => actionCatalog.IsCore(actionId);
@@ -135,6 +142,7 @@ public sealed class EntityActions(
     /// <summary>Starts the entity's cooldown on actionId: usable again cooldownFrames frames after now.</summary>
     public void SetCooldown(int entityId, Guid actionId, ushort cooldownFrames, long now)
     {
+        actionId = Resolve(actionId);
         var readyAtFrame = FrameDeadline.After(now, cooldownFrames);
 
         using (var heldCooldown = cooldowns.TryWriteFirst(entityId, new CooldownMatcher(actionId)))
@@ -152,9 +160,9 @@ public sealed class EntityActions(
     /// <summary>Whether the entity has actionId, and the override that comes with it (null when there is none).</summary>
     private bool TryGetGrant(int entityId, Guid actionId, out ActionDefinition? overrideDefinition)
     {
-        if (instances.TryGetFirst(entityId, new InstanceMatcher(actionId), out var instance))
+        actionId = Resolve(actionId);
+        if (TryGetOwnGrant(entityId, actionId, out overrideDefinition))
         {
-            overrideDefinition = instance.Override;
             return true;
         }
 
@@ -169,13 +177,88 @@ public sealed class EntityActions(
             return false;
         }
 
-        if (creatures.TryResolve(record.BlueprintId, out var blueprint) && blueprint.TryGetAction(actionId, out var grant))
+        if (creatures.TryResolve(record.BlueprintId, out var blueprint) && TryFindGrant(blueprint.Actions, actionId, out var grant))
         {
             overrideDefinition = grant.ResolveOverride(actionCatalog);
             return true;
         }
 
-        return IsCrawler(record) && actionCatalog.IsCore(actionId);
+        return IsCrawler(record) && IsResolvedCore(actionId);
+    }
+
+    /// <summary>Whether the resolved actionId is a Core action or what one resolves to.</summary>
+    private bool IsResolvedCore(Guid actionId)
+    {
+        if (actionCatalog.IsCore(actionId))
+        {
+            return true;
+        }
+
+        if (!actionCatalog.HasRedirects)
+        {
+            return false;
+        }
+
+        foreach (var coreActionId in actionCatalog.CoreActionIds)
+        {
+            if (Resolve(coreActionId) == actionId)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The entity's own grant of the resolved actionId: one naming it, else one naming an action that resolves to it.</summary>
+    private bool TryGetOwnGrant(int entityId, Guid actionId, out ActionDefinition? overrideDefinition)
+    {
+        if (instances.TryGetFirst(entityId, new InstanceMatcher(actionId), out var instance))
+        {
+            overrideDefinition = instance.Override;
+            return true;
+        }
+
+        if (!actionCatalog.HasRedirects)
+        {
+            overrideDefinition = null;
+            return false;
+        }
+
+        for (var denseIndex = instances.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = instances.GetNextDenseIndex(denseIndex))
+        {
+            var held = instances.GetReadonlyByDenseIndex(denseIndex);
+            if (Resolve(held.ActionId) == actionId)
+            {
+                overrideDefinition = held.Override;
+                return true;
+            }
+        }
+
+        overrideDefinition = null;
+        return false;
+    }
+
+    /// <summary>The grant among grants of the resolved actionId: one naming it, else the first naming an action that resolves to it.</summary>
+    private bool TryFindGrant(IReadOnlyList<ActionGrant> grants, Guid actionId, out ActionGrant grant)
+    {
+        ActionGrant? redirected = null;
+        for (var index = 0; index < grants.Count; index++)
+        {
+            if (grants[index].ActionId == actionId)
+            {
+                grant = grants[index];
+                return true;
+            }
+
+            if (redirected is null && Resolve(grants[index].ActionId) == actionId)
+            {
+                redirected = grants[index];
+            }
+        }
+
+        grant = redirected!;
+        return redirected is not null;
     }
 
     /// <summary>Whether the entity was spawned as a crawler and still is one: the flag is cleared from a crawler built after the session's crawler numbers ran out.</summary>
@@ -199,14 +282,10 @@ public sealed class EntityActions(
                 continue;
             }
 
-            foreach (var grant in part.Actions)
+            if (TryFindGrant(part.Actions, actionId, out var grant))
             {
-                if (grant.ActionId == actionId)
-                {
-                    overrideDefinition = grant.ResolveOverride(actionCatalog);
-                    latestOrder = applied.Order;
-                    break;
-                }
+                overrideDefinition = grant.ResolveOverride(actionCatalog);
+                latestOrder = applied.Order;
             }
         }
 
@@ -215,7 +294,7 @@ public sealed class EntityActions(
 
     private bool TryGetCooldownDeadline(int entityId, Guid actionId, out uint readyAtFrame)
     {
-        if (cooldowns.TryGetFirst(entityId, new CooldownMatcher(actionId), out var cooldown))
+        if (cooldowns.TryGetFirst(entityId, new CooldownMatcher(Resolve(actionId)), out var cooldown))
         {
             readyAtFrame = cooldown.ReadyAtFrame;
             return true;

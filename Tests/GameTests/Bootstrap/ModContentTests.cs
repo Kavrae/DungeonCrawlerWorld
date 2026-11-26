@@ -84,6 +84,33 @@ public sealed class ModContentTests
     }
 
     [TestMethod]
+    public void AModsActions_AddASpellAndADodge_ReplaceHeal_AndAMasterScrollCastsTheModsHeal()
+    {
+        CopyModFolder("Mods.ExampleMod", "ExampleMod");
+
+        var validated = ModValidation.Validate(_modsDirectory, TestContent.Layers, []);
+        var session = BuildWithMods(validated);
+
+        Assert.IsEmpty(validated.Failures);
+        var actions = session.Catalogs.ActionCatalog;
+        var spark = actions.Get(ExampleSparkId);
+        Assert.AreEqual("Example Spark", spark.Name);
+        Assert.IsTrue(Game.Modules.Actions.Dodges.IsDodge(actions.Get(ExampleLongStepId)), "A dodge under its own Guid.");
+        var heal = actions.Get(Game.Modules.Actions.BuiltInActionIds.Heal);
+        Assert.AreEqual(0.25f, ((Game.Effects.Entries.DirectHeal)heal.Effects[0].Entries[0]).PercentOfMaxHealth);
+        Assert.IsTrue(session.Content.TryGetLocation(GameContent.ActionsTable, Game.Modules.Actions.BuiltInActionIds.Heal, out var location));
+        Assert.AreEqual("Mod ExampleMod", location.Layer.Name);
+
+        var items = session.Catalogs.ItemCatalog;
+        Assert.AreSame(heal, ((Game.Modules.Actions.Activators.ScrollActivator)items.Get(BuiltInItemIds.ScrollOfHealing).Activator!).Spell, "Master's Scroll of Healing casts the Heal the game loads: the mod's.");
+        Assert.AreSame(spark, ((Game.Modules.Actions.Activators.ScrollActivator)items.Get(ScrollOfExampleSparkId).Activator!).Spell);
+    }
+
+    private static readonly Guid ExampleSparkId = new("ebe307c4-8130-4405-aab0-56c94f8d1a48");
+    private static readonly Guid ExampleLongStepId = new("e1d469ef-58da-40d3-bb7f-7474af2064ef");
+    private static readonly Guid ScrollOfExampleSparkId = new("4821d424-9673-4d90-a6fe-2c056c3a11f9");
+
+    [TestMethod]
     public void AModWhoseRecordFails_IsDropped_NamingItsLayerFileAndLine_AndTheGameStillBuilds()
     {
         CopyModFolder("Mods.TestFixtures", "BrokenContentMod", "BrokenContentMod");

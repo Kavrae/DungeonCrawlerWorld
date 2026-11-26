@@ -26,6 +26,7 @@ public sealed class ContentChecks(GameplayTagRegistry gameplayTags, AuraCatalog 
             .. ContentTagValidation.ProblemsOf(gameplayTags, action, heldBy),
             .. ToggleContentValidation.ProblemsOf(action),
             .. TargetingContentValidation.ProblemsOf(action),
+            .. Dodges.ProblemsOf(action, heldBy),
             .. ReferenceProblemsOf(entries => EffectEntries.ForEach(action, entries), heldBy),
         ];
     }
@@ -39,6 +40,8 @@ public sealed class ContentChecks(GameplayTagRegistry gameplayTags, AuraCatalog 
             .. ToggleContentValidation.ProblemsOf(item),
             .. TargetingContentValidation.ProblemsOf(item),
             .. ItemCooldownContentValidation.ProblemsOf(item),
+            .. ScrollContentValidation.ProblemsOf(item),
+            .. Dodges.ProblemsOf(item, heldBy),
             .. ReferenceProblemsOf(entries => EffectEntries.ForEach(item, entries), heldBy),
         ];
     }

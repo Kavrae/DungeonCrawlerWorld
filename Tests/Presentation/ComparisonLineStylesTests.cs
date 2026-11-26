@@ -10,7 +10,7 @@ public sealed class ComparisonLineStylesTests
 {
     private static ComparisonLineStyles ComparedAgainst(params Guid[] actionIds)
     {
-        var styles = new ComparisonLineStyles(new ActionCatalog(), EffectTextNames.None);
+        var styles = new ComparisonLineStyles(EffectTextNames.None);
         foreach (var actionId in actionIds)
         {
             styles.Add(TestContent.Action(actionId), preview: null);
@@ -20,7 +20,7 @@ public sealed class ComparisonLineStylesTests
     }
 
     private static ItemComparisonStat LineOf(Guid actionId, string keyPrefix) =>
-        ItemComparisonStatExtraction.Extract(TestContent.Action(actionId), new ActionCatalog(), EffectTextNames.None).Single(stat => stat.Key.StartsWith(keyPrefix, StringComparison.Ordinal));
+        ItemComparisonStatExtraction.Extract(TestContent.Action(actionId), EffectTextNames.None).Single(stat => stat.Key.StartsWith(keyPrefix, StringComparison.Ordinal));
 
     [TestMethod]
     public void ACooldown_IsWorseThanNone_AndAShorterOneIsBetter()
@@ -55,7 +55,7 @@ public sealed class ComparisonLineStylesTests
     [TestMethod]
     public void ADelayedActionsLock_ReadsAsItsWindup_AndComparesOnlyWithWindups()
     {
-        var fireball = ItemComparisonStatExtraction.ExtractActivatorStats(TestContent.Action(BuiltInActionIds.Fireball).Activator, new ActionCatalog()).ToList();
+        var fireball = ItemComparisonStatExtraction.ExtractActivatorStats(TestContent.Action(BuiltInActionIds.Fireball).Activator).ToList();
 
         CollectionAssert.Contains(fireball.Select(stat => stat.DisplayText).ToList(), "Windup: 3s");
         Assert.IsFalse(fireball.Any(stat => stat.Key == "activator:actionLock"), "Its lock is its windup: nothing locks after it.");
@@ -67,8 +67,8 @@ public sealed class ComparisonLineStylesTests
         var dodge = TestContent.Action(BuiltInActionIds.Dodge).Activator;
         var preview = new Game.Views.ActivatablePreview(new Dictionary<Game.Effects.IEffectEntry, Game.Effects.EffectAmountPreview>(), dodge.Targeting, Range: null, AreaSize: null, ActionLockFrames: 30);
 
-        var advanced = ItemComparisonStatExtraction.ExtractActivatorStats(dodge, new ActionCatalog(), preview, DetailsMode.Advanced).Single(stat => stat.Key == "activator:cooldown");
-        var simple = ItemComparisonStatExtraction.ExtractActivatorStats(dodge, new ActionCatalog(), preview, DetailsMode.Simple).Single(stat => stat.Key == "activator:cooldown");
+        var advanced = ItemComparisonStatExtraction.ExtractActivatorStats(dodge, preview, DetailsMode.Advanced).Single(stat => stat.Key == "activator:cooldown");
+        var simple = ItemComparisonStatExtraction.ExtractActivatorStats(dodge, preview, DetailsMode.Simple).Single(stat => stat.Key == "activator:cooldown");
 
         Assert.AreEqual("Cooldown: 0.5s", advanced.DisplayText);
         Assert.AreEqual(30.0, advanced.ComparableValue);

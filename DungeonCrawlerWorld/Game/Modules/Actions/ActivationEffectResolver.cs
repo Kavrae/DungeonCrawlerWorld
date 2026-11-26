@@ -1,6 +1,7 @@
 using Game.Effects;
 using Engine.ECS.Components.Stores;
 using Engine.Math;
+using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
 using Game.Modules.ProcessingTier;
 using Game.Tags;
@@ -79,7 +80,7 @@ public static class ActivationEffectResolver
 
     /// <summary>Applies definition's use by sourceEntityId where resolved landed.</summary>
     /// <param name="reachedScratch">Cleared and used to reach each entity once; the caller's, so nothing is allocated per use.</param>
-    /// <param name="durationScaleMultiplier">Scales every duration the effects carry; only a scroll sets it away from 1.</param>
+    /// <remarks>A spell's durations scale by its caster's Intelligence (SpellScalingEffects), cast or read from a scroll alike.</remarks>
     public static void Apply<TTargetRule>(
         ActivatableDefinition definition,
         ActivatableKind kind,
@@ -92,12 +93,12 @@ public static class ActivationEffectResolver
         PackedComponentPool<DodgingComponent> dodgingEntities,
         ProcessingTierQuery processingTiers,
         HashSet<int> reachedScratch,
-        ref TTargetRule targetRule,
-        float durationScaleMultiplier = 1.0f)
+        ref TTargetRule targetRule)
         where TTargetRule : struct, IActivationTargetRule
     {
         effectServices.EventBus.Publish(new ActivationUsedEvent(sourceEntityId, kind, definition.Id, definition.Tags));
 
+        var durationScaleMultiplier = SpellScalingEffects.MultiplierFor(effectServices.AbilityScores, sourceEntityId, definition.ActivatorOrNone);
         var walk = new Walk<TTargetRule>(
             definition,
             EffectContext.FromEntity(effectServices, sourceEntityId, targetEntityId: sourceEntityId, definition, now, durationScaleMultiplier),

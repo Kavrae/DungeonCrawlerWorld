@@ -152,7 +152,7 @@ public sealed class ContentByIdLoadingTests
 
         var failure = Assert.ContainsSingle(pass.Context.ContentFailures);
         Assert.AreEqual(save.Name, failure.Layer);
-        StringAssert.Contains(failure.Reason, "is a toggle but is not Self-targeted");
+        StringAssert.Contains(failure.Reason, "its shape must be Self alone");
     }
 
     [TestMethod]

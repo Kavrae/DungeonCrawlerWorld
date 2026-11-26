@@ -15,10 +15,11 @@ namespace Game.Modules.Actions;
 /// </summary>
 public static class ActionGrantEffects
 {
-    /// <remarks>A new grant is always ready to use -- its cooldown deadline starts at 0 (see ActionInstanceComponent.CooldownReadyAtFrame).</remarks>
+    /// <remarks>A new grant is always ready to use -- its cooldown deadline starts at 0 (see ActionInstanceComponent.CooldownReadyAtFrame). A disabled action is granted as its replacement (ActionCatalog.ResolveId), so granting both is one grant.</remarks>
     /// <param name="actions">Where an action with no override is read from.</param>
     public static void Grant(ComponentManager componentManager, ActionCatalog actions, int entityId, Guid actionId, ActionDefinition? overrideDefinition)
     {
+        actionId = actions.ResolveId(actionId);
         componentManager.Merge(entityId, new ActionInstanceComponent(actionId, overrideDefinition));
 
         if ((overrideDefinition ?? (actions.TryGet(actionId, out var definition) ? definition : null)) is { } action && ManaUse.DrainsUsersMana(action))

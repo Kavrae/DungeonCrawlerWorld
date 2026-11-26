@@ -151,6 +151,8 @@ public static class GameBuildPass
         ToggleContentValidation.EnsureValid(context);
         TargetingContentValidation.EnsureValid(context);
         ItemCooldownContentValidation.EnsureValid(context);
+        ScrollContentValidation.EnsureValid(context);
+        Dodges.EnsureValid(context);
         TerrainReferenceValidation.EnsureRegistered(context);
         StatusEffectContentValidation.EnsureValid(context);
         AreaContentValidation.EnsureValid(context);

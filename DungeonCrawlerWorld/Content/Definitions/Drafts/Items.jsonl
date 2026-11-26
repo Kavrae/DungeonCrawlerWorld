@@ -1,2 +1,0 @@
-{"fmt":1,"table":"Items"}
-{"id":"4sek8Z07b06KLAAAAAAAQQ","n":"Draught of Plenty  ","sp":"HealthPotion","g":"1","gc":4293760356,"t":["Targeting.Self"],"fx":[{"e":[{"$":"StatModifierGrant","tg":"IncomingManaRestore","op":"Multiplicative","pol":"Buff","m":1,"d":7200}]}],"ac":{"$":"Potion","tg":{"sh":"Circle","r":3,"a":1,"ta":"MarkedOnly"},"tm":{}},"gv":5,"d":"A test draught: mana restored to you is doubled for two minutes.","su":"Doubles mana restored to you for 2 minutes."}

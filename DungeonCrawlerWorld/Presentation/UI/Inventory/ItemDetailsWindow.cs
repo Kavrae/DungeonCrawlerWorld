@@ -53,7 +53,6 @@ namespace Presentation.UI.Inventory;
 /// </summary>
 public sealed class ItemDetailsWindow(
     ElementServices services,
-    ActionCatalog actionCatalog,
     EffectTextNames names,
     ActionStateView actionStateView,
     ActivationPreviews activationPreviews,
@@ -65,12 +64,12 @@ public sealed class ItemDetailsWindow(
 
     private static readonly Color BodyTextColor = ActivatableDetailsSections.BodyTextColor;
 
-    private readonly ActivatableDetailsSections _sections = new(services.ElementPoolService, services.FontService, actionCatalog, names);
+    private readonly ActivatableDetailsSections _sections = new(services.ElementPoolService, services.FontService, names);
 
     private ItemDefinition? _definition;
     private float _contentWidth;
     private IReadOnlyList<ItemDefinition> _comparedAgainst = [];
-    private readonly ComparisonLineStyles _comparisonStyles = new(actionCatalog, names);
+    private readonly ComparisonLineStyles _comparisonStyles = new(names);
     private bool _childrenReady;
     private int _currentEntityId;
     private uint _currentStackInstanceId;

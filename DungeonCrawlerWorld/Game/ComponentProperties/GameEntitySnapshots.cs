@@ -392,7 +392,7 @@ public sealed class GameEntitySnapshots(GameModuleContext context, World.World w
         }
     }
 
-    /// <summary>The auras a restored definition names: the session's own, else its content's, registered as they load.</summary>
+    /// <summary>The auras a restored definition names, the session's own, else its content's, registered as they load; and a scroll's spell, the session's.</summary>
     private sealed class SessionReferences(GameModuleContext context) : IContentReferences
     {
         public bool TryResolve<TValue>(Guid id, out TValue value)
@@ -412,6 +412,12 @@ public sealed class GameEntitySnapshots(GameModuleContext context, World.World w
                     value = (TValue)(object)aura;
                     return true;
                 }
+            }
+
+            if (typeof(TValue) == typeof(ActionDefinition) && context.Actions.TryGet(id, out var action))
+            {
+                value = (TValue)(object)action;
+                return true;
             }
 
             value = null!;

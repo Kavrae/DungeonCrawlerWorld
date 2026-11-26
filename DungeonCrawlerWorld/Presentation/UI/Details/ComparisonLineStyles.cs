@@ -10,7 +10,7 @@ namespace Presentation.UI.Details;
 /// Fill it with every compared definition (Add, each as the player would use it), then ask Resolve per line and
 /// ShapeHighlight per shape preview. Empty, every line keeps its own style and no tile is highlighted.
 /// </remarks>
-public sealed class ComparisonLineStyles(ActionCatalog actionCatalog, EffectTextNames names)
+public sealed class ComparisonLineStyles(EffectTextNames names)
 {
     private static readonly Color BodyTextColor = ActivatableDetailsSections.BodyTextColor;
 
@@ -36,7 +36,7 @@ public sealed class ComparisonLineStyles(ActionCatalog actionCatalog, EffectText
     /// <summary>Compares against definition, as preview says the player would use it (null: its own values).</summary>
     public void Add(ActivatableDefinition definition, ActivatablePreview? preview)
     {
-        _comparedStats.Add(ItemComparisonStatExtraction.Extract(definition, actionCatalog, names, preview));
+        _comparedStats.Add(ItemComparisonStatExtraction.Extract(definition, names, preview));
         _comparedTargeting.Add(preview?.Targeting ?? definition.ActivatorOrNone?.Targeting);
     }
 

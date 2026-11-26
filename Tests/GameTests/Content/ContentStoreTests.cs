@@ -253,7 +253,7 @@ public sealed class ContentStoreTests
         save.Writer.Flush();
 
         Assert.AreEqual(ContentStoreOutcome.SavedAsDraft, draft.Outcome);
-        StringAssert.Contains(draft.Problems.Single(), "is a toggle but is not Self-targeted");
+        StringAssert.Contains(draft.Problems.Single(), "its shape must be Self alone");
         Assert.IsFalse(session.Catalogs.ActionCatalog.TryGet(draft.Id, out _));
         Assert.IsFalse(session.Catalogs.ActionCatalog.TryGet(actions.DerivedIdOf(IncompleteToggle()), out _));
         Assert.AreEqual(draft.Id, savedAgain.Id);

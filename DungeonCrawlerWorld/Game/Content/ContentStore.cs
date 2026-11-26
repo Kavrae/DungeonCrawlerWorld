@@ -34,7 +34,7 @@ public sealed class ContentStore
         var lowerLayers = new ContentLayers([.. content.Layers.Layers.Where(layer => layer.Kind is ContentLayerKind.Master or ContentLayerKind.Mod)]);
         _lowerContent = new Lazy<GameContent>(() => GameContent.OpenCollectingFailures(lowerLayers, types));
         Checks = new ContentChecks(context.GameplayTags, context.Auras, context.Terrain, context.StatusEffectAppliers);
-        var references = new CatalogAuraReferences(context.Auras, content);
+        var references = new CatalogReferences(context.Auras, context.Actions, content);
 
         var actionCatalog = context.Actions;
         Actions = new ContentStoreTable<ActionDefinition>(
@@ -116,8 +116,8 @@ public sealed class ContentStore
         return false;
     }
 
-    /// <summary>A draft's auras, resolved by Guid against the session's catalog, else its content (an aura nothing loaded yet).</summary>
-    private sealed class CatalogAuraReferences(AuraCatalog auras, GameContent content) : IContentReferences
+    /// <summary>A draft's auras and a scroll's spell, resolved by Guid against the session's catalogs (a crafted spell included), else its content (an aura nothing loaded yet).</summary>
+    private sealed class CatalogReferences(AuraCatalog auras, ActionCatalog actions, GameContent content) : IContentReferences
     {
         public bool TryResolve<T>(Guid id, out T value)
             where T : class
@@ -125,6 +125,12 @@ public sealed class ContentStore
             if (typeof(T) == typeof(AuraDefinition) && (TryGetAura(auras, id, out var aura) || content.TryLoadAura(id, out aura)))
             {
                 value = (T)(object)aura;
+                return true;
+            }
+
+            if (typeof(T) == typeof(ActionDefinition) && actions.TryGet(id, out var action))
+            {
+                value = (T)(object)action;
                 return true;
             }
 

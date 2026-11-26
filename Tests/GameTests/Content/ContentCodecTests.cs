@@ -18,7 +18,7 @@ public sealed class ContentCodecTests
 
     private static ContentTypeRegistry Types => Build.Value.Context.ContentTypes;
 
-    private sealed class AuraReferences(IEnumerable<AuraDefinition> auras) : IContentReferences
+    private sealed class SessionReferences(IEnumerable<AuraDefinition> auras, ActionCatalog actions) : IContentReferences
     {
         private readonly Dictionary<Guid, AuraDefinition> _aurasById = auras.ToDictionary(aura => aura.Id);
 
@@ -28,6 +28,12 @@ public sealed class ContentCodecTests
             if (typeof(T) == typeof(AuraDefinition) && _aurasById.TryGetValue(id, out var aura))
             {
                 value = (T)(object)aura;
+                return true;
+            }
+
+            if (typeof(T) == typeof(ActionDefinition) && actions.TryGet(id, out var action))
+            {
+                value = (T)(object)action;
                 return true;
             }
 
@@ -42,7 +48,7 @@ public sealed class ContentCodecTests
         return [.. Enumerable.Range(0, auras.Count).Select(auraId => auras.Get((byte)auraId))];
     }
 
-    private static IContentReferences References { get; } = new AuraReferences(AllAuras());
+    private static IContentReferences References { get; } = new SessionReferences(AllAuras(), Build.Value.Context.Actions);
 
     private static T ReadBack<T>(byte[] bytes)
         where T : notnull

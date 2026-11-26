@@ -24,14 +24,14 @@ public static class ItemComparisonStatExtraction
 {
     /// <summary>Every line a comparison compares, in simple mode -- the mode comparison always shows -- for an item or an action.</summary>
     /// <param name="preview">The item or action as the player would use it (Game.Views.ActivationPreviews); null shows its own values.</param>
-    public static IReadOnlyList<ItemComparisonStat> Extract(ActivatableDefinition definition, ActionCatalog actionCatalog, EffectTextNames names, ActivatablePreview? preview = null)
+    public static IReadOnlyList<ItemComparisonStat> Extract(ActivatableDefinition definition, EffectTextNames names, ActivatablePreview? preview = null)
     {
         var stats = new List<ItemComparisonStat>(ExtractEffectStats(definition, names, DetailsMode.Simple, preview));
         stats.AddRange(ExtractCostStats(definition, names, preview));
 
         if (definition.ActivatorOrNone is { } activator)
         {
-            stats.AddRange(ExtractActivatorStats(activator, actionCatalog, preview, DetailsMode.Simple, names));
+            stats.AddRange(ExtractActivatorStats(activator, preview, DetailsMode.Simple, names));
             stats.AddRange(ExtractResourceStats(activator));
         }
 
@@ -204,7 +204,7 @@ public static class ItemComparisonStatExtraction
     /// change and breakdown of a scaled range or area.
     /// </param>
     /// <param name="showsTargeting">False for a toggle: what it reaches is its aura's (BuildAuraSection), not its activator's self-targeting, so no Shape, Range or Area Size line.</param>
-    public static IReadOnlyList<ItemComparisonStat> ExtractActivatorStats(IActionActivator activator, ActionCatalog actionCatalog, ActivatablePreview? preview = null, DetailsMode mode = DetailsMode.Advanced, EffectTextNames? names = null, bool showsTargeting = true)
+    public static IReadOnlyList<ItemComparisonStat> ExtractActivatorStats(IActionActivator activator, ActivatablePreview? preview = null, DetailsMode mode = DetailsMode.Advanced, EffectTextNames? names = null, bool showsTargeting = true)
     {
         var stats = new List<ItemComparisonStat>();
         var category = activator.Timing.Category;
@@ -259,10 +259,7 @@ public static class ItemComparisonStatExtraction
         switch (activator)
         {
             case ScrollActivator scroll:
-                if (actionCatalog.TryGet(scroll.SpellId, out var spell))
-                {
-                    stats.Add(new ItemComparisonStat("activator:casts", $"Casts: {spell.Name}", null, HigherIsBetter: true));
-                }
+                stats.Add(new ItemComparisonStat("activator:casts", $"Casts: {scroll.Spell.Name}", null, HigherIsBetter: true));
                 break;
 
         }

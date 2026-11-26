@@ -24,7 +24,7 @@ namespace Presentation.UI.Details;
 /// Lines that Item Details Comparison colours take their colour from the caller; a window that compares nothing passes
 /// BodyTextColor.
 /// </remarks>
-public sealed class ActivatableDetailsSections(ElementPoolService elementPoolService, FontService fontService, ActionCatalog actionCatalog, EffectTextNames names)
+public sealed class ActivatableDetailsSections(ElementPoolService elementPoolService, FontService fontService, EffectTextNames names)
 {
     public const float IconSize = 32f;
     public const float RowHeight = 18f;
@@ -33,8 +33,8 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
     /// <summary>A wrapping text line's height cap: taller than any screen, so a long line grows with its column, which scrolls, rather than stopping at the screen's height (an element's default cap).</summary>
     public const float MaximumTextRowHeight = 10000f;
 
-    /// <summary>Soft per-widget height cap for the target shape preview grid -- independent of the window's own overall MaximumSize/scroll safety net, so one large-AreaSize Circle can't single-handedly blow out the window's height; TargetShapePreviewGeometry.ComputeCellSize shrinks cells to fit within this instead.</summary>
-    private const float TargetShapePreviewMaxHeight = 160f;
+    /// <summary>Soft per-widget height cap for the target shape preview grid -- independent of the window's own overall MaximumSize/scroll safety net, so a long range or a large-AreaSize Circle can't single-handedly blow out the window's height (the one-screen rule); TargetShapePreviewGeometry.ComputeCellSize shrinks cells to fit within this instead. The aura reach's cap, so the two grids read at one size.</summary>
+    private const float TargetShapePreviewMaxHeight = AuraReachPreviewMaxHeight;
 
     /// <summary>Height cap for an aura's reach diamond, kept small so an aura section adds little height (the one-screen rule).</summary>
     private const float AuraReachPreviewMaxHeight = 96f;
@@ -43,6 +43,9 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
     private const float ReachMinimumShade = 0.15f;
 
     private const float ReachMaximumShade = 0.75f;
+
+    /// <summary>An activation preview's cell it can be aimed at but doesn't land on: the cell colour, halfway to the panel behind it.</summary>
+    private static readonly Color ReachOnlyCellFill = Color.Lerp(WindowPalette.PanelContentColor, WindowPalette.PanelBackgroundColor, 0.5f);
 
     private const string AuraSwatchGlyph = "●";
 
@@ -84,9 +87,9 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
 
         AddIcon(row, spriteName, glyph, glyphColor, rowContentHeight);
 
-        // The row's own content width is width - ContentPadding*2, not the outer width -- width is a hard
-        // constraint, so the text shrinks to fit instead.
-        var availableWidth = width - host.ContentPadding.X * 2;
+        // A row has no side padding (CreateRowWindow), so its content is the whole width -- a hard constraint, so the
+        // text shrinks to fit instead.
+        var availableWidth = width;
         var textX = IconSize + RowTextGap;
         var nameLine = elementPoolService.CreateElement<TextWindow>(row, new ElementOptions
         {
@@ -120,7 +123,7 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
 
         var row = BuildNameRow(host, spriteName, glyph, glyphColor, name, width, reservedRightWidth: buttonsWidth);
 
-        var buttonX = width - host.ContentPadding.X * 2;
+        var buttonX = width;
         for (var index = buttons.Count - 1; index >= 0; index--)
         {
             buttonX -= buttonWidths[index];
@@ -151,7 +154,7 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
         AddIcon(row, spriteName, glyph, glyphColor, rowContentHeight);
 
         var textX = IconSize + RowTextGap;
-        var availableWidth = width - host.ContentPadding.X * 2;
+        var availableWidth = width;
         var line = elementPoolService.CreateElement<TextWindow>(row, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
@@ -274,7 +277,7 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
     /// <summary>lines in a column on the left, and the aura's reach to their right: a diamond of size, each cell shaded by the aura's strength there.</summary>
     private void BuildLinesBesideReach(Window host, float width, IReadOnlyList<(ItemComparisonStat Stat, LineStyle Style)> lines, AuraDefinition aura, int power, int size)
     {
-        var availableWidth = width - host.ContentPadding.X * 2;
+        var availableWidth = width;
         var offsets = TargetShapePreviewGeometry.ComputeDiamondOffsets(size);
         var (minX, minY, columns, rows) = TargetShapePreviewGeometry.ComputeBounds(offsets);
         var cellSize = TargetShapePreviewGeometry.ComputeCellSize(columns, rows, availableWidth / TargetingRowZoneCount, AuraReachPreviewMaxHeight);
@@ -334,7 +337,9 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
     /// <summary>
     /// "Activation", then three equal-width zones: the targeting shape/range caption plus every Timing/per-activator-type
     /// line, stacked in the left zone; the target shape preview grid (see TargetShapePreviewGeometry/
-    /// TargetShapePreviewElement) centered within the middle zone; the right zone left empty for now. Vertically centered
+    /// TargetShapePreviewElement) centered within the middle zone -- every tile it can be aimed at dimmed
+    /// (ComputeReach), and the tiles it lands on aimed at the edge of that range in full (ComputeOffsets); the right zone
+    /// left empty for now. Vertically centered
     /// against the taller of the text column/grid. Both are sized entirely up front, before the row is created, so none
     /// of it risks the Fixed-vs-WrapContent shrink-feedback pitfall the window itself hit earlier.
     /// </summary>
@@ -344,7 +349,7 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
     /// <param name="isToggle">A toggle's reach is its aura's (BuildAuraSection), so it gets no grid and no Shape, Range or Area Size line; with nothing else to show, no section at all.</param>
     public void BuildActivationSection(Window host, IActionActivator activator, DetailsMode mode, float width, Func<ItemComparisonStat, LineStyle> lineStyle, Func<TargetingSpec, IReadOnlyList<Point>, IReadOnlySet<Point>?>? shapeHighlight = null, ActivatablePreview? preview = null, bool isToggle = false)
     {
-        var stats = ItemComparisonStatExtraction.ExtractActivatorStats(activator, actionCatalog, preview, mode, names, showsTargeting: !isToggle);
+        var stats = ItemComparisonStatExtraction.ExtractActivatorStats(activator, preview, mode, names, showsTargeting: !isToggle);
         if (isToggle)
         {
             if (stats.Count > 0)
@@ -362,13 +367,21 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
         BuildDivider(host, width, "Activation", 0.125f);
         var targeting = preview?.Targeting ?? activator.Targeting;
 
-        // The row's own content width is width - ContentPadding*2 (width is a hard constraint, matching every other
-        // top-level row), so the three zones divide that, not the outer width.
-        var availableWidth = width - host.ContentPadding.X * 2;
-        var zoneWidth = availableWidth / TargetingRowZoneCount;
+        // A row has no side padding (CreateRowWindow), so the three zones divide its whole width.
+        var zoneWidth = width / TargetingRowZoneCount;
 
         var offsets = TargetShapePreviewGeometry.ComputeOffsets(targeting);
-        var (minX, minY, columns, rows) = TargetShapePreviewGeometry.ComputeBounds(offsets);
+        var shapeCells = new HashSet<Point>(offsets);
+        var cells = new List<Point>(offsets);
+        foreach (var reachable in TargetShapePreviewGeometry.ComputeReach(targeting))
+        {
+            if (shapeCells.Add(reachable))
+            {
+                cells.Add(reachable);
+            }
+        }
+
+        var (minX, minY, columns, rows) = TargetShapePreviewGeometry.ComputeBounds(cells);
         var cellSize = TargetShapePreviewGeometry.ComputeCellSize(columns, rows, zoneWidth, TargetShapePreviewMaxHeight);
         var gridWidth = columns * cellSize;
         var gridHeight = rows * cellSize;
@@ -393,7 +406,8 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
-        shapePreview.Configure(offsets, minX, minY, cellSize, shapeHighlight?.Invoke(targeting, offsets));
+        var landsOn = new HashSet<Point>(offsets);
+        shapePreview.Configure(cells, minX, minY, cellSize, shapeHighlight?.Invoke(targeting, offsets), cellFill: cell => landsOn.Contains(cell) ? WindowPalette.PanelContentColor : ReachOnlyCellFill);
         row.AddChild(shapePreview);
     }
 
@@ -549,6 +563,7 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
         return string.Join('\n', lines);
     }
 
+    /// <summary>A row of width, the host's own vertical padding above and below its content and none at its sides, so everything in it starts at the host's left edge as a line added straight to the host does.</summary>
     private Window CreateRowWindow(Window host, float width, float rowHeight)
     {
         var row = elementPoolService.CreateElement<Window>(host, new ElementOptions
@@ -558,6 +573,7 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
+        row.ContentPadding = new Vector2(0f, host.ContentPadding.Y);
         host.AddChild(row);
         return row;
     }

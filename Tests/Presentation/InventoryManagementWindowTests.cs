@@ -287,7 +287,7 @@ public sealed class InventoryManagementWindowTests
     public void MergedStackCell_IsGreyedWhileEveryStackInItIsBlocked_AndAnItemNeverUsedIsNot()
     {
         var (window, componentManager, firstItemId, secondItemId, _) = Build(playerEntityId: EntityId);
-        var scrollActivator = new ScrollActivator(new TargetingSpec(TargetShape.Circle, MaximumRange: 5, AreaSize: 3), new ActionTiming(ActionTimingCategory.Immediate), Guid.NewGuid());
+        var scrollActivator = TestActivatables.Scroll(new TargetingSpec(TargetShape.Circle, MaximumRange: 5, AreaSize: 3));
         var scrollDefinition = new ItemDefinition(secondItemId, "Scroll B", null, "b", Color.White, Tags: [GameTags.ItemConsumableScroll], Effects: [], Activator: scrollActivator);
         InventoryActions.AddDivergentItem(componentManager, EntityId, scrollDefinition with { Description = "batch 1" });
         InventoryActions.AddDivergentItem(componentManager, EntityId, scrollDefinition with { Description = "batch 2" });

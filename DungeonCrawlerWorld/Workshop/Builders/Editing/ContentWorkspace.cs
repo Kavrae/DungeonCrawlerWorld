@@ -4,6 +4,7 @@ using Builders.References;
 using Engine.Content;
 using Game.Bootstrap;
 using Game.Content;
+using Game.Modules.Actions;
 using Game.Modules.Auras;
 using Workshop;
 using Workshop.Editing;
@@ -38,10 +39,12 @@ namespace Builders.Editing;
 /// </remarks>
 public sealed class ContentWorkspace(GameSession session, ContentSaving? saving = null) : IContentReferenceLookup, IContentReferences
 {
+    /// <summary>How many replacements a lookup follows from a disabled record before giving up: past any real chain, so a cycle (which the table already flags at its field) ends.</summary>
+    private const int MaximumReplacementHops = 64;
+
     private readonly List<IContentEditingTable> _tables = [];
     private ContentReferenceIndex? _references;
     private ContentOrigins? _origins;
-    private IReadOnlyList<ContentAppearance>? _sessionActionAppearances;
     private Task<GameSession>? _rebuild;
     private bool _isRebuildPending;
 
@@ -110,7 +113,7 @@ public sealed class ContentWorkspace(GameSession session, ContentSaving? saving 
         Log.SealMerging();
     }
 
-    /// <summary>How every record looks, in every table held and in the session's actions while no table holds them -- what a record's look is compared with.</summary>
+    /// <summary>How every record looks, in every table held -- what a record's look is compared with.</summary>
     public IEnumerable<ContentAppearance> AllAppearances()
     {
         foreach (var table in _tables)
@@ -120,13 +123,15 @@ public sealed class ContentWorkspace(GameSession session, ContentSaving? saving 
                 yield return appearance;
             }
         }
+    }
 
-        if (TableNamed(GameContent.ActionsTable) is null)
+    /// <summary>Evaluates again every held record, in every table, that names tableName's id -- one step out, so a scroll shows its spell as just edited.</summary>
+    public void ReevaluateRecordsNaming(string tableName, Guid id)
+    {
+        var namedTable = TableNamed(tableName);
+        foreach (var table in _tables)
         {
-            foreach (var appearance in _sessionActionAppearances ??= [.. Session.Catalogs.ActionCatalog.Definitions.Select(ActivatableAppearance.Of)])
-            {
-                yield return appearance;
-            }
+            table.ReevaluateRecordsNaming(tableName, id, namedTable);
         }
     }
 
@@ -512,7 +517,6 @@ public sealed class ContentWorkspace(GameSession session, ContentSaving? saving 
         Session = rebuilt;
         _references = null;
         _origins = null;
-        _sessionActionAppearances = null;
         SessionVersion++;
         foreach (var table in _tables)
         {
@@ -572,13 +576,18 @@ public sealed class ContentWorkspace(GameSession session, ContentSaving? saving 
         return SessionContentTables.Named(tableName) is { } sessionTable && sessionTable.NameOf(Session, id) is not null;
     }
 
-    /// <summary>The definition id stands for: a held record's as it last decoded, else (an aura) the session's content.</summary>
+    /// <summary>The definition id stands for: a held record's as it last decoded -- a disabled one's replacement, as the game resolves it -- else (an aura, or a scroll's spell) the session's content.</summary>
     public bool TryResolve<T>(Guid id, out T value)
         where T : class
     {
         foreach (var table in _tables)
         {
-            if (table.ValueType == typeof(T) && table.DefinitionOf(id) is T held)
+            if (table.ValueType != typeof(T))
+            {
+                continue;
+            }
+
+            if (table.DefinitionOf(FollowReplacements(table, id)) is T held)
             {
                 value = held;
                 return true;
@@ -591,7 +600,53 @@ public sealed class ContentWorkspace(GameSession session, ContentSaving? saving 
             return true;
         }
 
+        if (typeof(T) == typeof(ActionDefinition) && Session.Content.TryLoadAction(id, out var action))
+        {
+            value = (T)(object)action;
+            return true;
+        }
+
         value = null!;
         return false;
+    }
+
+    /// <summary>Whether naming named in table reaches id: named is id, or a held record on named's chain of replacements is -- so a scroll naming a disabled spell is re-evaluated when its replacement changes.</summary>
+    /// <param name="table">The held table named and id are in; null when it isn't held, so only named itself reaches.</param>
+    public static bool NameReaches(IContentEditingTable? table, Guid named, Guid id)
+    {
+        if (named == id)
+        {
+            return true;
+        }
+
+        if (table is null)
+        {
+            return false;
+        }
+
+        var current = named;
+        for (var hops = 0; hops < MaximumReplacementHops && table.IsDisabled(current) && table.ReplacementOf(current) is { } replacement; hops++)
+        {
+            if (replacement == id)
+            {
+                return true;
+            }
+
+            current = replacement;
+        }
+
+        return false;
+    }
+
+    /// <summary>What id stands for in table: itself, or the end of a disabled record's replacements.</summary>
+    private static Guid FollowReplacements(IContentEditingTable table, Guid id)
+    {
+        var resolved = id;
+        for (var hops = 0; hops < MaximumReplacementHops && table.IsDisabled(resolved) && table.ReplacementOf(resolved) is { } replacement; hops++)
+        {
+            resolved = replacement;
+        }
+
+        return resolved;
     }
 }

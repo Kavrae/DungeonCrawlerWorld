@@ -78,7 +78,7 @@ public static class ElementFactoryRegistry
         elementPool.RegisterFactory(() => new InventoryItemStackCell(services, sprites));
         elementPool.RegisterFactory(() => new HotbarSlotElement(services));
         elementPool.RegisterFactory(() => new ActionsWindow(services, new ActionsWindowServices(views.ActionStateView, views.HotkeyBindingView, views.EntityActions, menuCommands, catalogs.GameplayTags, gameSession.SimulationClock, actionTargetingController, mapViewState, contextMenuController, actionHoverDetails, gridViews.Actions)));
-        elementPool.RegisterFactory(() => new ActionDetailsWindow(services, actionCatalog, EffectTextNames.Of(catalogs, views.ActionSourceNaming), views.ActivationPreviews, new ActionDetailsUser(views.ActionStateView, world)));
+        elementPool.RegisterFactory(() => new ActionDetailsWindow(services, EffectTextNames.Of(catalogs, views.ActionSourceNaming), views.ActivationPreviews, new ActionDetailsUser(views.ActionStateView, world)));
         elementPool.RegisterFactory(() => new ActionCell(services, sprites));
         elementPool.RegisterFactory(() => new ShopItemStackCell(services, sprites));
         elementPool.RegisterFactory(() => new TradeItemStackCell(services, sprites));
@@ -104,7 +104,7 @@ public static class ElementFactoryRegistry
         elementPool.RegisterFactory(() => new FootprintIconElement(services));
 
         elementPool.RegisterFactory(() => new InspectionWindow(services));
-        elementPool.RegisterFactory(() => new ItemDetailsWindow(services, actionCatalog, EffectTextNames.Of(catalogs, views.ActionSourceNaming), views.ActionStateView, views.ActivationPreviews, world));
+        elementPool.RegisterFactory(() => new ItemDetailsWindow(services, EffectTextNames.Of(catalogs, views.ActionSourceNaming), views.ActionStateView, views.ActivationPreviews, world));
         elementPool.RegisterFactory(() => new CurrencyElement(services, sprites));
         elementPool.RegisterFactory(() => new TargetShapePreviewElement(services));
     }

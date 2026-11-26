@@ -16,8 +16,8 @@ public enum ValueContributionKind : byte
     /// <summary>An aura's strength where it lands, multiplying the amounts an aura's effects carry (EffectContext.Magnitude).</summary>
     Strength,
 
-    /// <summary>A scroll's Intelligence multiplier on its range, area and durations (ScrollScalingEffects).</summary>
-    ScrollIntelligence,
+    /// <summary>A spell's Intelligence multiplier on its range, area and durations, cast or read from a scroll (SpellScalingEffects).</summary>
+    SpellIntelligence,
 }
 
 /// <summary>One step between a value's base and its value as used.</summary>

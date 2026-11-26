@@ -1,36 +1,29 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
-using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Inventory;
-using Game.Tags;
 using Game.World;
 
 namespace Game.Modules.Actions;
 
 /// <summary>
-/// Records one scroll activation toward mastering ScrollActivator.SpellId, and -- once
-/// MasteryThreshold is reached -- permanently teaches that spell. Looks the spell up in
-/// ActionCatalog first (an already-authored spell, e.g. Heal); if none is registered under
-/// spellId yet, synthesizes a fresh ActionDefinition at runtime from the scroll's own
-/// ItemDefinition (name/glyph/tags/effects/targeting/timing, wrapped in a SpellActivator) and
-/// registers it, so nobody has to hand-author a matching spell for every scroll up front -- this
-/// only pays off for scrolls actually mastered, which is rare by design (see MasteryThreshold).
-/// Fires the spell grant itself (not a separate achievement reward) -- mastering Scroll-of-A and
-/// Scroll-of-B are two independent, repeatable crossings, each keyed by its own SpellId.
+/// Records one scroll activation toward mastering the spell it casts (ScrollActivator.Spell), and -- once
+/// MasteryThreshold is reached -- permanently teaches that spell, the same definition the scroll cast: every
+/// scroll binds a spell that exists, so nothing is made up here. Fires the spell grant itself (not a separate
+/// achievement reward) -- mastering Scroll-of-A and Scroll-of-B are two independent, repeatable crossings, each
+/// keyed by its own spell.
 /// </summary>
 public static class ScrollMasteryEffects
 {
     /// <summary>
     /// Flat for every scroll today. TODO: scale with the power of the spell/effect being taught
     /// (a cheap effect shouldn't take as long to master as a strong one) -- blocked on Action
-    /// Effects having some form of power-scaling concept, which doesn't exist yet. The
-    /// synthesized spell costing nothing (see SynthesizeSpellFromScroll below) has the same dependency.
+    /// Effects having some form of power-scaling concept, which doesn't exist yet.
     /// </summary>
     public const int MasteryThreshold = 200;
 
-    public static void RecordUsage(ComponentManager componentManager, EventBus eventBus, ActionCatalog actionCatalog, ItemDefinition scroll, int entityId, Guid spellId)
+    /// <param name="spellId">The spell the scroll cast (ScrollActivator.Spell's Id), which the catalog holds.</param>
+    public static void RecordUsage(ComponentManager componentManager, EventBus eventBus, ActionCatalog actionCatalog, int entityId, Guid spellId)
     {
         var pool = componentManager.GetMultiPool<ScrollMasteryComponent>();
 
@@ -54,29 +47,9 @@ public static class ScrollMasteryEffects
             return;
         }
 
-        if (!actionCatalog.TryGet(spellId, out var action))
-        {
-            action = SynthesizeSpellFromScroll(scroll, spellId);
-            actionCatalog.Register(action);
-        }
-
         ActionGrantEffects.Grant(componentManager, actionCatalog, entityId, spellId, overrideDefinition: null);
         eventBus.Publish(new ScrollMasteredEvent(entityId, spellId));
     }
-
-    /// <summary>The spell a mastered scroll becomes: the scroll's content, with its Item tags dropped (the SpellActivator adds Spell and Magic).</summary>
-    /// <remarks>No activation effects, so it costs nothing: a placeholder -- see MasteryThreshold's own doc comment for the same power-scaling TODO.</remarks>
-    private static ActionDefinition SynthesizeSpellFromScroll(ItemDefinition scroll, Guid spellId) => new(
-        Id: spellId,
-        Name: scroll.Name,
-        SpriteName: scroll.SpriteName,
-        Glyph: scroll.Glyph,
-        GlyphColor: scroll.GlyphColor,
-        Tags: scroll.Tags.WithoutDescendantsOf(GameTags.Item),
-        Effects: scroll.Effects,
-        Activator: new SpellActivator(scroll.Activator!.Targeting, scroll.Activator.Timing),
-        Description: scroll.Description,
-        Summary: scroll.Summary);
 
     private static bool TryGetUsageCount(MultiComponentPool<ScrollMasteryComponent> pool, int entityId, Guid spellId, out int usageCount)
     {

@@ -4,6 +4,7 @@ using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Modules.Core.Components;
 using Game.Effects;
+using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
 
 namespace Game.Modules.Actions;
@@ -166,9 +167,9 @@ public sealed class Toggles(MultiComponentPool<ActiveToggleComponent> activeTogg
         return true;
     }
 
-    /// <summary>Source and target both the holder: a toggle applies to whoever has it on.</summary>
+    /// <summary>Source and target both the holder: a toggle applies to whoever has it on, a spell's durations scaled by the holder's Intelligence as any spell's are (SpellScalingEffects).</summary>
     private EffectContext HolderContext(int holderEntityId, ActivatableDefinition definition, long now) =>
-        EffectContext.FromEntity(effectServices, holderEntityId, holderEntityId, definition, now);
+        EffectContext.FromEntity(effectServices, holderEntityId, holderEntityId, definition, now, SpellScalingEffects.MultiplierFor(effectServices.AbilityScores, holderEntityId, definition.ActivatorOrNone));
 
     private EffectContext HeldContext(int holderEntityId, uint key, ActivatableDefinition definition, long now) =>
         HolderContext(holderEntityId, definition, now) with { HeldGrantKey = key };

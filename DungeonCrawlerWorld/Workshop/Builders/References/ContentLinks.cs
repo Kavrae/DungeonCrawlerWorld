@@ -36,12 +36,22 @@ public static class ContentLinks
     };
 
     /// <summary>How the record that names one does so, read from the named side: "casts it"; "builds with it, in code" for what only code names.</summary>
-    public static string UsedByText(ContentReferenceKind kind) =>
-        kind == ContentReferenceKind.BuildsWith ? "builds with it, in code" : $"{VerbFor(kind)} it";
+    public static string UsedByText(ContentReferenceKind kind) => kind switch
+    {
+        ContentReferenceKind.BuildsWith => "builds with it, in code",
+        ContentReferenceKind.GrantsAction => "grants it, in code",
+        ContentReferenceKind.DerivesAction => "derives its own from it, in code",
+        _ => $"{VerbFor(kind)} it",
+    };
 
     /// <summary>How a record names another, read from its own side: "casts"; "builds with, in code" for what only code names.</summary>
-    public static string UsesText(ContentReferenceKind kind) =>
-        kind == ContentReferenceKind.BuildsWith ? "builds with, in code" : VerbFor(kind);
+    public static string UsesText(ContentReferenceKind kind) => kind switch
+    {
+        ContentReferenceKind.BuildsWith => "builds with, in code",
+        ContentReferenceKind.GrantsAction => "grants, in code",
+        ContentReferenceKind.DerivesAction => "derives its own from, in code",
+        _ => VerbFor(kind),
+    };
 
     private static string VerbFor(ContentReferenceKind kind) => kind switch
     {
@@ -53,6 +63,8 @@ public static class ContentLinks
         ContentReferenceKind.UsesPalette => "uses",
         ContentReferenceKind.PlacesArea => "places",
         ContentReferenceKind.BuildsWith => "builds with",
+        ContentReferenceKind.GrantsAction => "grants",
+        ContentReferenceKind.DerivesAction => "derives its own from",
         _ => kind.ToString(),
     };
 }

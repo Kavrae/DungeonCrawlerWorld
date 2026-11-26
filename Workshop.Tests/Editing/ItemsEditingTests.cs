@@ -66,14 +66,16 @@ public sealed class ItemsEditingTests
     }
 
     [TestMethod]
-    public void AScrollNamingASpellNoActionHas_IsOnlyAWarning()
+    public void AScrollNamingASpellNoActionHas_DoesNotDecode()
     {
-        var (_, items) = Open();
-
+        var (editing, items) = Open();
         var torch = Named(items, "Scroll of Torch");
+        Assert.IsTrue(editing.Workspace.Types.TryGetMember(typeof(Game.Modules.Actions.IActionActivator), "Scroll", out var scrollCodec));
 
-        Assert.IsTrue(Assert.ContainsSingle(torch.SchemaProblems).IsWarning);
-        Assert.IsFalse(torch.HasErrors);
+        items.Apply(torch, new ContentInspectorEdit("Change Spell", record => record.SetField(ContentPath.Root.Key("ac"), scrollCodec.Schema, "sp", JsonValue.Create(ContentGuid.Format(Guid.NewGuid()))), "ac.sp", ChangesShape: false));
+
+        StringAssert.Contains(torch.DecodeFailure, "which no ActionDefinition has");
+        Assert.IsTrue(torch.HasErrors);
     }
 
     [TestMethod]
@@ -129,7 +131,7 @@ public sealed class ItemsEditingTests
     }
 
     [TestMethod]
-    public void MakingAPotionAScroll_KeepsItsTargetingAndTiming_AndWantsASpell_UntilOneIsPicked()
+    public void MakingAPotionAScroll_DropsItsTargetingAndTiming_AndWantsASpell_ThenNoEffectsOfItsOwn()
     {
         var (editing, items) = Open();
         var potion = Named(items, "Health Potion");
@@ -140,7 +142,7 @@ public sealed class ItemsEditingTests
         items.Apply(potion, new ContentInspectorEdit("Make Activator Scroll", record => record.ChangeType(ContentPath.Root, itemSchema, "ac", "Scroll", potionCodec.Schema, scrollCodec.Schema), null, ChangesShape: true));
 
         var activator = (JsonObject)potion.Record.Find(ContentPath.Root.Key("ac"))!;
-        CollectionAssert.AreEqual(new[] { "$", "tg", "tm" }, activator.Select(property => property.Key).ToArray());
+        CollectionAssert.AreEqual(new[] { "$" }, activator.Select(property => property.Key).ToArray(), "A scroll's targeting and timing are its spell's.");
         Assert.AreEqual("ac.sp", potion.SchemaProblems.Single(problem => !problem.IsWarning).Path.Text);
         Assert.Contains("ac.sp", potion.NotFilledInYet);
         Assert.IsFalse(potion.FieldProblems.Any(problem => !problem.IsWarning));
@@ -152,8 +154,14 @@ public sealed class ItemsEditingTests
         var heal = Session.Value.Catalogs.ActionCatalog.Definitions.Single(action => action.Name == "Heal");
         items.Apply(potion, new ContentInspectorEdit("Change Spell", record => record.SetField(ContentPath.Root.Key("ac"), scrollCodec.Schema, "sp", JsonValue.Create(ContentGuid.Format(heal.Id))), "ac.sp", ChangesShape: false));
 
+        StringAssert.Contains(potion.DecodeFailure, "A scroll's effects are its spell's");
+
+        items.Apply(potion, new ContentInspectorEdit("Remove Effects", record => record.RemoveField(ContentPath.Root, "fx"), "fx", ChangesShape: true));
+
         Assert.IsFalse(potion.HasErrors, string.Join("; ", potion.FieldProblems.Select(problem => problem.Message)) + potion.DecodeFailure);
-        Assert.IsInstanceOfType<Game.Modules.Actions.Activators.ScrollActivator>(potion.LastGood.Activator);
+        var scroll = (Game.Modules.Actions.Activators.ScrollActivator)potion.LastGood.Activator!;
+        Assert.AreSame(heal.Effects, potion.LastGood.Effects);
+        Assert.AreEqual(heal.Activator.Targeting, scroll.Targeting);
     }
 
     [TestMethod]

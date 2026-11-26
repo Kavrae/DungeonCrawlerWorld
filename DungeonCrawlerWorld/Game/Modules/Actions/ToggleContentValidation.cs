@@ -1,3 +1,4 @@
+using Engine.Tiles;
 using Game.Effects;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Inventory;
@@ -32,10 +33,9 @@ internal static class ToggleContentValidation
         var heldBy = $"Action '{action.Name}'";
         var problems = new List<string>();
 
-        // A toggle applies to whoever has it on, so there is no other target for it to resolve.
-        if (action.Toggle is not null && !action.Activator.Targeting.IsSelfOnly)
+        if (action.Toggle is not null && SelfOnlyProblem(action.Activator.Targeting, heldBy) is { } problem)
         {
-            problems.Add($"{heldBy} is a toggle but is not Self-targeted (a Self shape anchored on the caster): a toggle applies to its holder.");
+            problems.Add(problem);
         }
 
         AddUnrevertableHeldEffects(action, heldBy, problems);
@@ -61,6 +61,30 @@ internal static class ToggleContentValidation
 
         AddUnrevertableHeldEffects(item, heldBy, problems);
         return problems;
+    }
+
+    /// <summary>Why a toggle action's targeting isn't Self alone on the caster -- naming the shape, or the anchor, it has instead -- or null when it is.</summary>
+    /// <remarks>
+    /// What a toggle holds reaches only whoever has it switched on, so it has no other target: a shape beside Self (Self,
+    /// Circle) would do nothing, and so would aiming it anywhere but the caster. Each message names the one field it is
+    /// about, and no longer field label, so the Workshop opens that field (ContentProblemLocator).
+    /// </remarks>
+    private static string? SelfOnlyProblem(TargetingSpec targeting, string heldBy)
+    {
+        if (targeting.IsSelfOnly)
+        {
+            return null;
+        }
+
+        if (targeting.Shape != TargetShape.Self)
+        {
+            var extra = targeting.Shape & ~TargetShape.Self;
+            return targeting.Shape.HasFlag(TargetShape.Self)
+                ? $"{heldBy} is switched on and off, and what it holds reaches only whoever has it on, so its shape must be Self alone: {targeting.Shape} adds {extra}, which would do nothing."
+                : $"{heldBy} is switched on and off, and what it holds reaches only whoever has it on, so its shape must be Self alone, not {targeting.Shape}.";
+        }
+
+        return $"{heldBy} is switched on and off, and what it holds reaches only whoever has it on, so its anchor must be the caster, not {targeting.Anchor}.";
     }
 
     /// <summary>A toggle's held effects may grant something with no end only through an entry that can take it back.</summary>

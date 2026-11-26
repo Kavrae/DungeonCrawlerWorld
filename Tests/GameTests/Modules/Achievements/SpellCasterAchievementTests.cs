@@ -125,13 +125,11 @@ public sealed class SpellCasterAchievementTests
         var componentManager = build.EcsContext.ComponentManager;
         var playerEntityId = build.EcsContext.EntityManager.CreateEntity();
         build.World.PlayerEntityId = playerEntityId;
-        var spellId = Guid.NewGuid();
-        var healingScroll = TestContent.Item(BuiltInItemIds.ScrollOfHealing);
-        var scroll = healingScroll with { Activator = ((ScrollActivator)healingScroll.Activator!) with { SpellId = spellId } };
+        var spellId = ((ScrollActivator)TestContent.Item(BuiltInItemIds.ScrollOfHealing).Activator!).Spell.Id;
 
         for (var i = 0; i < ScrollMasteryEffects.MasteryThreshold; i++)
         {
-            ScrollMasteryEffects.RecordUsage(componentManager, build.Context.EventBus, build.Context.Actions, scroll, playerEntityId, spellId);
+            ScrollMasteryEffects.RecordUsage(componentManager, build.Context.EventBus, build.Context.Actions, playerEntityId, spellId);
         }
 
         build.Context.EventBus.Publish(UsedAction(playerEntityId, build.Context.Actions.Get(spellId)));

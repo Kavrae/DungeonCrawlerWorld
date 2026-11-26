@@ -27,21 +27,58 @@ public static class TargetShapePreviewGeometry
     /// <summary>
     /// Relative (X, Y) tile offsets from the caster -- (0,0) is the caster's own tile, whether or
     /// not it's actually among the results (see TargetShape's own per-shape doc comments --
-    /// Self (alone or combined, e.g. Adjacent | Self) includes it, everything else doesn't). Directional shapes (Line, Cone, Wall, Sweep), and anything with a minimum range, have no real cursor
-    /// in a static preview, so they are aimed at maximum range in one fixed "north" direction (negative Y) --
-    /// a display convention, not a claim about real facing.
+    /// Self (alone or combined, e.g. Adjacent | Self) includes it, everything else doesn't). A static preview has no
+    /// cursor, so a shape that depends on its aim (any but one laid around the caster facing no direction) is aimed
+    /// at maximum range in one fixed "north" direction (negative Y) -- a display convention, not a claim about real
+    /// facing -- so it sits at the far edge of its reach (ComputeReach).
     /// </summary>
     public static List<Point> ComputeOffsets(TargetingSpec spec)
     {
-        var aimedTile = TargetShapeResolver.IsDirectional(spec.Shape) || spec.MinimumRange > 0
-            ? SentinelOrigin + new Vector3Int(0, -System.Math.Max(1, spec.AimRanges.MaximumRange), 0)
-            : SentinelOrigin;
+        spec = FitToPreview(spec);
+        var aimedTile = TargetShapeResolver.IsAimIndependent(spec.Shape, spec.Anchor)
+            ? SentinelOrigin
+            : SentinelOrigin + new Vector3Int(0, -System.Math.Max(1, spec.AimRanges.MaximumRange), 0);
 
         var results = new List<Vector3Int>();
         TargetShapeResolver.Resolve(spec.Shape, spec.Anchor, SentinelOrigin, SingleTileFootprint, aimedTile, spec.Ranges, SentinelBounds, results);
+        return ToOffsets(results);
+    }
 
-        var offsets = new List<Point>(results.Count);
-        foreach (var tile in results)
+    /// <summary>Relative offsets of every tile spec can be aimed at or reach from the caster, whatever the aim (TargetShapeResolver.ResolveReachable over open ground): its range band, or a shape laid around the caster its own tiles.</summary>
+    public static List<Point> ComputeReach(TargetingSpec spec)
+    {
+        spec = FitToPreview(spec);
+        var results = new List<Vector3Int>();
+        TargetShapeResolver.ResolveReachable(spec.Shape, spec.Anchor, SentinelOrigin, SingleTileFootprint, spec.Ranges, SentinelBounds, results, path: spec.Path, pathWalls: spec.PathWalls);
+        results.RemoveAll(static tile => System.Math.Abs(tile.X - SentinelOrigin.X) > MaximumPreviewRadius || System.Math.Abs(tile.Y - SentinelOrigin.Y) > MaximumPreviewRadius);
+        return ToOffsets(results);
+    }
+
+    /// <summary>How far from the caster a preview draws, in tiles: 2 x 11 + 1 = 23 cells across, which fit the details windows' 96 px grid cap at the 4 px minimum cell.</summary>
+    public const int MaximumPreviewRadius = 11;
+
+    /// <summary>spec with its distances shortened so its aim and shape fit MaximumPreviewRadius: the shape's size first kept whole up to the radius, then the range shortened to leave room for it. The preview shows the shape; the range is in its caption.</summary>
+    public static TargetingSpec FitToPreview(TargetingSpec spec)
+    {
+        if (spec.MaximumRange + spec.AreaSize <= MaximumPreviewRadius)
+        {
+            return spec;
+        }
+
+        var areaSize = System.Math.Min(spec.AreaSize, MaximumPreviewRadius);
+        var maximumRange = System.Math.Min(spec.MaximumRange, MaximumPreviewRadius - areaSize);
+        return spec with
+        {
+            AreaSize = areaSize,
+            MaximumRange = maximumRange,
+            MinimumRange = System.Math.Min(spec.MinimumRange, maximumRange),
+        };
+    }
+
+    private static List<Point> ToOffsets(List<Vector3Int> tiles)
+    {
+        var offsets = new List<Point>(tiles.Count);
+        foreach (var tile in tiles)
         {
             offsets.Add(new Point(tile.X - SentinelOrigin.X, tile.Y - SentinelOrigin.Y));
         }

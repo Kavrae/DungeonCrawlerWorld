@@ -15,37 +15,38 @@ public sealed class ContentReferenceIndexTests
     private static GameCatalogs Catalogs => Session.Value.Catalogs;
 
     [TestMethod]
-    public void EveryScrollWhoseSpellIsAnAction_UsesItsSpell_AndTheSpellIsUsedByIt()
+    public void QuickAttack_IsUsedByEveryRaceGrantingIt_TheDerivedOnesAsDerived()
     {
-        var scrolls = Catalogs.ItemCatalog.Definitions
-            .Where(item => item.Activator is ScrollActivator scroll && Catalogs.ActionCatalog.TryGet(scroll.SpellId, out _))
-            .ToList();
+        var usedBy = Index.Value.UsedBy(ContentRecordKind.Action, Game.Modules.Actions.BuiltInActionIds.QuickAttack);
+
+        ContentReferenceKind? KindFrom(string blueprintName) =>
+            usedBy.Where(reference => reference.From.Kind == ContentRecordKind.Blueprint && reference.From.Name.StartsWith(blueprintName, StringComparison.Ordinal) && reference.Kind != ContentReferenceKind.BuildsWith)
+                .Select(reference => (ContentReferenceKind?)reference.Kind)
+                .FirstOrDefault();
+
+        Assert.AreEqual(ContentReferenceKind.GrantsAction, KindFrom("Human"));
+        Assert.AreEqual(ContentReferenceKind.DerivesAction, KindFrom("Goblin"));
+        Assert.AreEqual(ContentReferenceKind.DerivesAction, KindFrom("Fairy"));
+        Assert.AreEqual(ContentReferenceKind.DerivesAction, KindFrom("Ghost"));
+        Assert.IsTrue(usedBy.Any(reference => reference.Kind == ContentReferenceKind.BuildsWith), "PlayerKit still builds with it.");
+        Assert.AreEqual("derives its own from it, in code", ContentLinks.UsedByText(ContentReferenceKind.DerivesAction));
+    }
+
+    [TestMethod]
+    public void EveryScroll_UsesItsSpell_AndTheSpellIsUsedByIt()
+    {
+        var scrolls = Catalogs.ItemCatalog.Definitions.Where(item => item.Activator is ScrollActivator).ToList();
         Assert.IsNotEmpty(scrolls);
 
         foreach (var scroll in scrolls)
         {
-            var spellId = ((ScrollActivator)scroll.Activator!).SpellId;
+            var spellId = ((ScrollActivator)scroll.Activator!).Spell.Id;
 
             var uses = Index.Value.Uses(ContentRecordKind.Item, scroll.Id);
             Assert.IsTrue(uses.Any(reference => reference.Kind == ContentReferenceKind.CastsSpell && reference.To.Kind == ContentRecordKind.Action && reference.To.Id == spellId), $"{scroll.Name} doesn't use its spell.");
 
             var usedBy = Index.Value.UsedBy(ContentRecordKind.Action, spellId);
             Assert.IsTrue(usedBy.Any(reference => reference.From.Kind == ContentRecordKind.Item && reference.From.Id == scroll.Id), $"{scroll.Name}'s spell isn't used by it.");
-        }
-    }
-
-    /// <summary>A scroll whose spell id names no action (Scroll of Torch's is a synthesised spell) links to nothing rather than to a record that doesn't exist.</summary>
-    [TestMethod]
-    public void AScrollWhoseSpellIsNoAction_CastsNothing()
-    {
-        var scrolls = Catalogs.ItemCatalog.Definitions
-            .Where(item => item.Activator is ScrollActivator scroll && !Catalogs.ActionCatalog.TryGet(scroll.SpellId, out _))
-            .ToList();
-        Assert.IsNotEmpty(scrolls);
-
-        foreach (var scroll in scrolls)
-        {
-            Assert.IsFalse(Index.Value.Uses(ContentRecordKind.Item, scroll.Id).Any(reference => reference.Kind == ContentReferenceKind.CastsSpell), $"{scroll.Name} casts a spell that isn't an action.");
         }
     }
 

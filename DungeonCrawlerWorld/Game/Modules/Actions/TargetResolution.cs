@@ -17,7 +17,7 @@ namespace Game.Modules.Actions;
 /// <remarks>
 /// <para>
 /// Select builds a selection when an activation is confirmed: the effective range and area (a
-/// scroll's scaled by the caster's Intelligence, ScrollScalingEffects), and in Target mode the entity
+/// spell's scaled by the caster's Intelligence, SpellScalingEffects), and in Target mode the entity
 /// marked on the aimed tile -- a Blocking one, else a Tiny one (picked by a roll seeded from the tile
 /// and frame, so the same input picks the same one), else a Phasing one. Dead entities are never
 /// marked. With nothing to mark, a Target selection resolves as Ground.
@@ -53,15 +53,15 @@ public sealed class TargetResolution(
     /// <summary>The walls' ISightBlockers.Version -- in a game, World.SightVersion, which also counts neighborhoods loading and unloading. Besides its arguments, ResolveReachable reads only the walls and the map's edge, so its tiles can be kept until this or the arguments change.</summary>
     public int SightVersion => walls.Version;
 
-    /// <summary>The caster's targeting for activator as it applies now: a scroll's range and area scaled by the caster's Intelligence, anything else's as declared.</summary>
+    /// <summary>The caster's targeting for activator as it applies now: a spell's range and area scaled by the caster's Intelligence (SpellScalingEffects), anything else's as declared.</summary>
     public TargetingSpec EffectiveSpec(int casterEntityId, IActionActivator activator)
     {
-        if (activator is not ScrollActivator)
+        if (!SpellScalingEffects.Applies(activator))
         {
             return activator.Targeting;
         }
 
-        return ScrollScalingEffects.ScaleTargeting(activator.Targeting, ScrollScalingEffects.MultiplierFor(abilityScores, casterEntityId));
+        return SpellScalingEffects.ScaleTargeting(activator.Targeting, SpellScalingEffects.MultiplierFor(abilityScores, casterEntityId));
     }
 
     /// <summary>The selection for casterEntityId activating activator at aimedTile in mode, marking whoever stands there if Target mode applies.</summary>

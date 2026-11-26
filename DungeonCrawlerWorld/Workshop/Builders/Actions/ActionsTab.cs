@@ -1,69 +1,61 @@
+using System.Text.Json.Nodes;
 using Builders.Browsing;
 using Builders.Editing;
-using Builders.References;
-using Game.Content;
 using Game.Modules.Actions;
 using Presentation.UI.Details;
+using UIEngine.UI;
 using UIEngine.UI.Filtering;
-using Workshop;
+using Workshop.Editing;
 
 namespace Builders.Actions;
 
-/// <summary>The Actions tab: every action in the session's catalog, grouped as abilities, spells and toggles, the selected one in Action Details, and what it grants or is cast by -- read-only.</summary>
-/// <remarks>Reads the workspace's session, and reopens on it whenever it is rebuilt.</remarks>
-public sealed class ActionsTab : RecordBrowserTab<ActionDefinition, ActionDetailsWindow>
+/// <summary>The Actions tab: every action the Workshop holds, grouped as abilities, spells and toggles, edited in the inspector and shown in Action Details as content gives it (ContentEditingTab).</summary>
+/// <remarks>Action Details has no user here, so every value is the definition's own: no ability-score bonus, no Intelligence scaling, no modifiers.</remarks>
+public sealed class ActionsTab(ContentEditingTable<ActionDefinition> table, ContentEditing editing, IContentInspectorSource inspectorSource, ElementPoolService elementPool)
+    : ContentEditingTab<ActionDefinition, ActionDetailsWindow>(table, editing, inspectorSource, elementPool)
 {
     public const string TabTitle = "Actions";
 
-    private readonly ContentWorkspace _workspace;
-
-    public ActionsTab(ContentWorkspace workspace)
-    {
-        _workspace = workspace;
-        workspace.SessionReplaced += Reopen;
-    }
-
-    private ActionCatalog ActionCatalog => _workspace.Session.Catalogs.ActionCatalog;
+    private const string ActionNameKey = ActivatableContent.NameKey;
 
     public override string Title => TabTitle;
-
-    protected override string BrowserTitle => $"Actions ({ActionCatalog.Count})";
 
     protected override string SearchGhostText => "Search actions";
 
     protected override string PreviewTitle => "Action Details";
 
-    protected override IEnumerable<ActionDefinition> AllRecords => ActionCatalog.Definitions;
+    protected override string SingularName => "action";
 
-    protected override Guid IdOf(ActionDefinition action) => action.Id;
+    protected override string NameKey => ActionNameKey;
 
-    protected override IReadOnlyList<RecordBrowserSection<ActionDefinition>> BuildSections(string search) =>
-        ActionBrowserSections.Build(ActionCatalog.Definitions, search, _workspace.Session.Catalogs.GameplayTags);
-
-    /// <summary>Timing (FreeCast, Immediate, Delayed: any of), then Source.</summary>
-    protected override IReadOnlyList<ListFilterGroup<ActionDefinition>> FilterGroups =>
-    [
-        RecordFilterGroups.OneOf<ActionDefinition>("timing", "Timing", TimingsInOrder, static action => TimingOf(action)),
-        RecordFilterGroups.Source(ActionCatalog.Definitions, action => _workspace.Origins.ModOf(GameContent.ActionsTable, action.Id)),
-    ];
-
-    private static readonly IReadOnlyList<string> TimingsInOrder = ["FreeCast", "Immediate", "Delayed"];
-
-    private static string TimingOf(ActionDefinition action) => action.Activator.Timing.Category switch
+    /// <summary>A name, the placeholder glyph and a Direct activator on the caster -- an action's activator is required, so a new one decodes and passes every check at once.</summary>
+    protected override JsonObject NewRecordFields(string name) => new()
     {
-        ActionTimingCategory.FreeCast => "FreeCast",
-        ActionTimingCategory.Delayed => "Delayed",
-        _ => "Immediate",
+        [ActionNameKey] = name,
+        [ActivatableContent.GlyphKey] = ActivatablePlaceholder.Glyph,
+        [ActivatableContent.ActivatorKey] = ActivatablePlaceholder.SelfActivator(),
     };
 
-    protected override RecordRowAppearance AppearanceOf(ActionDefinition action) => new(_workspace.Origins.Label(GameContent.ActionsTable, action.Id, action.Name), action.SpriteName, action.Glyph, action.GlyphColor);
+    protected override IReadOnlyList<RecordBrowserSection<ActionDefinition>> SectionsOf(IEnumerable<ActionDefinition> definitions, string search) =>
+        ActionBrowserSections.Build(definitions, search, Workspace.Session.Catalogs.GameplayTags);
 
-    protected override void ShowInPreview(ActionDetailsWindow preview, ActionDefinition action, float contentWidth) =>
+    /// <summary>Type (the browser's own headings), Timing (FreeCast, Immediate, Delayed) and Core, each any of.</summary>
+    protected override IReadOnlyList<ListFilterGroup<ContentRecordDocument<ActionDefinition>>> TableFilterGroups =>
+    [
+        RecordFilterGroups.OneOf<ContentRecordDocument<ActionDefinition>>("type", "Type", ActionBrowserSections.HeadingsInOrder, static document => ActionBrowserSections.HeadingOf(document.LastGood)),
+        RecordFilterGroups.OneOf<ContentRecordDocument<ActionDefinition>>("timing", "Timing", ActionBrowserSections.TimingsInOrder, static document => ActionBrowserSections.TimingOf(document.LastGood)),
+        RecordFilterGroups.OneOf<ContentRecordDocument<ActionDefinition>>("core", "Core", ActionBrowserSections.CoreChoicesInOrder, static document => ActionBrowserSections.CoreChoiceOf(document.LastGood)),
+    ];
+
+    protected override RecordRowAppearance LookOf(ActionDefinition action) => new(action.Name, action.SpriteName, action.Glyph, action.GlyphColor);
+
+    protected override void ShowDefinition(ActionDetailsWindow preview, ActionDefinition action, float contentWidth) =>
         preview.Configure(action, contentWidth);
 
-    protected override IReadOnlyList<WorkshopRelatedRecord> UsesOf(ActionDefinition action) =>
-        ContentLinks.UsesOf(_workspace.References, ContentRecordKind.Action, action.Id);
+    /// <summary>Action Details' own comparison colouring: each line better or worse than the other versions'.</summary>
+    protected override void ShowComparedDefinition(ActionDetailsWindow preview, ActionDefinition action, float contentWidth, IReadOnlyList<ActionDefinition> comparedAgainst) =>
+        preview.Configure(action, contentWidth, comparedAgainst);
 
-    protected override IReadOnlyList<WorkshopRelatedRecord> UsedByOf(ActionDefinition action) =>
-        ContentLinks.UsedByOf(_workspace.References, ContentRecordKind.Action, action.Id);
+    /// <summary>A record standing in for one that doesn't decode: its own name and glyph when it has them as text, and an activator, which an action requires.</summary>
+    public static string PlaceholderJsonOf(EditableContentRecord record) => ActivatablePlaceholder.JsonOf(record, "Action", withActivator: true);
 }

@@ -45,6 +45,27 @@ public class Catalog<T>(Func<T, Guid> idSelector)
     /// <summary>Makes from resolve to whatever to resolves to, whenever nothing is registered under from.</summary>
     public void AddRedirect(Guid from, Guid to) => _redirects[from] = to;
 
+    /// <summary>Whether any Guid redirects to another: with none, every Guid resolves to itself (ResolveId).</summary>
+    public bool HasRedirects => _redirects.Count > 0;
+
+    /// <summary>The Guid id stands for: itself while it is registered or has no redirect, else the end of its redirects -- the first registered Guid on the way, or the last one a cycle or a dead end leaves.</summary>
+    /// <remarks>Follows redirects alone, so it answers for a Guid a definition source hasn't registered yet (a by-id game's): two Guids that resolve to one are one definition wherever they are named.</remarks>
+    public Guid ResolveId(Guid id)
+    {
+        if (_redirects.Count == 0)
+        {
+            return id;
+        }
+
+        var current = id;
+        for (var hops = 0; hops <= _redirects.Count && !_definitionsById.ContainsKey(current) && _redirects.TryGetValue(current, out var next); hops++)
+        {
+            current = next;
+        }
+
+        return current;
+    }
+
     /// <summary>Tries to get a definition by its ID, following redirects.</summary>
     /// <param name="id">The ID of the definition to retrieve.</param>
     /// <param name="definition">The retrieved definition, or default if not found.</param>

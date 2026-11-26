@@ -45,6 +45,12 @@ public enum ContentReferenceKind : byte
 
     /// <summary>A blueprint's build gives, stocks or rolls from an item, or grants an action -- named in code (UsesItems, UsesActions), so nothing but code can change it.</summary>
     BuildsWith,
+
+    /// <summary>A blueprint gives every entity built from it an action as the catalog has it (its Actions grants) -- in code.</summary>
+    GrantsAction,
+
+    /// <summary>A blueprint gives every entity built from it its own version of an action, derived from the catalog's (ActionGrant.Derived: a race's Quick Attack with its own damage) -- in code.</summary>
+    DerivesAction,
 }
 
 /// <summary>One record of the session's content: what kind, its Guid (Guid.Empty for terrain, which is keyed by name), and its name.</summary>
@@ -57,7 +63,7 @@ public readonly record struct ContentReference(ContentRecord From, ContentRecord
 /// <remarks>
 /// Built once from a GameSession's catalogs. Effect entries are walked with EffectEntries, the walk Game's own content
 /// checks use, so every entry that names an aura (IEffectEntry.ReferencedAuras) is found wherever it is held. A scroll's
-/// spell is its activator's SpellId. Aura identity is the aura's Guid -- two sources of one aura name the same record.
+/// spell is the one its activator holds (ScrollActivator.Spell). Aura identity is the aura's Guid -- two sources of one aura name the same record.
 /// </remarks>
 public sealed class ContentReferenceIndex
 {
@@ -125,8 +131,12 @@ public sealed class ContentReferenceIndex
 
             foreach (var actionId in blueprint.UsesActions)
             {
-                var name = catalogs.ActionCatalog.TryGet(actionId, out var action) ? action.Name : actionId.ToString();
-                Add(new ContentReference(from, new ContentRecord(ContentRecordKind.Action, actionId, name), ContentReferenceKind.BuildsWith));
+                Add(new ContentReference(from, ActionRecord(catalogs, actionId), ContentReferenceKind.BuildsWith));
+            }
+
+            foreach (var grant in blueprint.Actions)
+            {
+                Add(new ContentReference(from, ActionRecord(catalogs, grant.ActionId), grant.DeriveOverride is null ? ContentReferenceKind.GrantsAction : ContentReferenceKind.DerivesAction));
             }
         }
 
@@ -142,6 +152,10 @@ public sealed class ContentReferenceIndex
         _usedByByRecord.TryGetValue((kind, id), out var references) ? references : [];
 
     private static ContentRecord AuraRecord(AuraDefinition aura) => new(ContentRecordKind.Aura, aura.Id, aura.Name);
+
+    /// <summary>The record of the action actionId names; its name is the catalog's, or its Guid when no layer holds it.</summary>
+    private static ContentRecord ActionRecord(GameCatalogs catalogs, Guid actionId) =>
+        new(ContentRecordKind.Action, actionId, catalogs.ActionCatalog.TryGet(actionId, out var action) ? action.Name : actionId.ToString());
 
     /// <summary>The record of the aura auraId names; its name is the catalog's, or its Guid when a build left it out.</summary>
     private static ContentRecord AuraRecord(Game.Modules.Auras.AuraCatalog auras, Guid auraId) =>
@@ -227,9 +241,9 @@ public sealed class ContentReferenceIndex
 
     private void AddActivatableReferences(ContentRecord from, ActivatableDefinition definition, GameCatalogs catalogs)
     {
-        if (ActivatorOf(definition) is ScrollActivator scroll && catalogs.ActionCatalog.TryGet(scroll.SpellId, out var spell))
+        if (ActivatorOf(definition) is ScrollActivator scroll)
         {
-            Add(new ContentReference(from, new ContentRecord(ContentRecordKind.Action, spell.Id, spell.Name), ContentReferenceKind.CastsSpell));
+            Add(new ContentReference(from, new ContentRecord(ContentRecordKind.Action, scroll.Spell.Id, scroll.Spell.Name), ContentReferenceKind.CastsSpell));
         }
 
         EffectEntries.ForEach(definition, entry => AddAuraReferences(from, entry, ContentReferenceKind.GrantsAura));

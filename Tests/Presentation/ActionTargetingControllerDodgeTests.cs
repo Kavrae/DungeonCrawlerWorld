@@ -32,7 +32,11 @@ public sealed class ActionTargetingControllerDodgeTests
     private static (ActionTargetingController ActionTargeting, MapViewState MapViewState, ComponentManager ComponentManager, PlayerMovementController PlayerMovement, SimulationClock Clock, EventBus EventBus) Build(params Vector3Int[] wallTiles) =>
         BuildWithFootprint(new Vector2Byte(1, 1), wallTiles);
 
-    private static (ActionTargetingController ActionTargeting, MapViewState MapViewState, ComponentManager ComponentManager, PlayerMovementController PlayerMovement, SimulationClock Clock, EventBus EventBus) BuildWithFootprint(Vector2Byte footprintSize, params Vector3Int[] wallTiles)
+    private static (ActionTargetingController ActionTargeting, MapViewState MapViewState, ComponentManager ComponentManager, PlayerMovementController PlayerMovement, SimulationClock Clock, EventBus EventBus) BuildWithFootprint(Vector2Byte footprintSize, params Vector3Int[] wallTiles) =>
+        BuildWithDodge(TestContent.Action(BuiltInActionIds.Dodge), footprintSize, wallTiles);
+
+    /// <summary>A player holding dodge, bound to the attack slot, with footprintSize, beside wallTiles.</summary>
+    private static (ActionTargetingController ActionTargeting, MapViewState MapViewState, ComponentManager ComponentManager, PlayerMovementController PlayerMovement, SimulationClock Clock, EventBus EventBus) BuildWithDodge(ActionDefinition dodge, Vector2Byte footprintSize, params Vector3Int[] wallTiles)
     {
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(20, 20, 1)), playerEntityId: PlayerEntityId);
         if (wallTiles.Length > 0)
@@ -51,12 +55,12 @@ public sealed class ActionTargetingControllerDodgeTests
         TestTransforms.Set(componentManager, PlayerEntityId, new TransformComponent(PlayerPosition, footprintSize));
         componentManager.Merge(PlayerEntityId, new MovementComponent(null, null));
         componentManager.Merge(PlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(BuiltInActionIds.Dodge, overrideDefinition: null));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(dodge.Id, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 5));
-        componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.DefaultAttack, BuiltInActionIds.Dodge));
+        componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.DefaultAttack, dodge.Id));
 
         var actionCatalog = new ActionCatalog();
-        actionCatalog.Register(TestContent.Action(BuiltInActionIds.Dodge));
+        actionCatalog.Register(dodge);
         var itemCatalog = new ItemCatalog();
 
         var camera = TestMapCameras.Over(world);
@@ -265,6 +269,43 @@ public sealed class ActionTargetingControllerDodgeTests
         actionTargeting.TryClaimDodgeDirectionalKey(new KeyboardState(Keys.D), new KeyboardState(), claimedKeys);
 
         Assert.IsNull(componentManager.GetPackedPool<MovementComponent>().GetReadonly(PlayerEntityId).NextMapPosition);
+        Assert.IsEmpty(claimedKeys);
+    }
+
+    /// <summary>A dodge is what it does, not Dodge's Guid: an enhanced dodge (an NPC's, one learned later) offers the same step tiles and takes the same WASD confirm.</summary>
+    [TestMethod]
+    public void ADodgeUnderAnotherGuid_OffersTheStepTiles_AndStepsOnItsWasdConfirm()
+    {
+        var longStep = TestContent.Action(BuiltInActionIds.Dodge) with { Id = Guid.NewGuid(), Name = "Long Step" };
+        var (actionTargeting, mapViewState, componentManager, _, _, eventBus) = BuildWithDodge(longStep, new Vector2Byte(1, 1), new Vector3Int(6, 5, 0));
+
+        actionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
+
+        Assert.IsTrue(mapViewState.ArmedActionIsDodge);
+        Assert.IsNotNull(mapViewState.TargetableTiles);
+        Assert.DoesNotContain(new Vector3Int(6, 5, 0), mapViewState.TargetableTiles, "The wall's step is left out, as Dodge's is.");
+
+        var claimedKeys = new HashSet<Keys>();
+        actionTargeting.TryClaimDodgeDirectionalKey(new KeyboardState(Keys.A), new KeyboardState(), claimedKeys);
+        componentManager.GetPackedPool<PendingActionActivationComponent>().Remove(PlayerEntityId);
+        eventBus.Publish(new Game.World.ActivationUsedEvent(PlayerEntityId, Game.Modules.Actions.ActivatableKind.Action, longStep.Id, longStep.Tags));
+
+        Assert.Contains(Keys.A, claimedKeys);
+        Assert.AreEqual(new Vector3Int(4, 5, 0), componentManager.GetPackedPool<MovementComponent>().GetReadonly(PlayerEntityId).NextMapPosition);
+    }
+
+    [TestMethod]
+    public void ArmingSomethingThatIsntADodge_LeavesTheMovementKeysAlone()
+    {
+        var notADodge = TestContent.Action(BuiltInActionIds.Dodge) with { Id = Guid.NewGuid(), Name = "Stand Still", Effects = [] };
+        var (actionTargeting, mapViewState, _, _, _, _) = BuildWithDodge(notADodge, new Vector2Byte(1, 1));
+        actionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
+        var claimedKeys = new HashSet<Keys>();
+
+        actionTargeting.TryClaimDodgeDirectionalKey(new KeyboardState(Keys.D), new KeyboardState(), claimedKeys);
+
+        Assert.AreEqual(notADodge.Id, mapViewState.ArmedActionId);
+        Assert.IsFalse(mapViewState.ArmedActionIsDodge);
         Assert.IsEmpty(claimedKeys);
     }
 

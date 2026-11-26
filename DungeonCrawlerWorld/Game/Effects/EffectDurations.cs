@@ -4,7 +4,7 @@ namespace Game.Effects;
 
 /// <summary>Scales the duration an effect entry grants, the one way every timed grant does.</summary>
 /// <remarks>
-/// context.DurationScaleMultiplier first (a scroll's Intelligence scaling; 1 otherwise), then the caster's
+/// context.DurationScaleMultiplier first (a spell's Intelligence scaling, SpellScalingEffects; 1 otherwise), then the caster's
 /// Outgoing and the target's Incoming Buff or Debuff duration, picked by polarity and tag-conditional through
 /// context.ActivatorTags (EffectModifiers.Scale). Works in any unit -- frames or an effect's own ticks -- since it only
 /// multiplies. A null or zero duration is returned unscaled.
@@ -29,7 +29,7 @@ public static class EffectDurations
         var scaled = value * context.DurationScaleMultiplier;
         if (context.DurationScaleMultiplier != 1f)
         {
-            context.AmountPreview?.Add(ValueContribution.Multiplier(ValueContributionKind.ScrollIntelligence, context.DurationScaleMultiplier));
+            context.AmountPreview?.Add(ValueContribution.Multiplier(ValueContributionKind.SpellIntelligence, context.DurationScaleMultiplier));
         }
 
         var outgoingTarget = polarity == StatModifierPolarity.Buff ? StatModifierTarget.OutgoingBuffDuration : StatModifierTarget.OutgoingDebuffDuration;

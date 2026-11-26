@@ -187,13 +187,13 @@ internal static class ActionContentCodecs
                 element.String(ActivatableContent.GlyphKey),
                 element.Color(ActivatableContent.GlyphColorKey),
                 element.Tags(ActivatableContent.TagsKey),
-                element.List<Effect>("fx"),
+                element.List<Effect>(ActivatableContent.EffectsKey),
                 activator,
                 element.String("d"),
                 element.String("su"),
                 element.Object<ToggleSpec>("tog"))
             {
-                ActivationEffects = element.List<Effect>("ae"),
+                ActivationEffects = element.List<Effect>(ActivatableContent.ActivationEffectsKey),
                 Core = element.Boolean(CoreKey),
             };
         }
@@ -226,18 +226,16 @@ internal static class ActionContentCodecs
         public override PotionActivator Read(ContentObject element) => new(ActivatorContent.Targeting(element), ActivatorContent.Timing(element));
     }
 
-    /// <summary>A scroll's spell is a Guid in the Actions table, but need not name an action there (a synthesised spell), so it is read as a Guid and never resolved here.</summary>
+    /// <summary>A scroll is its spell and nothing else: the Guid as written, and the spell it resolves to through the content (a disabled one's replacement), which must exist.</summary>
     private sealed class ScrollActivatorCodec : ContentCodec<ScrollActivator>
     {
-        public override ContentSchema Schema { get; } = ActivatorContent.TargetedSchema(nameof(ScrollActivator), ContentField.Reference("sp", "Spell", ActionsTable, isRequired: true));
+        private const string SpellKey = ActivatableContent.ScrollSpellKey;
 
-        public override void WriteProperties(ContentWriter writer, ScrollActivator value)
-        {
-            ActivatorContent.WriteTargeted(writer, value.Targeting, value.Timing);
-            writer.Guid("sp", value.SpellId);
-        }
+        public override ContentSchema Schema { get; } = new(nameof(ScrollActivator), [ContentField.Reference(SpellKey, "Spell (cast as it is, without its costs)", ActionsTable, isRequired: true)]);
 
-        public override ScrollActivator Read(ContentObject element) => new(ActivatorContent.Targeting(element), ActivatorContent.Timing(element), element.Guid("sp"));
+        public override void WriteProperties(ContentWriter writer, ScrollActivator value) => writer.Guid(SpellKey, value.SpellId);
+
+        public override ScrollActivator Read(ContentObject element) => new(element.Guid(SpellKey), element.Reference<ActionDefinition>(SpellKey));
     }
 
     /// <summary>Charges and MaxCharges are omitted at 0, as authored.</summary>
@@ -353,6 +351,13 @@ public static class ActivatableContent
 
     public const string TagsKey = "t";
 
+    public const string EffectsKey = "fx";
+
+    public const string ActivationEffectsKey = "ae";
+
+    /// <summary>A scroll's spell, in its activator (ScrollActivator).</summary>
+    public const string ScrollSpellKey = "sp";
+
     /// <summary>The activator's key, which each type writes after the leading fields.</summary>
     public const string ActivatorKey = "ac";
 
@@ -364,7 +369,7 @@ public static class ActivatableContent
         ContentField.Text(GlyphKey, "Glyph"),
         ContentColors.Field(GlyphColorKey, "Glyph colour"),
         ContentField.TagSet(TagsKey, "Tags", GameTagDomains.Activation),
-        ContentField.ListOf<Effect>("fx", "Effects (what using it does to its targets; what a toggle holds while on)", ContentFieldKind.Object),
+        ContentField.ListOf<Effect>(EffectsKey, "Effects (what using it does to its targets; what a toggle holds while on; a scroll's are its spell's)", ContentFieldKind.Object),
     ];
 
     public static IReadOnlyList<ContentField> TrailingFields { get; } =
@@ -372,10 +377,11 @@ public static class ActivatableContent
         ContentField.Text("d", "Description") with { IsMultiline = true },
         ContentField.Text("su", "Summary"),
         ContentField.Object<ToggleSpec>("tog", "Toggle"),
-        ContentField.ListOf<Effect>("ae", "Activation effects (the costs on the user to activate it: applied to whoever uses it, all or nothing, before anything else -- a mana drain, a health drain)", ContentFieldKind.Object),
+        ContentField.ListOf<Effect>(ActivationEffectsKey, "Activation effects (the costs on the user to activate it: applied to whoever uses it, all or nothing, before anything else -- a mana drain, a health drain)", ContentFieldKind.Object),
     ];
 
-    public static void WriteLeading(ContentWriter writer, ActivatableDefinition value)
+    /// <param name="writesEffects">False for a definition whose effects aren't its own (a scroll's are its spell's), so they never reach its record.</param>
+    public static void WriteLeading(ContentWriter writer, ActivatableDefinition value, bool writesEffects = true)
     {
         writer.Guid(ContentTable.IdKey, value.Id);
         writer.String(NameKey, value.Name);
@@ -383,7 +389,10 @@ public static class ActivatableContent
         writer.String(GlyphKey, value.Glyph);
         writer.Color(GlyphColorKey, value.GlyphColor);
         writer.Tags(TagsKey, value.DeclaredTags);
-        writer.List("fx", value.Effects);
+        if (writesEffects)
+        {
+            writer.List(EffectsKey, value.Effects);
+        }
     }
 
     public static void WriteTrailing(ContentWriter writer, ActivatableDefinition value)
@@ -391,6 +400,6 @@ public static class ActivatableContent
         writer.String("d", value.Description);
         writer.String("su", value.Summary);
         writer.Object("tog", value.Toggle);
-        writer.List("ae", value.ActivationEffects);
+        writer.List(ActivationEffectsKey, value.ActivationEffects);
     }
 }

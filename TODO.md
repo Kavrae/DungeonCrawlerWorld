@@ -66,25 +66,15 @@ membership. Dependencies, out of scope here: a floor-end event (see EndOfLevelSt
 class-selection UI, the advancement rules themselves, the residue roll. Ends with an in-game test and
 a `phase-performance-testing` A/B.
 
-#### Workshop: edit Actions
-
-Planned in `PLAN-workshop-edit-actions.md` (2026-11-25, decisions awaiting confirmation).
-
-On the Items tab's machinery (IMPLEMENTATION-NOTES "Workshop content editing", "Adding an editing tab"): a
-`ContentEditingTable<ActionDefinition>` and an Actions tab deriving `ContentEditingTab`, replacing today's read-only one,
-plus the custom pieces: a spell's mana (a
-`ManaDrain` among its activation effects), timing and toggle spec. Checks: change an action's range and see it in a
-scroll that casts it; a toggle action that breaks the toggle rules lands in Drafts with its error in the Error List;
-disabling an action that content names asks first, and Cascade disables its dependents. The plan's example, Fireball
-named by "the Scroll and the Wand", doesn't hold for the shipped content: no scroll casts Fireball and the Wand of
-Fireball carries its own effects, so pick an action a scroll casts (Heal, by the Scroll of Healing).
-
 #### Workshop: edit Auras
 
-On the Items tab's machinery, as "Workshop: edit Actions" (the template check of 2026-11-14 already ran an Auras table
-through editing, publishing and the disable plan). The reference rule holds as it is (a published item can't name an
-aura that is only a draft). Also: an item's decode resolves an aura through the workspace (`ContentWorkspace.TryResolve`),
-which should look in the Auras table's documents first once it is held. Checks: change the Toxic Idol's aura power and
+On the Items tab's machinery, as the Actions tab is (`PLAN-workshop-edit-actions.md`; the template check of 2026-11-14
+already ran an Auras table through editing, publishing and the disable plan). The reference rule holds as it is (a
+published item can't name an aura that is only a draft). Already built by the Actions tab: a record that decodes
+through another is re-evaluated when that one changes, and the decode resolves through the held tables first
+(`ContentWorkspace.TryResolve`, a disabled record's replacement followed) -- so an item's or action's aura grant follows
+the aura as edited once the Auras table is held; build that table before Actions and Items in `BuilderTabs.Create`.
+Checks: change the Toxic Idol's aura power and
 see it in the game; save it as a draft and see the game keep the old one; disabling the aura asks first with the Idol as its dependent; Confirm With Replacement redirects
 it to another aura, and the Idol radiates that one in the game. Afterwards the data-driven plan's "indented copy for
 reading" can go.
@@ -724,6 +714,16 @@ already updates. Investigate the pros and cons of adding events.
 
 ### Low Priority
 
+#### Workshop Test Preview
+
+The Workshop always shows plain catalog values: a definition's own numbers, with no user (`PLAN-workshop-edit-actions.md`
+Decision 9). A Test Preview mode lets the editor pick two premade entities, a caster and a target. The previews of an
+action or item then show the values that result: ability-score bonuses, Outgoing and Incoming modifiers, spell
+Intelligence scaling, immunities and what would be refused. It reads through `ActivationPreviews` as the game's details
+do, beside the plain view, never in its place. Depends on an **Entity Editor**, which makes entities with set ability
+scores, skills, items, actions and equipment and saves them as premade test entities. That editor is not yet a TODO
+entry of its own.
+
 #### Workshop live inspector
 
 The Workshop's Debug tab showing a running game's entities and editing their components, over the diagnostics link
@@ -1331,14 +1331,17 @@ uses up a consumable resource: arrows and bolts, a lantern's oil, a torch's fuel
 
 #### Torch reveal + light-weakness damage, Scroll Mastery power-scaling
 
-- Scroll of Torch's light aura (`ScrollOfTorch.Aura`) is glow-only -- its `AuraDefinition` has no effects.
-  Needs a real effect (fog-of-war reveal, light-weakness damage). Also worth
-  reconsidering once fog of war lands: a Torch now lights the entity it is read at, or anchors on the
-  tile read at (`AuraAnchors`). The per-tile light level in "Field of view
+- The Torch spell's light aura (Torch Light, which the Scroll of Torch casts through the spell) is glow-only --
+  its `AuraDefinition` has no effects. Needs a real effect (fog-of-war reveal, light-weakness damage). Also worth
+  reconsidering once fog of war lands: Torch lights the entity it is cast at, or anchors on the
+  tile cast at (`AuraAnchors`). The per-tile light level in "Field of view
   and perception" (High, above) is where the reveal belongs: a Torch writes light into tiles, fog of war
   and NPC sight read it, and light-weakness damage checks the light level on the victim's tile.
-- `ScrollMasteryEffects.MasteryThreshold` (flat 200) and a synthesized spell's placeholder `ManaCost: 0`
-  should scale with the effect's power. Blocked on Action Effects gaining a power-scaling concept.
+- `ScrollMasteryEffects.MasteryThreshold` (flat 200) should scale with the spell's power. Blocked on Action
+  Effects gaining a power-scaling concept. (Mastery teaches the spell the scroll casts; nothing is synthesised.)
+- Scroll skills (later) are stat modifiers conditioned on the `Item.Consumable.Scroll` activator tag, read live at
+  use like any modifier. Range and area need targeting modifiers first; they join `SpellScalingEffects`, which is
+  every spell's Intelligence scaling, a scroll's included (`PLAN-workshop-edit-actions.md` Decision 11).
 
 #### Experience module
 
@@ -1849,6 +1852,9 @@ cost shows up in the diagnostics engine so it's visible when budgets are tuned.
 Same rules as Skills (level 0-15/20, XP with use, never decreases) -- land after Skills so both share
 one leveling primitive. A spell's level would modify its `Effect` magnitude/duration (bigger
 heal, cheaper Magic Missile) -- exact "what changes" design still open.
+A scroll then holds its spell **at a set level** -- a poor scroll a level-1 Heal, a fine one a level-15 Heal --
+as a field on `ScrollActivator` with a default of 1, so no existing file changes. Scrolls have no level of their
+own; a scroll casts its spell as the spell is (`PLAN-workshop-edit-actions.md` Decisions 1-3).
 
 #### Mobs looting corpses by preference
 
@@ -2133,6 +2139,15 @@ Until then a shop or small building is a single entity up to Huge, like the 2x2 
 
 ### Low Priority
 
+#### Advanced Scrolls
+
+Let a scroll hold effects of its own beside its spell, and hold several spells, cast either all at once or one after
+another. Today a scroll holds exactly one spell and nothing else: its effects, targeting and timing are the spell's,
+and a scroll record holding `fx` fails (`PLAN-workshop-edit-actions.md` Decision 1, which this relaxes). This is a step
+toward a calligraphy playstyle built on scrolls, temporary runes and other writing-based actions and items. Open
+questions: whose targeting a multi-spell scroll aims with (one aim for all, or one per spell); how "in sequence" is
+timed against windups and the action lock; and whether a scroll's own effects take the spell's Intelligence scaling.
+
 #### Doors that open and close
 
 A door is an entity in a doorway that the player and creatures open and close. Closed, it blocks movement,
@@ -2404,11 +2419,33 @@ crawlers died during a boss fight.
 - Depends on "In-game day/time tracking". The Outbound raid's abstract resolution above is one case
   of this; the "Unsimulated-tier time" item decides what Beyond does.
 
-#### AdvancedDodge buff
+#### Enhanced dodges: steps longer than one tile
 
-A buff/upgrade that increases Dodge's movement distance beyond one adjacent tile and extends the
-duration of its dodging-immunity window. Follow-up to Combat Overhaul: Dodge (this file's own entry
-above).
+A dodge is anything holding a `DodgeActivation` (`Game.Modules.Actions.Dodges.IsDodge`, read by Presentation through
+the armed action's effective definition -- never Dodge's Guid), so an enhanced dodge is content: its own action, or
+an override of Dodge on a race or a learned grant. Its step is its targeting's `MaximumRange`, but only a one-tile
+step is built (`Dodges.StepTiles`; `DodgeFootprint` steps the footprint one tile; `Dodges.ProblemsOf` refuses a
+longer one). Build the longer step: the step tiles out to the range (every tile the whole footprint could reach in a
+straight line without crossing a wall or an occupant), WASD confirming the farthest along each direction, and the
+move itself (several tiles in one frame, or a dash through MovementSystem). Also: a longer or stronger immunity
+window per dodge (the window is `DodgeEffects.ComputeWindowFrames`, Dexterity only; `DodgeActivation` gains its own
+window fields with defaults). Then drop the range check. Replaces "AdvancedDodge buff".
+
+#### Action upgrades: a learned action supersedes another
+
+The player learns an enhanced Dodge (or any better version of an action) and it takes the old one's place: the hotbar
+slot bound to the old action uses the new, and the Actions window lists only the new. Today an entity simply holds
+both. The seam for an NPC that starts with an enhanced version is a grant under the old action's Guid with an override
+(`ActionGrant`, as a race's `Derived` grants are); a learned upgrade that is its own record wants a content-side
+answer -- a "supersedes" Guid on the action, read by `EntityActions` when it lists and resolves an entity's actions
+(as it now resolves a disabled action to its replacement), so the old Guid in a hotbar slot finds the upgrade.
+
+#### NPCs dodge
+
+No NPC behavior uses a dodge. Add one (`Game.Modules.NpcBehavior`) that finds the entity's dodge by what it does
+(`Dodges.IsDodge` over `EntityActions`), not by Dodge's Guid -- so an NPC holding an enhanced dodge uses it -- and fires
+it against a telegraphed `Trait.Dodgeable` windup aimed at it (`TargetingView.IsWindupDodgeable`), stepping out of
+the telegraph where a step exists. Its consideration is the windup's time left against the NPC's action lock.
 
 #### Repair destroyed items
 
@@ -2722,6 +2759,10 @@ Which appearance each kind gets is shuffled per run, derived from the session se
   "recipe/UI/materials/where performed" question is the same design.
 - **Open:** whether knowledge carries across floors (the run-level object in "Game flow") -- almost
   certainly yes.
+- **Scroll crafting** (crafting and scroll skills, and knowing the spell): a crafted scroll is a persistent item
+  record (`ContentStore.Items.CreatePersistent`) naming a spell -- and, once spells have levels, its level. Its Guid
+  is derived from the canonical line, so the same scroll crafted twice is one record. The spell must be a record in
+  some layer: a crafted spell is (`ContentStore.Actions`), a tome's inline `SpellGrant` spell is not until saved.
 
 #### ItemBindingRule for hotkey-bound consumables
 
@@ -3568,6 +3609,20 @@ as if a key were pressed, a ready shape for "Replay by recording input" and "In-
 
 ### Medium Priority
 
+#### Details: Range and Area read the same in words and in the grid
+
+Item Details' and Action Details' Activation section says Range and Area Size in words, and its grid draws them
+(`ActivatableDetailsSections.BuildActivationSection` over `TargetShapePreviewGeometry`), but the two don't agree and the
+result is confusing. Since 2026-11-26 the grid shows every tile the spec can be aimed at dimmed (`ComputeReach`) and
+the tiles it lands on aimed at the far edge (`ComputeOffsets`), with distance numbers along the caster's row counting
+the caster's own tile as 1 -- so the number at the edge is Range + 1, while "Range: 6" counts tiles out from the
+caster. Area Size is a radius in words but shows only as the landed shape's extent. Range is a rounded circle measured
+from the footprint, and Minimum Range a hole. Make the words and the picture say one thing: one way of counting
+distance in both (the numbers start at 1 on the first tile out, or the words change), the edge of the range and the
+area's radius visibly marked on the grid, a minimum range shown as the hole it is, and a scaled spell's change
+(Intelligence) visible on the grid as well as in "(+17)". Check every shape (Single target, Circle, Ring, Line, Cone,
+Wall, Sweep, Adjacent, Self) with and without a minimum range and an Intelligence bonus.
+
 #### Improved targeting preview
 
 Item Details shows reach in two ways. Activations get a grid (`TargetShapePreviewElement`, through
@@ -3795,6 +3850,27 @@ A window for the player's own status that sits alongside the Health window (its 
 hotkey, the same shape as Health/Inventory/Ability Scores), for things about the player that aren't
 health, inventory or ability scores. First consumer: "Boss and crawler kill icons" (Low Priority, this
 section).
+
+#### Death recap screen
+
+When the player dies, a screen that shows how well the run went, before or as part of "Game over screen
+on player 0 HP" (High Priority, this section).
+
+- **How deep they got, drawn.** A simple geometric picture of the run's floors (e.g. 8 stacked floors)
+  with a red line zigzagging downward floor by floor, ending in a splat or X on the floor where they
+  died. Reads the floor count from "Floors: an 18-floor run" (Game, Low) once it exists.
+- **The stats**: name, race, class, level reached, most valuable item (by shop value), most used action
+  or spell (not counting Dodge), toughest enemy defeated, number of bosses killed and number of players
+  (crawlers) killed.
+- **Game owns the tallies.** Uses, kills and the toughest kill are counted by the game as the run goes
+  (`ActivationUsedEvent` for uses, `DeadComponent.KilledBy` for kills -- the same reads as "Boss and
+  crawler kill icons", Low), and the screen reads them through a view; Presentation never counts.
+  "Toughest" needs a rule (level, maximum health, a boss flag) decided when it's built.
+- **Screenshot button** that saves the screen as an image, so the player can share it as proof of
+  progress.
+- **Saved to a file**: each run's recap is written to the player's folders when the run ends, so a
+  main menu screen ("Main Menu and Mod menu", Engine, Medium; "Game flow", Game, Medium) can list past
+  runs and show each one's recap again.
 
 #### Shift+click to move a whole stack when looting and shopping
 

@@ -217,7 +217,7 @@ public sealed class ItemDetailsModeTests
         var actionStateView = TestActionStateViews.Over(Build.Value.EcsContext.ComponentManager, context.Actions, context.Items);
         elementPool.RegisterFactory(() => new TextDivider(TestElementServices.For(elementPool, fontService)));
         elementPool.RegisterFactory(() => new TargetShapePreviewElement(TestElementServices.For(elementPool, fontService)));
-        elementPool.RegisterFactory(() => new ItemDetailsWindow(TestElementServices.For(elementPool, fontService), context.Actions, new EffectTextNames(context.GameplayTags, context.Terrain, context.StatusEffectDisplays), actionStateView, new ActivationPreviews(context.EffectServices, context.SimulationClock), TestPlayerQuery.NoPlayer));
+        elementPool.RegisterFactory(() => new ItemDetailsWindow(TestElementServices.For(elementPool, fontService), new EffectTextNames(context.GameplayTags, context.Terrain, context.StatusEffectDisplays), actionStateView, new ActivationPreviews(context.EffectServices, context.SimulationClock), TestPlayerQuery.NoPlayer));
         return elementPool;
     }
 

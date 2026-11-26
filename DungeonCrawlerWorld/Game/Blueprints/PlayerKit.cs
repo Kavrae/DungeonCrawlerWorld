@@ -57,7 +57,7 @@ public static class PlayerKit
     public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
         Build = Build,
-        UsesActions = [BuiltInActionIds.Heal, BuiltInActionIds.MagicMissile, BuiltInActionIds.ToxicStrike, BuiltInActionIds.ToxicAura, BuiltInActionIds.Lantern, BuiltInActionIds.Fireball, BuiltInActionIds.LightningBolt, BuiltInActionIds.FireFan, BuiltInActionIds.WallOfFire, BuiltInActionIds.RingOfLava, BuiltInActionIds.BattleFury, BuiltInActionIds.Dodge, BuiltInActionIds.PowerAttack, BuiltInActionIds.QuickAttack],
+        UsesActions = [BuiltInActionIds.Heal, BuiltInActionIds.MagicMissile, BuiltInActionIds.ToxicStrike, BuiltInActionIds.ToxicAura, BuiltInActionIds.Lantern, BuiltInActionIds.Fireball, BuiltInActionIds.LightningBolt, BuiltInActionIds.FireFan, BuiltInActionIds.WallOfFire, BuiltInActionIds.RingOfLava, BuiltInActionIds.BattleFury, BuiltInActionIds.Torch, BuiltInActionIds.Dodge, BuiltInActionIds.PowerAttack, BuiltInActionIds.QuickAttack],
         UsesItems = [BuiltInItemIds.WandOfFireball, BuiltInItemIds.HealthPotion, BuiltInItemIds.ManaPotion, BuiltInItemIds.HotkeyExpansionPotion, BuiltInItemIds.DamagePotion, BuiltInItemIds.ToxicPotion, BuiltInItemIds.ToxicIdol, BuiltInItemIds.DreadIdol, BuiltInItemIds.ScrollOfHealing, BuiltInItemIds.ScrollOfTorch, BuiltInItemIds.ImmunityTestPotion, BuiltInItemIds.ResistanceTestPotion, BuiltInItemIds.DraughtOfPlenty, BuiltInItemIds.DraughtOfThrift, BuiltInItemIds.DraughtOfVenom, BuiltInItemIds.DraughtOfRadiance],
         Appearance = new() { Name = PlayerName, Description = PlayerDescription, Glyph = "@", GlyphColor = Color.White, SpriteName = "Player" },
     };
@@ -112,6 +112,7 @@ public static class PlayerKit
         ActionGrantEffects.Grant(componentManager, actions, entityId, BuiltInActionIds.WallOfFire, overrideDefinition: null);
         ActionGrantEffects.Grant(componentManager, actions, entityId, BuiltInActionIds.RingOfLava, overrideDefinition: null);
         ActionGrantEffects.Grant(componentManager, actions, entityId, BuiltInActionIds.BattleFury, overrideDefinition: null);
+        ActionGrantEffects.Grant(componentManager, actions, entityId, BuiltInActionIds.Torch, overrideDefinition: null);
 
         // TEMPORARY, for testing spells (Fireball costs 15): 30 mana whatever Intelligence would give. Remove once mana is balanced.
         var mana = componentManager.GetPackedPool<ManaComponent>();

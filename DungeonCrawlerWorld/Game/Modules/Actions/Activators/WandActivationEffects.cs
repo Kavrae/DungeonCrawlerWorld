@@ -11,6 +11,6 @@ public static class WandActivationEffects
     /// <summary>Charge count at Intelligence total 300 (AbilityScoreMath's own clamp range).</summary>
     public const ushort MaxCharges = 30;
 
-    /// <summary>Linear ramp from MinCharges at Intelligence total 1 up to MaxCharges at total 300 -- mirrors ScrollScalingEffects/PotionCooldownEffects' own AbilityScoreMath.Lerp usage.</summary>
+    /// <summary>Linear ramp from MinCharges at Intelligence total 1 up to MaxCharges at total 300 -- mirrors SpellScalingEffects/PotionCooldownEffects' own AbilityScoreMath.Lerp usage.</summary>
     public static ushort ComputeMaxCharges(ushort intelligenceTotal) => (ushort)AbilityScoreMath.Lerp(intelligenceTotal, MinCharges, MaxCharges);
 }

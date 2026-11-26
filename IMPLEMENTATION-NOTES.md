@@ -3876,10 +3876,21 @@ any table with a codec.
   given its `TabNavigator`, and focus the control of the field the step changed (`ContentEditStep.OriginFieldPath`, from
   `ContentInspectorEdit.FieldPath`; `off`/`rep` for Disable, Enable and Cascade) in the open tab or the tab they open --
   the nearest row above it when the field is gone; New and Delete name none.
-- **Adding an editing tab** (checked with Auras, 2026-11-14, and not kept):
+- **Records that decode through another** (2026-11-26, with the Actions tab): a scroll holds its decoded spell, so an
+  edit, undo, add or removal of any held record re-evaluates every held record of any table that names it, one step
+  out (`ContentWorkspace.ReevaluateRecordsNaming` over `IContentEditingTable.ReevaluateRecordsNaming`), and its tab
+  shows it at once -- before anything is saved. The decode resolves through the workspace (`TryResolve`): a held
+  record as it last decoded, a disabled one's replacement as the game resolves it, else the session's content. A table
+  a record decodes through is built first in `BuilderTabs.Create` (Actions before Items).
+- **The Workshop shows plain values.** A details window there has no user (`NoWorkshopPlayer`): each definition's own
+  numbers, with no ability-score bonus, Intelligence scaling or modifiers. Values for chosen entities are TODO.md's
+  "Workshop Test Preview".
+- **Adding an editing tab** (checked with Auras, 2026-11-14, and not kept; the Actions tab is the second built,
+  2026-11-26):
   1. A `ContentEditingTable<T>` in `BuilderTabs.Create` over the session's definitions: name, mod origin, the per-record
      checks (`ContentChecks.ProblemsOf`), and optionally its look (for the same-look warning) and a stand-in for a
-     record that doesn't decode.
+     record that doesn't decode (`ActivatablePlaceholder` for actions and items; an action's holds an activator, which
+     it requires). Build it before any table whose records decode through it.
   2. A tab deriving `ContentEditingTab<T, TPreview>`: title, nouns, the name key, a new record's starting fields,
      browser sections, the row's look and the preview. About forty lines. Its Uses and Used By (the bottom panel) come
      from the workspace: the documents' reference walk joined with the index.
@@ -3888,6 +3899,47 @@ any table with a codec.
   4. Anything only the game knows about its records (sprite pickers, notes, decorations) goes in `GameInspectorSource`,
      naming fields by the codec's own key constants (`ActivatableContent.*Key`), never a literal.
   5. A table records can name that isn't in `SessionContentTables` yet gets its entry there.
+
+### Scrolls cast their spell; Intelligence scales spells; dodges and disabled grants (2026-11-26)
+
+`PLAN-workshop-edit-actions.md`, Phases 0 and 1 (Decisions 1-3, 6, 7 and 11).
+
+- **A scroll is its spell.** `ScrollActivator(SpellId, Spell)`: the Guid as its record names it (so a disabled spell's
+  replacement never rewrites the line) and the spell it resolves to, decoded through the content's references
+  (`ContentObject.Reference<ActionDefinition>`) as an aura grant holds its aura. Its targeting and timing are the
+  spell's, the cooldown left out (a scroll is used up); its implied tags are a scroll's plus all the spell's, so
+  `Trait.Dodgeable` and `Effect.Healing` carry over. `ItemDefinition` takes a scroll's effects from the spell whatever is
+  passed; the item codec writes none and fails a scroll record holding any. Its activation effects are the item's own,
+  never the spell's: **a scroll costs nothing but itself.** `ScrollContentValidation`: the spell has a `SpellActivator`
+  and isn't a toggle. A scroll naming no spell doesn't decode, so mastery teaches a spell that exists and synthesises
+  nothing.
+- **The spell is fixed for the session.** Every reference source resolves it -- `GameContent` (redirects followed),
+  `ContentStore` (the session's catalog: a crafted scroll may name a crafted spell), entity snapshots, the Workshop's
+  workspace. `ContentCatalogLoader` registers a scroll's spell with it, and settles a save's actions before its items,
+  so a scroll holds the spell the catalog does.
+- **Later, recorded only:** a scroll holds its spell **at a set level** once spells have levels (a field with a default,
+  no file changes); scroll skills are modifiers conditional on `Item.Consumable.Scroll`; a crafted scroll is a
+  persistent item record naming a spell; a scroll with effects of its own, or several spells, is TODO.md's "Advanced
+  Scrolls".
+- **Intelligence scales every spell** (`SpellScalingEffects`, was `ScrollScalingEffects`): a 1x-4x multiplier over
+  Intelligence 1-300 on maximum range, area and effect durations, for any use whose activator implies `Spell` -- cast,
+  read from a scroll, a tome's, a mastered one. Not costs, not minimum range; NPCs by their own Intelligence.
+  `ActivationEffectResolver.Apply` works out the duration multiplier itself, so actions and items share it; the
+  breakdown reads "Intelligence (spell)" (`ValueContributionKind.SpellIntelligence`).
+- **A dodge is what it does** (`Dodges.IsDodge`: its own effects hold a `DodgeActivation`), never Dodge's Guid, so an
+  enhanced dodge -- an NPC's default, a learned one, a race's override -- gets the step tiles, the WASD confirm and its
+  hints. Presentation keeps the answer beside the armed action (`MapViewState.ArmedActionIsDodge`, written only by
+  `ActionTargetingController.SetArmedAction`). A dodge steps one tile (`Dodges.StepTiles`); a longer range is refused
+  until longer steps exist (TODO.md "Enhanced dodges").
+- **A disabled action's grant is its replacement's.** `Catalog.ResolveId` (Engine) follows redirects; `EntityActions`
+  takes every Guid it is asked about and every grant it holds -- the entity's own, applied parts', its blueprint's,
+  Core, cooldowns -- as the action it resolves to, so an entity granted both is granted one action, listed once, with
+  one cooldown, and a hotkey bound to the old Guid uses the replacement. Among grants resolving to one action, one
+  naming it directly wins. Blueprint grants are never stored per entity, which is why this is done where grants are
+  read rather than only where they are made.
+- **The Workshop's index sees grants in code**: a blueprint's `Actions` as "grants it, in code" or, for a `Derived`
+  recipe, "derives its own from it, in code" (`ContentReferenceKind.GrantsAction`/`DerivesAction`), beside
+  `UsesActions`. Every shipped action is named by code, so Delete and Cascade are refused for all of them.
 
 ### Workshop compare with master (2026-11-15)
 
