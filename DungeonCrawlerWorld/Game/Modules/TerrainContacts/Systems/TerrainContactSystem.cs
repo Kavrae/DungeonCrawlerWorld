@@ -25,13 +25,18 @@ namespace Game.Modules.TerrainContacts.Systems;
 /// at the start of each Update, not an EventBus subscription per move (see FrameEventBuffer). Every
 /// buffered move landing on contact terrain applies it and restarts the repeat -- including a move
 /// from one such cell to another, not just a fresh entry. Only a contact that repeats leaves
-/// anything on the entity (TerrainContactExposureComponent), and those sit on a timer wheel: only
+/// anything on the entity (TerrainContactExposureComponent, one per terrain), and those sit on a timer wheel: only
 /// the ones due this frame are touched, on their exact frame at every processing tier.
 /// </para>
 /// <para>
 /// Terrain that changes under an entity counts as stepping onto the new terrain (TerrainChangedEvent),
 /// and every repeat reads the terrain where the entity stands rather than trusting what it stood on
 /// last time, so no exposure outlives the terrain that caused it.
+/// </para>
+/// <para>
+/// An entity stands on every tile of its footprint: each distinct terrain with a contact under it applies once, on
+/// stepping on and at that terrain's own interval -- a large entity with one corner on lava burns, as a small one on
+/// that tile does, and lava under several of its tiles still burns once.
 /// </para>
 /// </remarks>
 public sealed class TerrainContactSystem : ISystem
@@ -40,16 +45,23 @@ public sealed class TerrainContactSystem : ISystem
     public byte StripeCount => 1;
 
     private readonly TerrainRegistry _terrain;
-    private readonly PackedComponentPool<TerrainContactExposureComponent> _exposures;
+    private readonly MultiComponentPool<TerrainContactExposureComponent> _exposures;
     private readonly EffectServices _effectServices;
     private readonly IMapQuery _mapQuery;
     private readonly DirectComponentPool<TransformComponent> _transforms;
     private readonly FrameEventBuffer<EntityMovedEvent> _movedEntities;
     private readonly PackedComponentPool<DeadComponent> _deadEntities;
-    private readonly PackedTimerWheel<TerrainContactExposureComponent> _wheel;
+    private readonly MultiTimerWheel<TerrainContactExposureComponent> _wheel;
     private readonly SimulationClock _clock;
     private readonly SimulationScope _simulationScope;
-    private readonly List<int> _occupantIdsScratch = [];
+    /// <summary>The most distinct terrains a footprint can stand on: one per tile of the largest footprint.</summary>
+    private const int MaximumFootprintTerrains = Blueprints.ResolvedBlueprint.MaximumFootprintTiles * Blueprints.ResolvedBlueprint.MaximumFootprintTiles;
+
+    /// <summary>The most occupants of a changed cell copied onto the stack; more are copied to the heap.</summary>
+    private const int MaximumStackOccupants = 16;
+
+    /// <summary>The terrains of the exposures an entity holds that no tile of its footprint is on any more.</summary>
+    private readonly List<ushort> _staleExposureTerrainsScratch = [];
 
     // Cached once instead of passing the Tick method group every Update -- unlike a static
     // method group, an instance method group conversion allocates a fresh delegate on every
@@ -59,7 +71,7 @@ public sealed class TerrainContactSystem : ISystem
 
     public TerrainContactSystem(
         TerrainRegistry terrain,
-        PackedComponentPool<TerrainContactExposureComponent> exposures,
+        MultiComponentPool<TerrainContactExposureComponent> exposures,
         EffectServices effectServices,
         IMapQuery mapQuery,
         DirectComponentPool<TransformComponent> transforms,
@@ -77,7 +89,7 @@ public sealed class TerrainContactSystem : ISystem
         _clock = simulationClock;
         _simulationScope = simulationScope;
         _tick = Tick;
-        _wheel = new PackedTimerWheel<TerrainContactExposureComponent>(exposures, simulationScope);
+        _wheel = new MultiTimerWheel<TerrainContactExposureComponent>(exposures, simulationScope);
 
         simulationScope.EntityResumed += OnEntityResumed;
         effectServices.EventBus.Subscribe<TerrainChangedEvent>(OnTerrainChanged);
@@ -92,52 +104,112 @@ public sealed class TerrainContactSystem : ISystem
     {
         foreach (var moved in _movedEntities.ItemSpan)
         {
-            StepOnto(moved.EntityId, moved.NewPosition, time.FrameCount);
+            StepOnto(moved.EntityId, moved.NewPosition, moved.Size, time.FrameCount);
         }
 
         _wheel.Tick(time.FrameCount, _tick);
     }
 
-    /// <summary>Applies the contact of the terrain at position to entityId as one stepping onto it, and starts, restarts or ends its repeat to match.</summary>
-    private void StepOnto(int entityId, Vector3Int position, long now)
+    /// <summary>Applies the contact of each distinct terrain under the footprint at position to entityId as one stepping onto it, and starts, restarts or ends each repeat to match.</summary>
+    private void StepOnto(int entityId, Vector3Int position, Vector2Byte size, long now)
     {
         if (_deadEntities.Has(entityId))
         {
             return;
         }
 
-        var terrainTypeId = _mapQuery.GetTerrainAt(position).TypeId;
+        Span<ushort> contactTerrains = stackalloc ushort[MaximumFootprintTerrains];
+        contactTerrains = contactTerrains[..CollectContactTerrainsUnder(position, size, contactTerrains)];
+
+        _staleExposureTerrainsScratch.Clear();
+        for (var denseIndex = _exposures.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _exposures.GetNextDenseIndex(denseIndex))
+        {
+            var exposedTerrainTypeId = _exposures.GetReadonlyByDenseIndex(denseIndex).TerrainTypeId;
+            if (!contactTerrains.Contains(exposedTerrainTypeId))
+            {
+                _staleExposureTerrainsScratch.Add(exposedTerrainTypeId);
+            }
+        }
+
+        foreach (var staleTerrainTypeId in _staleExposureTerrainsScratch)
+        {
+            _exposures.RemoveFirst(entityId, new TimerKeyMatcher<TerrainContactExposureComponent>(staleTerrainTypeId));
+        }
+
+        foreach (var terrainTypeId in contactTerrains)
+        {
+            StepOntoTerrain(entityId, terrainTypeId, now);
+        }
+    }
+
+    /// <summary>Applies one terrain's contact to entityId as one stepping onto it, and starts or restarts its repeat, or ends it for a contact that doesn't repeat.</summary>
+    private void StepOntoTerrain(int entityId, ushort terrainTypeId, long now)
+    {
         if (!_terrain.TryGet(terrainTypeId, out var definition) || definition.Contact is not { } contact)
         {
-            _exposures.Remove(entityId);
             return;
         }
 
         var outcome = ApplyContact(entityId, terrainTypeId, definition, contact, now, announcesRefusal: true);
+        var matcher = new TimerKeyMatcher<TerrainContactExposureComponent>(terrainTypeId);
 
         if (contact.RepeatEveryFrames is not { } repeatEveryFrames)
         {
-            _exposures.Remove(entityId);
+            _exposures.RemoveFirst(entityId, matcher);
             return;
         }
 
-        var exposure = new TerrainContactExposureComponent(FrameDeadline.AfterStaggered(now, repeatEveryFrames, entityId), terrainTypeId)
-        {
-            Refused = outcome == EffectOutcome.Refused,
-        };
+        var nextTickFrame = FrameDeadline.AfterStaggered(now, repeatEveryFrames, entityId);
+        var refused = outcome == EffectOutcome.Refused;
 
-        using (var heldExposure = _exposures.TryWrite(entityId))
+        using (var heldExposure = _exposures.TryWriteFirst(entityId, matcher))
         {
             if (heldExposure.Found)
             {
-                heldExposure.Value.NextTickFrame = exposure.NextTickFrame;
-                heldExposure.Value.TerrainTypeId = exposure.TerrainTypeId;
-                heldExposure.Value.Refused = exposure.Refused;
+                heldExposure.Value.NextTickFrame = nextTickFrame;
+                heldExposure.Value.Refused = refused;
                 return;
             }
         }
 
-        _exposures.Add(entityId, exposure);
+        _exposures.Add(entityId, new TerrainContactExposureComponent(nextTickFrame, terrainTypeId) { Refused = refused });
+    }
+
+    /// <summary>Fills terrains with each distinct terrain that has a contact under any tile of the footprint at position, and returns how many.</summary>
+    /// <remarks>Each caller holds its own buffer: applying a contact can change terrain, which steps occupants onto it again before the caller has finished.</remarks>
+    private int CollectContactTerrainsUnder(Vector3Int position, Vector2Byte size, Span<ushort> terrains)
+    {
+        var count = 0;
+        for (var deltaY = 0; deltaY < size.Y; deltaY++)
+        {
+            for (var deltaX = 0; deltaX < size.X; deltaX++)
+            {
+                var terrainTypeId = _mapQuery.GetTerrainAt(position + new Vector3Int(deltaX, deltaY, 0)).TypeId;
+                if (_terrain.TryGetContact(terrainTypeId, out _) && !terrains[..count].Contains(terrainTypeId))
+                {
+                    terrains[count++] = terrainTypeId;
+                }
+            }
+        }
+
+        return count;
+    }
+
+    /// <summary>Whether any tile of the footprint at position is on terrainTypeId.</summary>
+    private bool FootprintStandsOn(Vector3Int position, Vector2Byte size, ushort terrainTypeId)
+    {
+        for (var deltaY = 0; deltaY < size.Y; deltaY++)
+        {
+            for (var deltaX = 0; deltaX < size.X; deltaX++)
+            {
+                if (_mapQuery.GetTerrainAt(position + new Vector3Int(deltaX, deltaY, 0)).TypeId == terrainTypeId)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private EffectOutcome ApplyContact(int entityId, ushort terrainTypeId, TerrainDefinition definition, TerrainContact contact, long now, bool announcesRefusal)
@@ -151,11 +223,10 @@ public sealed class TerrainContactSystem : ISystem
         return EffectSequence.Apply(contact.Effects, in context);
     }
 
-    /// <summary>Applies one repeat of the contact the entity is standing on, or ends the exposure. Returns whether the exposure should be removed -- see TimerFired's contract.</summary>
+    /// <summary>Applies one repeat of the exposure's terrain contact, or ends the exposure. Returns whether the exposure should be removed -- see TimerFired's contract; the wheel removes that one instance, by terrain.</summary>
     /// <remarks>
-    /// Removed when the entity is dead, has no position, or no longer stands on terrain whose contact
-    /// repeats. The terrain is read where the entity stands now, so one that changed since the last
-    /// repeat is the one applied. A repeat that is refused again after a refused one stays silent.
+    /// Removed when the entity is dead, has no position, no tile of its footprint stands on the exposure's terrain any
+    /// more, or that terrain's contact no longer repeats. A repeat that is refused again after a refused one stays silent.
     /// </remarks>
     private bool Tick(int entityId, TerrainContactExposureComponent exposure, long now)
     {
@@ -164,19 +235,23 @@ public sealed class TerrainContactSystem : ISystem
             return true;
         }
 
-        var terrainTypeId = _mapQuery.GetTerrainAt(transform.Position).TypeId;
+        var terrainTypeId = exposure.TerrainTypeId;
+        if (!FootprintStandsOn(transform.Position, transform.Size, terrainTypeId))
+        {
+            TakeUpRepeatingTerrainsUnder(entityId, transform.Position, transform.Size, now);
+            return true;
+        }
+
         if (!_terrain.TryGet(terrainTypeId, out var definition) || definition.Contact is not { } contact || contact.RepeatEveryFrames is not { } repeatEveryFrames)
         {
             return true;
         }
 
-        var alreadyRefused = exposure.Refused && terrainTypeId == exposure.TerrainTypeId;
-        var outcome = ApplyContact(entityId, terrainTypeId, definition, contact, now, announcesRefusal: !alreadyRefused);
+        var outcome = ApplyContact(entityId, terrainTypeId, definition, contact, now, announcesRefusal: !exposure.Refused);
 
-        using var heldExposure = _exposures.TryWrite(entityId);
+        using var heldExposure = _exposures.TryWriteFirst(entityId, new TimerKeyMatcher<TerrainContactExposureComponent>(terrainTypeId));
         if (heldExposure.Found)
         {
-            heldExposure.Value.TerrainTypeId = terrainTypeId;
             heldExposure.Value.Refused = outcome == EffectOutcome.Refused;
             heldExposure.Value.AdvanceOnePeriod(repeatEveryFrames);
         }
@@ -184,7 +259,21 @@ public sealed class TerrainContactSystem : ISystem
         return false;
     }
 
-    /// <summary>A cell's terrain changed: whoever stands on it has just stepped onto the new terrain.</summary>
+    /// <summary>For a repeat that found its terrain gone from under the footprint: every repeating terrain under it that the entity holds no exposure to applies now and starts its own repeat, so a repeat always reads the terrain where the entity stands.</summary>
+    private void TakeUpRepeatingTerrainsUnder(int entityId, Vector3Int position, Vector2Byte size, long now)
+    {
+        Span<ushort> contactTerrains = stackalloc ushort[MaximumFootprintTerrains];
+        foreach (var terrainTypeId in contactTerrains[..CollectContactTerrainsUnder(position, size, contactTerrains)])
+        {
+            if (_terrain.TryGetContact(terrainTypeId, out var contact) && contact.RepeatEveryFrames is not null
+                && _exposures.CountMatching(entityId, new TimerKeyMatcher<TerrainContactExposureComponent>(terrainTypeId)) == 0)
+            {
+                StepOntoTerrain(entityId, terrainTypeId, now);
+            }
+        }
+    }
+
+    /// <summary>A cell's terrain changed: whoever stands on it has just stepped onto the terrain under its footprint.</summary>
     private void OnTerrainChanged(TerrainChangedEvent changed) =>
         StepOccupantsOnto(new Vector3Int(changed.X, changed.Y, (int)changed.TerrainLayer), _clock.CurrentFrame);
 
@@ -195,22 +284,25 @@ public sealed class TerrainContactSystem : ISystem
             return;
         }
 
-        // Copied first: applying a contact can change who occupies the cell.
-        _occupantIdsScratch.Clear();
-        _occupantIdsScratch.AddRange(_mapQuery.GetOccupantEntityIdSpanAt(position));
+        // Copied first, into a buffer of this call's own: applying a contact can change who occupies the cell, or change
+        // terrain again, which steps occupants onto it before this loop has finished.
+        var occupantSpan = _mapQuery.GetOccupantEntityIdSpanAt(position);
+        Span<int> occupantIds = occupantSpan.Length <= MaximumStackOccupants ? stackalloc int[MaximumStackOccupants] : new int[occupantSpan.Length];
+        occupantIds = occupantIds[..occupantSpan.Length];
+        occupantSpan.CopyTo(occupantIds);
 
-        foreach (var occupantId in _occupantIdsScratch)
+        foreach (var occupantId in occupantIds)
         {
             // A frozen occupant is left alone: it steps onto whatever it stands on when it resumes (OnEntityResumed).
-            if (_simulationScope.IsSimulated(occupantId))
+            if (_simulationScope.IsSimulated(occupantId) && _transforms.TryGetReadonly(occupantId, out var occupantTransform))
             {
-                StepOnto(occupantId, position, now);
+                StepOnto(occupantId, occupantTransform.Position, occupantTransform.Size, now);
             }
         }
     }
 
-    /// <summary>Picks a resumed entity back up: the repeats owed while it froze are skipped, not applied, and if the terrain under it is no longer the one it was exposed to, it steps onto what is there now.</summary>
-    /// <remarks>Runs after the wheel's own resume handler has rescheduled the stale deadline; rewriting it here reschedules again and leaves that earlier entry to be dropped as stale, the wheel's ordinary lazy cancellation.</remarks>
+    /// <summary>Picks a resumed entity back up: the repeats owed while it froze are skipped, not applied, and if the repeating terrains under its footprint are no longer the ones it was exposed to, it steps onto what is there now.</summary>
+    /// <remarks>Runs after the wheel's own resume handler has rescheduled the stale deadlines; rewriting them here reschedules again and leaves those earlier entries to be dropped as stale, the wheel's ordinary lazy cancellation.</remarks>
     private void OnEntityResumed(int entityId)
     {
         var now = _clock.CurrentFrame;
@@ -221,26 +313,34 @@ public sealed class TerrainContactSystem : ISystem
             return;
         }
 
-        var terrainTypeId = _mapQuery.GetTerrainAt(transform.Position).TypeId;
-        var exposedTerrainTypeId = _exposures.TryGetReadonly(entityId, out var exposure) ? exposure.TerrainTypeId : TerrainRegistry.None;
-        var repeats = _terrain.TryGetContact(terrainTypeId, out var contact) && contact.RepeatEveryFrames is not null;
-
-        if (terrainTypeId != exposedTerrainTypeId && (repeats || exposedTerrainTypeId != TerrainRegistry.None))
+        Span<ushort> contactTerrains = stackalloc ushort[MaximumFootprintTerrains];
+        var repeatingTerrainCount = 0;
+        var exposuresMatch = true;
+        foreach (var terrainTypeId in contactTerrains[..CollectContactTerrainsUnder(transform.Position, transform.Size, contactTerrains)])
         {
-            StepOnto(entityId, transform.Position, now);
+            if (_terrain.TryGetContact(terrainTypeId, out var contact) && contact.RepeatEveryFrames is not null)
+            {
+                repeatingTerrainCount++;
+                exposuresMatch &= _exposures.CountMatching(entityId, new TimerKeyMatcher<TerrainContactExposureComponent>(terrainTypeId)) > 0;
+            }
+        }
+
+        if (!exposuresMatch || repeatingTerrainCount != _exposures.CountForEntity(entityId))
+        {
+            StepOnto(entityId, transform.Position, transform.Size, now);
         }
     }
 
-    /// <summary>Moves the entity's exposure past every repeat owed while it was frozen, applying none of them: an exposure is an interaction with the surroundings, not an effect already in progress, so it does not accrue while frozen.</summary>
+    /// <summary>Moves each of the entity's exposures past every repeat owed while it was frozen, applying none of them: an exposure is an interaction with the surroundings, not an effect already in progress, so it does not accrue while frozen.</summary>
     private void SkipOwedTicks(int entityId, long now)
     {
-        if (!_exposures.TryGetReadonly(entityId, out var exposure)
-            || !_terrain.TryGetContact(exposure.TerrainTypeId, out var contact)
-            || contact.RepeatEveryFrames is not { } repeatEveryFrames)
+        for (var denseIndex = _exposures.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _exposures.GetNextDenseIndex(denseIndex))
         {
-            return;
+            var exposure = _exposures.GetReadonlyByDenseIndex(denseIndex);
+            if (_terrain.TryGetContact(exposure.TerrainTypeId, out var contact) && contact.RepeatEveryFrames is { } repeatEveryFrames)
+            {
+                _exposures.UpdateByDenseIndex(denseIndex, new SkipOwedPeriodsUpdate<TerrainContactExposureComponent>(repeatEveryFrames, now));
+            }
         }
-
-        _exposures.TryUpdate(entityId, new SkipOwedPeriodsUpdate<TerrainContactExposureComponent>(repeatEveryFrames, now));
     }
 }

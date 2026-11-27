@@ -59,6 +59,9 @@ param(
     # 3x3 of neighborhoods, today's default. Part of what makes runs comparable, like the seed and
     # range: a different size is a different workload.
     [int]$MapSize = 3072,
+    # More game arguments, separated by spaces (for example "--setting=AurasModule.StressAuraCreaturePercent=100" for the
+    # aura stress benchmark). Recorded with every saved run, and only a run with the same ones is a previous run to compare with.
+    [string]$ExtraArguments = "",
     [int]$TimeoutSeconds = 300,
     # Default 20 for a single run against a saved one, 10 for -Compare (medians of interleaved
     # runs are much tighter).
@@ -142,6 +145,7 @@ function Invoke-BenchmarkRun {
 
     $gameArguments = @("--seed=$Seed", "--benchmark-frames=$StartFrame-$EndFrame")
     $gameArguments += "--map-size=$MapSize"
+    $gameArguments += @($ExtraArguments -split "\s+" | Where-Object { $_ })
     $diagnosticsFeatures = @()
     if (-not $RunHeadless) { $diagnosticsFeatures += "frame" }
     if ($Gauges) { $diagnosticsFeatures += "gauges" }
@@ -399,7 +403,7 @@ if ($Compare) {
     $pairs = if ($Repeat -gt 0) { $Repeat } else { 3 }
     $threshold = if ($RegressionPercent -ge 0) { $RegressionPercent } else { 10 }
 
-    Write-Host "A/B, headless, $Configuration, seed $Seed, frames $StartFrame-$EndFrame, map $MapSize, $pairs runs per side, interleaved"
+    Write-Host "A/B, headless, $Configuration, seed $Seed, frames $StartFrame-$EndFrame, map $MapSize, $pairs runs per side, interleaved$(if ($ExtraArguments) { ", arguments: $ExtraArguments" })"
     Write-Host "  A (baseline): $baselineExe  (saved $($baselineInfo.savedUtc), commit $($baselineInfo.gitCommit))"
     Write-Host "  B (current):  $ExePath"
 
@@ -473,6 +477,7 @@ if ($Compare) {
         unit           = "ms/frame"
         randomSeed     = $Seed
         mapSize        = $MapSize
+        extraArguments = $ExtraArguments
         startFrame     = $StartFrame
         endFrame       = $EndFrame
         runsPerSide    = $pairs
@@ -505,7 +510,7 @@ $runCount = if ($Repeat -gt 0) { $Repeat } elseif ($Headless) { 5 } else { 1 }
 $threshold = if ($RegressionPercent -ge 0) { $RegressionPercent } else { 20 }
 $sampling = if ($Headless) { "frame-range-headless" } else { "frame-range" }
 
-Write-Host "$(if ($Headless) { 'Headless' } else { 'Windowed' }) benchmark, $Configuration, seed $Seed, frames $StartFrame-$EndFrame, map $MapSize, $runCount run(s)"
+Write-Host "$(if ($Headless) { 'Headless' } else { 'Windowed' }) benchmark, $Configuration, seed $Seed, frames $StartFrame-$EndFrame, map $MapSize, $runCount run(s)$(if ($ExtraArguments) { ", arguments: $ExtraArguments" })"
 $runs = @()
 for ($i = 1; $i -le $runCount; $i++) {
     if ($runCount -gt 1) { Write-Host "  run $i/$runCount..." }
@@ -551,6 +556,7 @@ $result = [ordered]@{
     unit                  = "ms/frame"
     randomSeed            = $Seed
     mapSize               = $MapSize
+    extraArguments        = $ExtraArguments
     startFrame            = $StartFrame
     endFrame              = $EndFrame
     runs                  = $runCount
@@ -590,6 +596,7 @@ foreach ($candidate in (Get-ChildItem -Path $OutputDir -Filter "2*.json" | Where
         $candidateConfiguration -eq $Configuration -and
         [int]$candidateReport.randomSeed -eq $Seed -and
         [int]$candidateReport.mapSize -eq $MapSize -and
+        [string]$(if ($candidateReport.extraArguments) { $candidateReport.extraArguments } else { "" }) -eq $ExtraArguments -and
         [long]$candidateReport.startFrame -eq $StartFrame -and
         [long]$candidateReport.endFrame -eq $EndFrame) {
         $previousFile = $candidate

@@ -72,7 +72,7 @@ public sealed class ToggleItemTests
         public int PoisonStrengthAt(Vector3Int position)
         {
             Assert.IsTrue(Session.Catalogs.Auras.TryGetId(TestContent.Aura(BuiltInAuraIds.ToxicIdolPoison).Id, out var auraId));
-            return Session.Internals.AuraField.GetTotalPowerAt(position, auraId);
+            return Session.Views.AuraView.PowerAt(position.X, position.Y, position.Z, auraId);
         }
 
         public uint Light(int entityId)
@@ -274,7 +274,7 @@ public sealed class ToggleItemTests
     }
 
     [TestMethod]
-    public void TwoLitUnitsInOneStack_AreTwoTogglesWhoseSourcesAdd_AndEachEndsOnlyItsOwn()
+    public void TwoLitUnitsInOneStack_AreTwoToggles_AsStrongAsOne_AndEachEndsOnlyItsOwn()
     {
         var harness = BuildWithIdols(2);
         var player = harness.PlayerEntityId;
@@ -284,7 +284,7 @@ public sealed class ToggleItemTests
 
         Assert.AreEqual(2, harness.ActiveToggleCount(player));
         Assert.AreEqual(2, harness.HeldSourceCount(player));
-        Assert.AreEqual(IdolStrength * 2, harness.PoisonStrengthAt(harness.PlayerAuraTile));
+        Assert.AreEqual(IdolStrength, harness.PoisonStrengthAt(harness.PlayerAuraTile), "Two sources of one aura are as strong as one.");
 
         Assert.IsTrue(ToggleItemActions.TryToggle(harness.Components, harness.Items, player, litStackId, out _));
 
@@ -335,7 +335,7 @@ public sealed class ToggleItemTests
         Assert.AreEqual(2, harness.LitIdolStack(player).Quantity);
         Assert.AreEqual(2, harness.ActiveToggleCount(player));
         Assert.AreEqual(2, harness.HeldSourceCount(player));
-        Assert.AreEqual(IdolStrength * 2, harness.PoisonStrengthAt(harness.PlayerAuraTile));
+        Assert.AreEqual(IdolStrength, harness.PoisonStrengthAt(harness.PlayerAuraTile), "Two sources of one aura are as strong as one.");
     }
 
     [TestMethod]

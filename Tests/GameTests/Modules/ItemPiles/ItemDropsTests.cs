@@ -260,7 +260,7 @@ public sealed class ItemDropsTests
         Assert.IsTrue(ToggleItemActions.TryToggle(harness.Components, harness.Build.Context.Items, harness.PlayerEntityId, idolStackId, out var litStackId));
         harness.RunFrame();
         Assert.IsTrue(harness.Build.Context.Auras.TryGetId(BuiltInAuraIds.ToxicIdolPoison, out var auraId));
-        var powerAtHolder = harness.Build.Context.AuraField.GetTotalPowerAt(PlayerPosition, auraId);
+        var powerAtHolder = PowerAt(harness, PlayerPosition, auraId);
 
         harness.Drops.TryDrop(harness.PlayerEntityId, ItemDrop.WholeStackOf(litStackId), DiagonalTile);
         harness.RunFrame();
@@ -275,10 +275,9 @@ public sealed class ItemDropsTests
         harness.RunFrame();
         harness.RunFrame();
 
-        var field = harness.Build.Context.AuraField;
-        Assert.AreEqual(powerAtHolder, field.GetTotalPowerAt(steppedTo, auraId), "The aura is centred on the player.");
-        Assert.AreEqual(0, field.GetTotalPowerAt(new Vector3Int(steppedTo.X - 5, steppedTo.Y, steppedTo.Z), auraId), "Nothing is left behind past the player's reach.");
-        Assert.AreEqual(0, field.GetTotalPowerAt(new Vector3Int(DiagonalTile.X - 4, DiagonalTile.Y, DiagonalTile.Z), auraId), "Nothing radiates from where the pile was.");
+        Assert.AreEqual(powerAtHolder, PowerAt(harness, steppedTo, auraId), "The aura is centred on the player.");
+        Assert.AreEqual(0, PowerAt(harness, new Vector3Int(steppedTo.X - 5, steppedTo.Y, steppedTo.Z), auraId), "Nothing is left behind past the player's reach.");
+        Assert.AreEqual(0, PowerAt(harness, new Vector3Int(DiagonalTile.X - 4, DiagonalTile.Y, DiagonalTile.Z), auraId), "Nothing radiates from where the pile was.");
     }
 
     private static void WalkPlayerTo(Harness harness, Vector3Int destination)
@@ -298,6 +297,10 @@ public sealed class ItemDropsTests
         Assert.AreEqual(destination, transforms.GetReadonly(harness.PlayerEntityId).Position, "Sanity check: the player walked.");
     }
 
+    /// <summary>The aura's power at tile: the field's or a pulse source's, whichever is stronger, as AuraView reads it.</summary>
+    private static int PowerAt(Harness harness, Vector3Int tile, byte auraId) =>
+        Math.Max(harness.Build.Context.AuraField.GetTotalPowerAt(tile, auraId), harness.Build.Context.AuraPulses.PowerAt(tile, auraId));
+
     private static Dictionary<Vector3Int, int> PowerAround(Harness harness, byte auraId)
     {
         var powers = new Dictionary<Vector3Int, int>();
@@ -306,7 +309,7 @@ public sealed class ItemDropsTests
             for (var x = PlayerPosition.X - 8; x <= PlayerPosition.X + 8; x++)
             {
                 var tile = new Vector3Int(x, y, PlayerPosition.Z);
-                powers[tile] = harness.Build.Context.AuraField.GetTotalPowerAt(tile, auraId);
+                powers[tile] = PowerAt(harness, tile, auraId);
             }
         }
 

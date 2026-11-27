@@ -73,7 +73,7 @@ public sealed class BurningApplierTests
     {
         var componentManager = CreateComponentManager();
         var applier = CreateApplier(componentManager, AddComplexBodyParts(componentManager));
-        componentManager.GetPackedPool<Game.Modules.TerrainContacts.Components.TerrainContactExposureComponent>().Add(EntityId, new(nextTickFrame: 60, terrainTypeId: 1));
+        componentManager.GetMultiPool<Game.Modules.TerrainContacts.Components.TerrainContactExposureComponent>().Add(EntityId, new(nextTickFrame: 60, terrainTypeId: 1));
 
         applier.ApplyStacks(EntityId, count: 2, ActionSource.Admin, now: 0);
 

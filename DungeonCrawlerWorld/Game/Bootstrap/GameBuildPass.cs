@@ -59,7 +59,7 @@ public static class GameBuildPass
 
         var localTierRoster = new LocalTierRoster(componentManager.GetPackedPool<Modules.NpcBehavior.Components.NpcDecisionComponent>(), componentManager.GetDirectPool<ProcessingTierComponent>(), context.ProcessingTierEvents);
 
-        RegisterDiagnostics(ecsContext, context.EntityFactory.Skeletons, localTierRoster, context.ProcessingTierResolver, context.AuraField);
+        RegisterDiagnostics(ecsContext, context.EntityFactory.Skeletons, localTierRoster, context.ProcessingTierResolver, context.AuraField, context.AuraPulses);
         RegisterDecisionGauges(ecsContext, context.NpcDecisions);
         if (loadsContentById)
         {
@@ -172,7 +172,7 @@ public static class GameBuildPass
     }
 
     /// <summary>Gives diagnostics the skeleton/built split of living entities and the gauges for creature and tier counts and aura storage.</summary>
-    private static void RegisterDiagnostics(EcsContext ecsContext, CreatureSkeletons skeletons, LocalTierRoster localTierRoster, ProcessingTierResolver tierResolver, AuraField auraField)
+    private static void RegisterDiagnostics(EcsContext ecsContext, CreatureSkeletons skeletons, LocalTierRoster localTierRoster, ProcessingTierResolver tierResolver, AuraField auraField, AuraPulseSources auraPulses)
     {
         var entityManager = ecsContext.EntityManager;
         int CountBuiltEntities() => entityManager.LivingEntityCount - skeletons.Count;
@@ -185,6 +185,12 @@ public static class GameBuildPass
         ecsContext.Gauges.Register("ProcessingTier", "PendingTransitionNeighborhoods", GaugeKind.Level, () => tierResolver.Transitions.PendingNeighborhoodCount);
         ecsContext.Gauges.Register("Auras", "TotalsChunks", GaugeKind.Level, () => auraField.TotalsChunkCount);
         ecsContext.Gauges.Register("Auras", "TotalsBytes", GaugeKind.Level, () => auraField.TotalsAllocatedBytes);
+        var auraSources = ecsContext.ComponentManager.GetMultiPool<Modules.Auras.Components.AuraSourceComponent>();
+        var auraExposures = ecsContext.ComponentManager.GetMultiPool<Modules.Auras.Components.AuraExposureComponent>();
+        ecsContext.Gauges.Register("Auras", "Sources", GaugeKind.Level, () => auraSources.Count);
+        ecsContext.Gauges.Register("Auras", "Exposures", GaugeKind.Level, () => auraExposures.Count);
+        ecsContext.Gauges.Register("Auras", "Pulses", GaugeKind.Cumulative, () => auraPulses.Pulses);
+        ecsContext.Gauges.Register("Auras", "PulseRecords", GaugeKind.Cumulative, () => auraPulses.RecordsWritten);
     }
 
     /// <summary>The decision system's counters: decisions made and commitments started, per frame.</summary>

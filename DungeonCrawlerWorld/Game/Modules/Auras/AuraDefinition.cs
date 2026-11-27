@@ -8,7 +8,7 @@ namespace Game.Modules.Auras;
 /// <summary>How an aura's value at an entity's position reaches its effects.</summary>
 public enum AuraMagnitude : byte
 {
-    /// <summary>Effects are scaled by the aura's value there (EffectContext.Magnitude), so they follow its falloff and add where sources overlap.</summary>
+    /// <summary>Effects are scaled by the aura's value there (EffectContext.Magnitude), so they follow its falloff; where sources overlap, the strongest one's value is used.</summary>
     Power,
 
     /// <summary>Effects apply at their own amounts anywhere the aura reaches, however strong it is there.</summary>
@@ -28,7 +28,7 @@ public enum AuraMagnitude : byte
 /// while an entity stays in range, with no source entity, credited to the strongest contributor there
 /// (AuraField.Attribute). An entry that should hold a level rather than pile up says so itself:
 /// StatusEffectGrant with TopUpTo, StatModifierGrant with RefreshFromAnySource -- not RefreshFromSameSource, which
-/// holds one per credited contributor, so two sources of the aura would add.
+/// holds one per credited contributor, so two sources of the aura would each hold one.
 /// </para>
 /// </remarks>
 /// <param name="Id">Stable, mod-safe identity: a later content layer's record with it replaces this one when a session loads, and within a session its first registration stands (AuraCatalog).</param>

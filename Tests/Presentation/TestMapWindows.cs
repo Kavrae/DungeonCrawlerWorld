@@ -98,7 +98,7 @@ internal static class TestMapWindows
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
 
         var auras = TestAuras.GlowOnlyCatalog();
-        var auraView = new AuraView(new AuraField(world, terrain, auras, eventBus), auras);
+        var auraView = TestAuraViews.Over(new AuraField(world, terrain, auras, eventBus), auras);
 
         var floatingTextController = new FloatingTextController(eventBus, new SimulationClock());
         var floatingTextRenderer = new FloatingTextRenderer(floatingTextController, camera, fontService, new Game.Modules.StatusEffects.StatusEffectDisplayRegistry(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver));

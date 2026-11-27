@@ -145,7 +145,7 @@ internal static class TestSystems
 
     public static TerrainContactSystem TerrainContactSystem(
         TerrainRegistry terrain,
-        PackedComponentPool<TerrainContactExposureComponent> exposures,
+        MultiComponentPool<TerrainContactExposureComponent> exposures,
         PackedComponentPool<SimpleHealthComponent> health,
         EventBus eventBus,
         IMapQuery mapQuery,

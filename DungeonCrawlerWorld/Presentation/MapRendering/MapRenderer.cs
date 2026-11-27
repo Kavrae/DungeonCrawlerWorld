@@ -128,6 +128,9 @@ public sealed class MapRenderer : IDisposable
     /// <summary>The auras' glow as the texture the sprite effect reads, rebuilt when the grid or the auras change.</summary>
     private readonly MapGlowTexture _glowTexture;
 
+    /// <summary>The pulse sources reaching the view this frame, collected in Draw (AuraView.CopyPulseSourcesReaching).</summary>
+    private readonly List<PulseSourceReach> _pulseSourcesInView = [];
+
     /// <summary>The grid _wallPlan was last planned for; the cached tops and the row walk's overhangs read the plan, so it must match what is drawn.</summary>
     private readonly MapBuildStamp _plannedWalls = new();
 
@@ -221,6 +224,19 @@ public sealed class MapRenderer : IDisposable
         _topsCache?.EnsureRendered(_renderService.Batch, key, _drawTopsIntoCache);
     }
 
+    /// <summary>What the glow image is as of: the field's version with every pulse source reaching the view folded in, so the image is rebuilt when a visible carried aura moves or changes, and not when one out of view does.</summary>
+    private static int GlowVersionOf(int fieldVersion, List<PulseSourceReach> pulseSources)
+    {
+        var hash = new HashCode();
+        hash.Add(fieldVersion);
+        foreach (var source in pulseSources)
+        {
+            hash.Add(source);
+        }
+
+        return hash.ToHashCode();
+    }
+
     /// <summary>Draws one frame of the map: the flat fill, the ground, the ground marks, the walls' tops, then the row walk -- lit by the auras' glow.</summary>
     /// <remarks>
     /// Drawn into the UI's one pass (UiRenderService.Batch), in its place among the windows and under their draw offset
@@ -238,7 +254,9 @@ public sealed class MapRenderer : IDisposable
     public void Draw(int mapLayer, IReadOnlyList<int> watchedEntityIds, IReadOnlyList<MapGroundMark> groundMarks)
     {
         var key = MapImageKey.Of(_camera, mapLayer);
-        var glowTexture = _glowTexture.Ensure(_renderService.GraphicsDevice, key, _auraView.Version);
+        var marginTiles = MapGlowTexels.MarginTiles;
+        _auraView.CopyPulseSourcesReaching(key.Scroll.X - marginTiles, key.Scroll.Y - marginTiles, key.Scroll.X + key.TileColumns + marginTiles, key.Scroll.Y + key.TileRows + marginTiles, mapLayer, _pulseSourcesInView);
+        var glowTexture = _glowTexture.Ensure(_renderService.GraphicsDevice, key, GlowVersionOf(_auraView.Version, _pulseSourcesInView), _pulseSourcesInView);
         var batch = _renderService.Batch;
         batch.Glow = SpriteEffectGlow.OverTileGrid(glowTexture, key.TileSize, _camera.TileOrigin(0, 0), MapGlowTexels.MarginTiles);
         try

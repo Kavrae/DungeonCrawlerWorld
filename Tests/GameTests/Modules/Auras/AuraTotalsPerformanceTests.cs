@@ -6,7 +6,7 @@ using Game.World;
 
 namespace Tests.GameTests.Modules.Auras;
 
-/// <summary>A reach-4 and a reach-30 source walking back and forth across a neighborhood seam, rewriting both diamonds every step as a move does.</summary>
+/// <summary>A reach-4 and a reach-30 source walking back and forth across a neighborhood seam, clearing the cells it held and raising its new diamond every step, as a field source's move does.</summary>
 /// <remarks>
 /// Asserts a ratio, not a time (see AbilityScorePerformanceTests): the cost per cell written must not
 /// grow with the source's size, which is what dense chunks are for -- a large source pays for its
@@ -70,7 +70,18 @@ public sealed class AuraTotalsPerformanceTests
         const int power = 8;
         var cellsPerSplat = 2 * reach * (reach + 1) + 1;
         var position = new Vector3Int(SeamX - WalkHalfLength, 500, 0);
-        grid.AddSource(position, power, reach, AuraFalloff.Linear, AuraId);
+        grid.RaiseSource(position, power, reach, AuraFalloff.Linear, AuraId);
+        var heldCells = new List<Vector3Int>(cellsPerSplat);
+
+        void Clear(Vector3Int at)
+        {
+            heldCells.Clear();
+            grid.CollectHeldCells(at, power, reach, AuraFalloff.Linear, AuraId, heldCells);
+            foreach (var cell in heldCells)
+            {
+                grid.ClearCell(cell, AuraId);
+            }
+        }
 
         void Walk()
         {
@@ -79,8 +90,8 @@ public sealed class AuraTotalsPerformanceTests
                 for (var step = 0; step < 2 * WalkHalfLength; step++)
                 {
                     var next = position with { X = position.X + direction };
-                    grid.RemoveSource(position, power, reach, AuraFalloff.Linear, AuraId);
-                    grid.AddSource(next, power, reach, AuraFalloff.Linear, AuraId);
+                    Clear(position);
+                    grid.RaiseSource(next, power, reach, AuraFalloff.Linear, AuraId);
                     position = next;
                 }
             }
@@ -102,7 +113,7 @@ public sealed class AuraTotalsPerformanceTests
         var elapsed = Stopwatch.GetElapsedTime(startTimestamp);
         var allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
 
-        grid.RemoveSource(position, power, reach, AuraFalloff.Linear, AuraId);
+        Clear(position);
 
         var cellsWritten = (double)(walks - 1) * 4 * WalkHalfLength * 2 * cellsPerSplat;
         return new WalkResult(elapsed.TotalNanoseconds / cellsWritten, allocated, grid.TotalsChunkCount);

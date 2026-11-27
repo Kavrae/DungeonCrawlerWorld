@@ -84,10 +84,12 @@ public sealed class TerrainContactSystemTests
             }
         }
 
-        public void Move(Vector3Int from, Vector3Int to)
+        public void Move(Vector3Int from, Vector3Int to) => Move(from, to, new Vector2Byte(1, 1));
+
+        public void Move(Vector3Int from, Vector3Int to, Vector2Byte size)
         {
-            transforms.Merge(MoverEntityId, new TransformComponent(to, new Vector2Byte(1, 1)));
-            MovedEntities.Record(new EntityMovedEvent(MoverEntityId, from, to, new Vector2Byte(1, 1)));
+            transforms.Merge(MoverEntityId, new TransformComponent(to, size));
+            MovedEntities.Record(new EntityMovedEvent(MoverEntityId, from, to, size));
         }
     }
 
@@ -102,8 +104,8 @@ public sealed class TerrainContactSystemTests
     private static DirectComponentPool<TransformComponent> CreateTransformPool() =>
         new(200, static (ref existing, incoming) => existing = incoming);
 
-    private static PackedComponentPool<TerrainContactExposureComponent> CreateExposurePool() =>
-        new(entityCapacity: 200, initialCapacity: 4, static (ref existing, incoming) => { });
+    private static MultiComponentPool<TerrainContactExposureComponent> CreateExposurePool() =>
+        new(entityCapacity: 200, initialCapacity: 4);
 
     private static PackedComponentPool<SimpleHealthComponent> CreateHealthPool() =>
         new(entityCapacity: 200, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
@@ -134,7 +136,7 @@ public sealed class TerrainContactSystemTests
     private static (
         Harness Harness,
         TerrainRegistry Terrain,
-        PackedComponentPool<TerrainContactExposureComponent> Exposures,
+        MultiComponentPool<TerrainContactExposureComponent> Exposures,
         PackedComponentPool<SimpleHealthComponent> Health,
         FakeMapQuery MapQuery,
         PackedComponentPool<DeadComponent> DeadEntities) Build()
@@ -153,6 +155,60 @@ public sealed class TerrainContactSystemTests
         var system = TestSystems.TerrainContactSystem(terrain, exposures, health, new EventBus(), mapQuery, new TestPlayerQuery(MoverEntityId), movedEntities, new MathUtility(), new SimulationClock(), statModifiers: null, deadEntities: deadEntities, transforms: transforms);
 
         return (new Harness(system, movedEntities, transforms), terrain, exposures, health, mapQuery, deadEntities);
+    }
+
+    private static readonly Vector2Byte HugeSize = new(3, 3);
+
+    /// <summary>Where a 3x3 mover's footprint has its far corner on OnHazard and every other tile off it.</summary>
+    private static readonly Vector3Int HugeCornerOnHazard = new(3, 3, 0);
+
+    [TestMethod]
+    public void HugeMover_WithOneCornerOnTheHazard_TakesItsContact_AndKeepsRepeating()
+    {
+        var (harness, _, exposures, health, _, _) = Build();
+
+        harness.Move(OffHazard, HugeCornerOnHazard, HugeSize);
+        harness.Step();
+
+        Assert.AreEqual(90, health.GetReadonly(MoverEntityId).CurrentHealth);
+
+        harness.StepThrough(harness.Frame + FirstTickDelay);
+
+        Assert.AreEqual(80, health.GetReadonly(MoverEntityId).CurrentHealth);
+        Assert.IsTrue(exposures.Has(MoverEntityId));
+    }
+
+    [TestMethod]
+    public void HugeMover_OverTwoTilesOfOneHazard_TakesItOnce()
+    {
+        var (harness, _, exposures, health, mapQuery, _) = Build();
+        mapQuery.SetTerrain(new Vector3Int(4, 5, 0), mapQuery.GetTerrainAt(OnHazard).TypeId);
+
+        harness.Move(OffHazard, HugeCornerOnHazard, HugeSize);
+        harness.Step();
+
+        Assert.AreEqual(90, health.GetReadonly(MoverEntityId).CurrentHealth);
+        Assert.AreEqual(1, exposures.CountForEntity(MoverEntityId));
+    }
+
+    [TestMethod]
+    public void HugeMover_OnTwoDifferentHazards_TakesEach_AndLeavingOneEndsOnlyIts()
+    {
+        var (harness, terrain, exposures, health, mapQuery, _) = Build();
+        var otherHazard = terrain.Register(HazardTerrain("test:other-hazard"));
+        mapQuery.SetTerrain(new Vector3Int(3, 3, 0), otherHazard);
+
+        harness.Move(OffHazard, HugeCornerOnHazard, HugeSize);
+        harness.Step();
+
+        Assert.AreEqual(80, health.GetReadonly(MoverEntityId).CurrentHealth);
+        Assert.AreEqual(2, exposures.CountForEntity(MoverEntityId));
+
+        harness.Move(HugeCornerOnHazard, new Vector3Int(4, 4, 0), HugeSize);
+        harness.Step();
+
+        Assert.AreEqual(1, exposures.CountForEntity(MoverEntityId), "Only the hazard still under the footprint is held.");
+        Assert.AreEqual(mapQuery.GetTerrainAt(OnHazard).TypeId, exposures.GetReadonlyByDenseIndex(exposures.GetFirstDenseIndex(MoverEntityId)).TerrainTypeId);
     }
 
     [TestMethod]
@@ -177,7 +233,7 @@ public sealed class TerrainContactSystemTests
         harness.Step();
 
         Assert.IsTrue(exposures.Has(MoverEntityId));
-        Assert.AreEqual((uint)(harness.Frame + FirstTickDelay), exposures.GetReadonly(MoverEntityId).NextTickFrame);
+        Assert.AreEqual((uint)(harness.Frame + FirstTickDelay), exposures.GetReadonlyByDenseIndex(exposures.GetFirstDenseIndex(MoverEntityId)).NextTickFrame);
     }
 
     [TestMethod]
@@ -263,7 +319,7 @@ public sealed class TerrainContactSystemTests
         var movedOn = harness.Frame;
 
         Assert.AreEqual(80, health.GetReadonly(MoverEntityId).CurrentHealth);
-        Assert.AreEqual((uint)(movedOn + FirstTickDelay), exposures.GetReadonly(MoverEntityId).NextTickFrame);
+        Assert.AreEqual((uint)(movedOn + FirstTickDelay), exposures.GetReadonlyByDenseIndex(exposures.GetFirstDenseIndex(MoverEntityId)).NextTickFrame);
 
         harness.StepThrough(movedOn + FirstTickDelay - 1);
         Assert.AreEqual(80, health.GetReadonly(MoverEntityId).CurrentHealth, "The first hazard's old tick frame passed mid-way -- it must not also fire.");
@@ -334,7 +390,7 @@ public sealed class TerrainContactSystemTests
         scope.RaiseResumed(MoverEntityId);
 
         Assert.AreEqual(100f, health.GetReadonly(MoverEntityId).CurrentHealth);
-        Assert.AreEqual(660u, exposures.GetReadonly(MoverEntityId).NextTickFrame);
+        Assert.AreEqual(660u, exposures.GetReadonlyByDenseIndex(exposures.GetFirstDenseIndex(MoverEntityId)).NextTickFrame);
     }
 
     /// <summary>Records each application it receives, for a test about when and in what order a contact's effects apply.</summary>
@@ -351,7 +407,7 @@ public sealed class TerrainContactSystemTests
 
     private static readonly Vector3Int OnOtherTerrain = new(6, 5, 0);
 
-    private static (Harness Harness, PackedComponentPool<TerrainContactExposureComponent> Exposures, ushort TerrainTypeId) BuildWith(TerrainContact contact)
+    private static (Harness Harness, MultiComponentPool<TerrainContactExposureComponent> Exposures, ushort TerrainTypeId) BuildWith(TerrainContact contact)
     {
         var terrain = new TerrainRegistry();
         var exposures = CreateExposurePool();
@@ -469,7 +525,7 @@ public sealed class TerrainContactSystemTests
         FakeMapQuery MapQuery,
         EventBus EventBus,
         ComponentManager Components,
-        PackedComponentPool<TerrainContactExposureComponent> Exposures,
+        MultiComponentPool<TerrainContactExposureComponent> Exposures,
         PackedComponentPool<SimpleHealthComponent> Health,
         TestFloatingText FloatingText)
     {
@@ -498,7 +554,7 @@ public sealed class TerrainContactSystemTests
         var mapQuery = new FakeMapQuery();
         var eventBus = new EventBus();
         var movedEntities = new FrameEventBuffer<EntityMovedEvent>();
-        var exposures = components.GetPackedPool<TerrainContactExposureComponent>();
+        var exposures = components.GetMultiPool<TerrainContactExposureComponent>();
         var health = components.GetPackedPool<SimpleHealthComponent>();
         var transforms = components.GetDirectPool<TransformComponent>();
         var floatingText = new TestFloatingText().Place(MoverEntityId, ProcessingTierLevel.Local);
@@ -575,7 +631,7 @@ public sealed class TerrainContactSystemTests
         fixture.Harness.StepThrough(fixture.Harness.Frame + FirstTickDelay);
 
         Assert.AreEqual(65, fixture.Health.GetReadonly(MoverEntityId).CurrentHealth);
-        Assert.AreEqual(strongerHazard, fixture.Exposures.GetReadonly(MoverEntityId).TerrainTypeId);
+        Assert.AreEqual(strongerHazard, fixture.Exposures.GetReadonlyByDenseIndex(fixture.Exposures.GetFirstDenseIndex(MoverEntityId)).TerrainTypeId);
     }
 
     /// <summary>A contact's effects are read from the definition at every application, so replacing the definition changes what the next repeat does.</summary>
@@ -613,7 +669,7 @@ public sealed class TerrainContactSystemTests
         fixture.Harness.Step();
         fixture.Harness.StepThrough(fixture.Harness.Frame + 4 * TickIntervalFrames);
 
-        Assert.IsTrue(fixture.Exposures.GetReadonly(MoverEntityId).Refused);
+        Assert.IsTrue(fixture.Exposures.GetReadonlyByDenseIndex(fixture.Exposures.GetFirstDenseIndex(MoverEntityId)).Refused);
         Assert.AreEqual(1, blockedEvents);
         Assert.AreEqual(1, fixture.FloatingText.Published.Count(text => text.Kind == FloatingTextKind.Immune));
     }
@@ -636,7 +692,7 @@ public sealed class TerrainContactSystemTests
         var poison = components.GetPackedPool<PoisonTimerComponent>().GetReadonly(MoverEntityId);
         Assert.AreEqual(3, poison.StackCount);
         Assert.AreEqual(ActionSource.FromTerrain(swamp), poison.Source);
-        Assert.IsFalse(fixture.Exposures.GetReadonly(MoverEntityId).Refused);
+        Assert.IsFalse(fixture.Exposures.GetReadonlyByDenseIndex(fixture.Exposures.GetFirstDenseIndex(MoverEntityId)).Refused);
     }
 
     /// <summary>Holy Ground's shape: a repeating contact granting a modifier that refreshes, held once however long the entity stands there and lasting its own duration after the latest application.</summary>

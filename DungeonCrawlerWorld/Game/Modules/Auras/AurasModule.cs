@@ -29,9 +29,12 @@ public sealed class AurasModule : IGameModule
 
     public Guid Id => ModuleId;
 
-    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, ProcessingTierModule.ModuleId, .. EffectServices.RequiredModuleIds.Where(static moduleId => moduleId != ModuleId)];
+    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, ProcessingTierModule.ModuleId, MovementModule.ModuleId, .. EffectServices.RequiredModuleIds.Where(static moduleId => moduleId != ModuleId)];
 
     public IReadOnlyList<Guid> RunsAfter { get; } = [MovementModule.ModuleId];
+
+    /// <summary>Declares the aura stress benchmark's settings (AuraStressTest), off by default.</summary>
+    public void DeclareSettings(Engine.Settings.SettingsDeclarations settings) => AuraStressTest.Declare(settings);
 
     /// <summary>Registers the content codecs for the serialized types this module owns.</summary>
     public void DeclareContentTypes(ContentTypeDeclarations contentTypes)
@@ -45,6 +48,7 @@ public sealed class AurasModule : IGameModule
 
         componentManager.RegisterMultiPool<AuraSourceComponent>(observation: ComponentChangeObservation.Observed);
         componentManager.RegisterMultiPool<AuraExposureComponent>();
+        componentManager.RegisterPackedPool<AuraExposureTickComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<AuraSourceExpiryComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<AuraAnchorComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 16);
         componentManager.RegisterRelationship<AuraAnchorOwnerLink>(new RelationshipSpec(TargetDestroyedPolicy.DestroySources), initialCapacity: 16);
@@ -58,6 +62,7 @@ public sealed class AurasModule : IGameModule
 
         systemManager.Register(new AuraSystem(
             componentManager.GetMultiPool<AuraExposureComponent>(),
+            componentManager.GetPackedPool<AuraExposureTickComponent>(),
             componentManager.GetMultiPool<AuraSourceComponent>(),
             componentManager.GetDirectPool<TransformComponent>(),
             context.MapQuery,
@@ -68,7 +73,10 @@ public sealed class AurasModule : IGameModule
             context.SimulationClock,
             context.AuraField,
             context.EffectServices,
-            context.SimulationScope));
+            context.SimulationScope,
+            context.AuraPulses,
+            context.OccupiedCells,
+            context.ProcessingTierEvents));
 
         systemManager.Register(new AuraSourceExpirySystem(
             componentManager.GetPackedPool<AuraSourceExpiryComponent>(),
@@ -78,6 +86,7 @@ public sealed class AurasModule : IGameModule
 
         WireAnchors(context, systemManager, componentManager);
         WireEntityDestruction(context, componentManager);
+        AuraStressTest.Wire(context, registration.Settings);
     }
 
     /// <summary>A destroyed entity's aura sources leave the field while it is still placed: their removal reads where each source last was.</summary>

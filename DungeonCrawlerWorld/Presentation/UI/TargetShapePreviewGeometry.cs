@@ -57,7 +57,11 @@ public static class TargetShapePreviewGeometry
     /// <summary>How far from the caster a preview draws, in tiles: 2 x 11 + 1 = 23 cells across, which fit the details windows' 96 px grid cap at the 4 px minimum cell.</summary>
     public const int MaximumPreviewRadius = 11;
 
-    /// <summary>spec with its distances shortened so its aim and shape fit MaximumPreviewRadius: the shape's size first kept whole up to the radius, then the range shortened to leave room for it. The preview shows the shape; the range is in its caption.</summary>
+    /// <summary>spec with its distances shortened so its aim and shape fit MaximumPreviewRadius: the shape's size first kept whole up to the radius, then the range shortened only as far as the shape's own tiles need. The preview shows the shape; the range is in its caption.</summary>
+    /// <remarks>
+    /// How much room a shape needs past its aim is the shape's: a Circle reaches its size beyond the aim, a Wall only sideways
+    /// across it. So a shape laid out where the aim lands keeps the longest range at which every tile it covers fits.
+    /// </remarks>
     public static TargetingSpec FitToPreview(TargetingSpec spec)
     {
         if (spec.MaximumRange + spec.AreaSize <= MaximumPreviewRadius)
@@ -66,13 +70,33 @@ public static class TargetShapePreviewGeometry
         }
 
         var areaSize = System.Math.Min(spec.AreaSize, MaximumPreviewRadius);
-        var maximumRange = System.Math.Min(spec.MaximumRange, MaximumPreviewRadius - areaSize);
-        return spec with
+        if (spec.Anchor != TargetAnchor.PathEnd)
         {
-            AreaSize = areaSize,
-            MaximumRange = maximumRange,
-            MinimumRange = System.Math.Min(spec.MinimumRange, maximumRange),
-        };
+            return WithRange(spec with { AreaSize = areaSize }, System.Math.Min(spec.MaximumRange, MaximumPreviewRadius - areaSize));
+        }
+
+        var fitted = spec with { AreaSize = areaSize };
+        for (var maximumRange = System.Math.Min(spec.MaximumRange, MaximumPreviewRadius); maximumRange > 0; maximumRange--)
+        {
+            fitted = WithRange(fitted, maximumRange);
+            if (ShapeFitsPreview(fitted))
+            {
+                return fitted;
+            }
+        }
+
+        return WithRange(fitted, 0);
+    }
+
+    private static TargetingSpec WithRange(TargetingSpec spec, int maximumRange) =>
+        spec with { MaximumRange = maximumRange, MinimumRange = System.Math.Min(spec.MinimumRange, maximumRange) };
+
+    /// <summary>Whether every tile spec's shape covers, aimed at its maximum range, lies within MaximumPreviewRadius of the caster.</summary>
+    private static bool ShapeFitsPreview(TargetingSpec spec)
+    {
+        var results = new List<Vector3Int>();
+        TargetShapeResolver.Resolve(spec.Shape, spec.Anchor, SentinelOrigin, SingleTileFootprint, SentinelOrigin + new Vector3Int(0, -System.Math.Max(1, spec.AimRanges.MaximumRange), 0), spec.Ranges, SentinelBounds, results);
+        return results.TrueForAll(static tile => System.Math.Abs(tile.X - SentinelOrigin.X) <= MaximumPreviewRadius && System.Math.Abs(tile.Y - SentinelOrigin.Y) <= MaximumPreviewRadius);
     }
 
     private static List<Point> ToOffsets(List<Vector3Int> tiles)

@@ -3510,6 +3510,49 @@ count (TODO.md "Aura follow-ups"). Unloading a neighborhood with its shrines is 
 teleported walk through the whole session (`AuraEvictionWalkTests`): the field afterwards matches one
 built from scratch across the border.
 
+### Aura scaling: strongest wins, pulses for moving sources, one tick per target (2026-11-27)
+
+`PLAN-aura-scaling.md`, built from the aura stress benchmark (`AuraStressTest`: every built creature radiates a random
+small, medium and large aura of 14 effects; `--setting=AurasModule.StressAuraCreaturePercent=N`, passed by the benchmark
+script's `-ExtraArguments`). The rules, each in CLAUDE.md's Auras section:
+- **Strongest wins.** Where sources of one aura overlap, the strongest one's value applies; sources never add. The field
+  (`AuraTotals`, `ushort` per cell) holds maximums: adding raises cells, and removing or moving a field source clears the
+  cells it held and raises them again from the sources still reaching them (`AuraSourceIndex.CollectIn`, terrain read
+  from the map). A None source's move writes only the cells that changed sides. An unloaded neighborhood is recomputed,
+  with a band one reach wide, on `NeighborhoodUnloadedEvent` -- nothing happens per `TerrainUnloadingEvent` row.
+- **Field or pulse, by whether the carrier can move** (`AuraPulseSources.IsPulseCarrier`). Terrain and sources on
+  entities that can't move are in the field; the rest pulse (`AuraSystem`): every 60 frames at Local, 240 at
+  Neighborhood, none frozen, the first staggered across the period on a 512-frame ring (it must exceed the 1.5 periods
+  `FrameDeadline.AfterStaggered` reaches, or carriers fall off the schedule -- the prototype lost 40% of them that way),
+  at once on a tier change. A pulse writes the strongest value and its credit onto each target's exposure, live for
+  the period plus one frame. A record therefore always lasts until its source's next pulse, whichever way the tier
+  changed; the pulse at once matters only for a carrier rising to Local.
+- **One tick per target** (`AuraExposureTickComponent` on a `PackedTimerWheel`); exposures are records with no timer.
+- **A large entity is in an aura, or on a terrain, wherever any tile of its footprint is** (`PowerReachingFootprint`;
+  `TerrainContactExposureComponent` is one per (entity, terrain)). Found in Phase 1's check: both read the origin tile.
+- **Accepted, not fixed** (each fix costs performance): a pulse source's effect lingers up to a period after it is turned
+  off or its carrier leaves, and a weaker source takes over only once the stronger one's record runs out.
+- Drawing and inspection read the field and the pulse sources alike: `AuraView.PowerAt`/`CopyAurasAt`/`VersionAt`, and
+  the glow from `CopyPulseSourcesReaching`, laid out once per rebuild by `AuraGlowBlend` and folded into the glow
+  texture's version (`MapRenderer.GlowVersionOf`).
+
+**Timer wheels reuse their slot lists** (`TimerWheel._spareSlotLists`): a drained slot hands its emptied list to whichever
+slot needs one next. Each of the 4,096 slots used to grow a list of its own the first time its frame came round, so the
+first 68 s of any session -- every benchmark range -- allocated a fresh list a frame for every wheel (burns, poison,
+auras, cooldowns): 27 -> 3 KB a frame without stress, 187 -> 8.5 KB at 100% stress, no gen-0 collection in a 3,000-frame
+range without stress, worst frame about 6 ms where it was 10-16.
+
+Measured (headless Release, seed 1, frames 600-3600, A/B against the build before the plan; the machine read ~35% slower
+on 2026-11-27 than on 2026-11-26, so the relative figures are the ones that hold): 100% stress -56% (23.5 -> 9.8 ms a
+frame on 2026-11-26), 50% -53%; without stress +7% overall and +17% in AuraSystem, most of it gameplay (strongest-wins
+lava burns creatures less deep in a field, so more stay alive and exposed: +4.5% ticks, +13% effect cost), worst frame
+11-13 -> 6-8 ms. Aura totals 650 -> 56 MB at 100% (110 -> 56 MB without). Windowed at 100% the game keeps real time: 11.7
+ms update, 0.70 ms draw.
+
+Measured and left: a per-chunk list of the field's auras for `StartExposures` (0.07 ms a frame without stress, 0.2 at
+100%: not worth it now that only stationary auras are in the field); pulse scans on workers (~3.9 ms at 100%, ~0 without
+stress) wait for `PLAN-multithreading.md`'s fork-join, workers scanning and the main thread writing records in order.
+
 ### Entity relationships
 
 Landed 2026-10-09 (`Engine/ECS/Relationships/`); the rules are in CLAUDE.md's ECS section. Researched

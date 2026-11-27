@@ -1,3 +1,4 @@
+using Game.Views;
 using Microsoft.Xna.Framework.Graphics;
 
 namespace Presentation.MapRendering;
@@ -13,14 +14,16 @@ public sealed class MapGlowTexture(MapGlowTexels texels) : IDisposable
     public void Invalidate() => _built.Invalidate();
 
     /// <summary>The texture for the grid key describes, rebuilt first when it is stale; resized with the grid.</summary>
-    public Texture2D Ensure(GraphicsDevice graphicsDevice, MapImageKey key, int auraVersion)
+    /// <param name="auraVersion">What the image's auras are as of: AuraView.Version with the pulse sources reaching the area folded in (MapRenderer.GlowVersionOf).</param>
+    /// <param name="pulseSources">The pulse sources reaching the image's area, laid out if it is rebuilt.</param>
+    public Texture2D Ensure(GraphicsDevice graphicsDevice, MapImageKey key, int auraVersion, IReadOnlyList<PulseSourceReach> pulseSources)
     {
         if (_texture is { } current && _built.IsCurrentFor(key, auraVersion))
         {
             return current;
         }
 
-        texels.Build(key);
+        texels.Build(key, pulseSources);
         if (_texture is null || _texture.Width != texels.Width || _texture.Height != texels.Height)
         {
             _texture?.Dispose();

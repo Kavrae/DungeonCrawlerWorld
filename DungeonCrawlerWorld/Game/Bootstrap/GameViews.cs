@@ -28,7 +28,7 @@ public sealed class GameViews
         ActionStateView = new ActionStateView(componentManager, EntityActions, context.Items, localTierRoster, context.EffectServices, context.Toggles, context.SimulationClock);
         TargetingView = new TargetingView(context.TargetResolution);
         TransformView = new TransformView(componentManager);
-        AuraView = new AuraView(context.AuraField, context.Auras);
+        AuraView = new AuraView(context.AuraField, context.AuraPulses, context.Auras);
         ActionSourceNaming = new ActionSourceNaming(context.Terrain, context.Auras, context.EntityKeys);
         NpcDecisions = new NpcDecisionView(componentManager, context.NpcDecisions, context.PlayerQuery, context.SimulationClock);
         ComponentInspection = new ComponentInspectionView(componentManager, context.Definitions, Game.ComponentProperties.GameComponentPropertyMeanings.For(context));

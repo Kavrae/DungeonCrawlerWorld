@@ -17,7 +17,7 @@ namespace Game.Modules.Auras;
 /// </para>
 /// <para>
 /// Ids are assigned in registration order and differ between sessions, so nothing saves or orders by one; a Guid is
-/// the identity that lasts, and what makes two sources the same aura: their powers add. Safe to call from a worker
+/// the identity that lasts, and what makes two sources the same aura: where both reach, the stronger holds (PLAN-aura-scaling.md, Decision 1). Safe to call from a worker
 /// planning a neighborhood: registration is locked, and Get reads an array that is replaced rather than changed.
 /// </para>
 /// </remarks>

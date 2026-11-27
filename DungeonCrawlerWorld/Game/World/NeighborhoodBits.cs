@@ -84,6 +84,25 @@ public sealed class NeighborhoodBits(int depth)
         }
     }
 
+    /// <summary>Clears every bit of one neighborhood at once.</summary>
+    public void ClearNeighborhood(int cellX, int cellY)
+    {
+        if (!_byNeighborhood.Remove((cellX, cellY), out var neighborhood))
+        {
+            return;
+        }
+
+        Array.Clear(neighborhood.Words);
+        neighborhood.SetBitCount = 0;
+        if (_spareNeighborhoods.Count < MaximumSpareNeighborhoods)
+        {
+            _spareNeighborhoods.Push(neighborhood);
+        }
+
+        _lastNeighborhoodCell = (int.MinValue, int.MinValue);
+        _lastNeighborhood = null;
+    }
+
     private Neighborhood? NeighborhoodOf(Vector3Int position, bool create)
     {
         var neighborhoodCell = (Neighborhoods.CellOf(position.X), Neighborhoods.CellOf(position.Y));

@@ -393,10 +393,10 @@ public sealed class InspectionWindowContent(
         }
     }
 
-    /// <summary>Fills _scratchAuras with the auras reaching the tile, read again only when the tile or the aura field has changed since it was last read.</summary>
+    /// <summary>Fills _scratchAuras with the auras reaching the tile, read again only when the tile or the auras reaching it have changed since it was last read.</summary>
     private void CopyAurasAt(Point selected, int mapLayer)
     {
-        var version = auraView.Version;
+        var version = auraView.VersionAt(selected.X, selected.Y, mapLayer);
         if (selected == _scratchAurasPosition && mapLayer == _scratchAurasMapLayer && version == _scratchAurasVersion)
         {
             return;

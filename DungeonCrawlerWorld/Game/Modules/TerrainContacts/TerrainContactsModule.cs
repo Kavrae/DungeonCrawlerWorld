@@ -28,7 +28,7 @@ public sealed class TerrainContactsModule : IGameModule
     {
         var componentManager = registration.ComponentManager;
 
-        componentManager.RegisterPackedPool<TerrainContactExposureComponent>(static (ref existing, incoming) => { });
+        componentManager.RegisterMultiPool<TerrainContactExposureComponent>();
     }
 
     public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
@@ -39,7 +39,7 @@ public sealed class TerrainContactsModule : IGameModule
 
         systemManager.Register(new TerrainContactSystem(
             context.Terrain,
-            componentManager.GetPackedPool<TerrainContactExposureComponent>(),
+            componentManager.GetMultiPool<TerrainContactExposureComponent>(),
             context.EffectServices,
             context.MapQuery,
             componentManager.GetDirectPool<TransformComponent>(),

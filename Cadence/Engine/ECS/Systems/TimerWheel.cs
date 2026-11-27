@@ -41,6 +41,9 @@ public sealed class TimerWheel
     private readonly List<TimerEntry> _overflow = [];
     private readonly List<TimerEntry> _rebucketScratch = [];
 
+    /// <summary>Emptied slot lists, handed to whichever slot needs one next: a slot is drained once a revolution, so a list kept in its own slot would sit idle for 68 seconds while every other frame's slot grew a list of its own.</summary>
+    private readonly Stack<List<TimerEntry>> _spareSlotLists = new();
+
     /// <summary>The next frame DrainDue will process. Anything scheduled at or before it fires on that drain.</summary>
     private long _nextFrame;
 
@@ -91,6 +94,8 @@ public sealed class TimerWheel
             due.AddRange(slot);
             PendingCount -= slot.Count;
             slot.Clear();
+            _slots[_nextFrame & _mask] = null;
+            _spareSlotLists.Push(slot);
         }
     }
 
@@ -104,8 +109,11 @@ public sealed class TimerWheel
         }
 
         var index = (int)(fireFrame & _mask);
-        (_slots[index] ??= []).Add(entry);
+        (_slots[index] ??= TakeSlotList()).Add(entry);
     }
+
+    /// <summary>An emptied slot list to reuse, or a new one when none is spare.</summary>
+    private List<TimerEntry> TakeSlotList() => _spareSlotLists.Count > 0 ? _spareSlotLists.Pop() : [];
 
     /// <summary>At the start of a revolution, moves every overflow entry that now fits within one revolution into its slot, keeping overflow order.</summary>
     private void Rebucket()
@@ -116,7 +124,7 @@ public sealed class TimerWheel
             if (entry.Deadline - _nextFrame < _slots.Length)
             {
                 var index = (int)(entry.Deadline & _mask);
-                (_slots[index] ??= []).Add(entry);
+                (_slots[index] ??= TakeSlotList()).Add(entry);
             }
             else
             {

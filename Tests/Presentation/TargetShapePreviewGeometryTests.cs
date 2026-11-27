@@ -30,4 +30,28 @@ public sealed class TargetShapePreviewGeometryTests
 
         CollectionAssert.AreEquivalent(TargetShapePreviewGeometry.ComputeOffsets(adjacent), TargetShapePreviewGeometry.ComputeReach(adjacent));
     }
+
+    [TestMethod]
+    public void AWallAcrossItsAim_KeepsItsWholeRange_SinceItSpreadsOnlySideways()
+    {
+        var wall = new TargetingSpec(TargetShape.Wall, MaximumRange: 10, AreaSize: 9);
+
+        var landsOn = TargetShapePreviewGeometry.ComputeOffsets(wall);
+        var reach = TargetShapePreviewGeometry.ComputeReach(wall);
+
+        Assert.AreEqual(9, landsOn.Count);
+        Assert.IsTrue(landsOn.TrueForAll(static tile => tile.Y == -10));
+        Assert.Contains(new Point(10, 0), reach);
+        Assert.DoesNotContain(new Point(11, 0), reach);
+    }
+
+    [TestMethod]
+    public void ACircleAtItsAim_ShortensItsRange_ToLeaveRoomForItsRadius()
+    {
+        var circle = new TargetingSpec(TargetShape.Circle, MaximumRange: 10, AreaSize: 3);
+
+        var fitted = TargetShapePreviewGeometry.FitToPreview(circle);
+
+        Assert.AreEqual(TargetShapePreviewGeometry.MaximumPreviewRadius - 3, fitted.MaximumRange);
+    }
 }

@@ -113,7 +113,7 @@ public sealed class MapRendererTests
         var camera = new MapCamera(mapView);
         camera.Initialize(new Vector2(360, 360));
         var auras = TestAuras.GlowOnlyCatalog();
-        var auraView = new AuraView(new AuraField(TestWorlds.Create(new Map(new Vector3Int(64, 64, 1))), new TerrainRegistry(), auras, new EventBus()), auras);
+        var auraView = TestAuraViews.Over(new AuraField(TestWorlds.Create(new Map(new Vector3Int(64, 64, 1))), new TerrainRegistry(), auras, new EventBus()), auras);
 
         var renderer = new MapRenderer(mapView, auraView, camera, new UiRenderService(), TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver));
 

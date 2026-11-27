@@ -9,8 +9,8 @@ namespace Game.Modules.Auras.Components;
 /// and the glow follows the same values, so what is drawn always matches what the aura reaches. What
 /// the aura does and the colour it glows are the definition's (AuraCatalog). A Multi pool: an entity
 /// holds one instance per source, and may hold several of one aura -- at most one with no key (a
-/// blueprint's, or a timed grant's), and one more per toggle holding it. Every source adds to the
-/// field. 8 bytes: Size sits beside AuraId so Power needs no padding.
+/// blueprint's, or a timed grant's), and one more per toggle holding it. Every source is in the
+/// field, where the strongest at each cell holds it. 8 bytes: Size sits beside AuraId so Power needs no padding.
 /// </remarks>
 /// <param name="auraId">The aura's session-local id (AuraCatalog).</param>
 /// <param name="power">The aura's value at the source.</param>

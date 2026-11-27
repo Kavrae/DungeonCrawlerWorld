@@ -21,6 +21,7 @@ public sealed class AuraSourceIndex(int depth)
     private const int ChunksPerSideShift = Neighborhoods.SizeShift - ChunkShift;
     private const int ChunksPerSideMask = (1 << ChunksPerSideShift) - 1;
 
+    private readonly int _depth = depth;
     private readonly int _bucketsPerNeighborhood = depth << (2 * ChunksPerSideShift);
     private readonly AuraEntries?[] _entriesByAuraId = new AuraEntries?[byte.MaxValue + 1];
 
@@ -114,15 +115,14 @@ public sealed class AuraSourceIndex(int depth)
         }
     }
 
-    /// <summary>The strongest entity source of auraId at position other than the owner's own, by value there under falloff -- ties to the lowest key -- and the sums of every entity source's value there and of the owner's own.</summary>
+    /// <summary>The strongest entity source of auraId at position other than the owner's own, by value there under falloff -- ties to the lowest key -- and the strongest value of the owner's own there.</summary>
     /// <remarks>The owner's own are the sources ownerEntityId carries. An anchor it placed is not its own: it reaches and credits its placer like anyone else, and an aura that shouldn't hit its placer grants it an immunity first.</remarks>
-    /// <returns>False when no entity source other than the owner's own reaches position; the totals are still summed.</returns>
-    public bool TryFindStrongest(byte auraId, Vector3Int position, int ownerEntityId, AuraFalloff falloff, out ActionSource strongest, out int strongestValue, out int entityTotal, out int ownTotal)
+    /// <returns>False when no entity source other than the owner's own reaches position; ownValue is still found.</returns>
+    public bool TryFindStrongest(byte auraId, Vector3Int position, int ownerEntityId, AuraFalloff falloff, out ActionSource strongest, out int strongestValue, out int ownValue)
     {
         strongest = default;
         strongestValue = 0;
-        entityTotal = 0;
-        ownTotal = 0;
+        ownValue = 0;
         if (_entriesByAuraId[auraId] is not { Count: > 0 } entries)
         {
             return false;
@@ -144,16 +144,21 @@ public sealed class AuraSourceIndex(int depth)
 
                 foreach (var entry in bucket)
                 {
-                    var value = falloff.ValueAt(entry.Power, entry.Size, GridDistance.ManhattanDistance(entry.Position, position));
+                    var distance = GridDistance.ManhattanDistance(entry.Position, position);
+                    if (distance > entry.Size)
+                    {
+                        continue;
+                    }
+
+                    var value = falloff.ValueAt(entry.Power, entry.Size, distance);
                     if (value <= 0)
                     {
                         continue;
                     }
 
-                    entityTotal += value;
                     if (entry.EntityId == ownerEntityId)
                     {
-                        ownTotal += value;
+                        ownValue = Math.Max(ownValue, value);
                         continue;
                     }
 
@@ -168,6 +173,41 @@ public sealed class AuraSourceIndex(int depth)
         }
 
         return found;
+    }
+
+    /// <summary>The largest reach of any entity source of auraId, or 0 for none.</summary>
+    public int MaximumSizeOf(byte auraId) => _entriesByAuraId[auraId] is { Count: > 0 } entries ? entries.MaximumSize : 0;
+
+    /// <summary>Adds to sources every entity source of auraId standing in the rectangle (every layer): what may reach a cell within the largest reach of it.</summary>
+    public void CollectIn(byte auraId, int minX, int minY, int maxXExclusive, int maxYExclusive, List<(Vector3Int Position, ushort Power, byte Size)> sources)
+    {
+        if (_entriesByAuraId[auraId] is not { Count: > 0 } entries)
+        {
+            return;
+        }
+
+        for (var layer = 0; layer < _depth; layer++)
+        {
+            for (var chunkY = minY >> ChunkShift; chunkY <= (maxYExclusive - 1) >> ChunkShift; chunkY++)
+            {
+                for (var chunkX = minX >> ChunkShift; chunkX <= (maxXExclusive - 1) >> ChunkShift; chunkX++)
+                {
+                    if (entries.FindBucket(chunkX, chunkY, layer) is not { } bucket)
+                    {
+                        continue;
+                    }
+
+                    foreach (var entry in bucket)
+                    {
+                        var position = entry.Position;
+                        if (position.X >= minX && position.X < maxXExclusive && position.Y >= minY && position.Y < maxYExclusive)
+                        {
+                            sources.Add((position, entry.Power, entry.Size));
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private Entry? TakeOut(int entityId, Vector3Int position, AuraSourceComponent source)

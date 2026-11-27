@@ -167,7 +167,7 @@ public sealed class HealingShrineTests
     }
 
     [TestMethod]
-    public void TwoShrinesOverlapping_TheirHealingAdds()
+    public void TwoShrinesOverlapping_TheStrongerHeals_TheyNeverAdd()
     {
         var session = BuildSession();
         session.Spawn(HealingShrine.Id, Beside(ShrinePosition, -1));
@@ -177,7 +177,7 @@ public sealed class HealingShrineTests
 
         session.RunUntilHealthChanges(chestId);
 
-        Assert.AreEqual(76, session.HealthOf(chestId));
+        Assert.AreEqual(63, session.HealthOf(chestId), "Each shrine alone heals 13 here; together they still heal 13.");
     }
 
     [TestMethod]

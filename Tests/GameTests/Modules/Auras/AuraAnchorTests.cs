@@ -43,7 +43,8 @@ public sealed class AuraAnchorTests
             return entityId;
         }
 
-        public int PowerAt(Vector3Int tile, Game.Modules.Auras.AuraDefinition aura) => Build.Context.AuraField.GetTotalPowerAt(tile, Build.Context.Auras.GetId(aura.Id));
+        public int PowerAt(Vector3Int tile, Game.Modules.Auras.AuraDefinition aura) =>
+            Math.Max(Build.Context.AuraField.GetTotalPowerAt(tile, Build.Context.Auras.GetId(aura.Id)), Build.Context.AuraPulses.PowerAt(tile, Build.Context.Auras.GetId(aura.Id)));
 
         public void ReadTorch(TargetingMode mode, Vector3Int tile)
         {

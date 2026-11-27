@@ -81,7 +81,7 @@ public sealed class ToggleActionTests
         public int StrengthAt(Vector3Int position, AuraDefinition aura)
         {
             Assert.IsTrue(Session.Catalogs.Auras.TryGetId(aura.Id, out var auraId));
-            return Session.Internals.AuraField.GetTotalPowerAt(position, auraId);
+            return Session.Views.AuraView.PowerAt(position.X, position.Y, position.Z, auraId);
         }
 
         public float Mana => Components.GetPackedPool<ManaComponent>().GetReadonly(PlayerEntityId).CurrentMana;

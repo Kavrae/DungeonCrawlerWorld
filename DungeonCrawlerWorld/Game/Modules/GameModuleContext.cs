@@ -83,6 +83,7 @@ public sealed class GameModuleContext
         SimulationClock = services.Clock;
         Terrain = world.Terrain;
         AuraField = new AuraField(world, Terrain, Auras, eventBus);
+        AuraPulses = new AuraPulseSources(componentManager, EntityKeys, Definitions, world, Auras);
 
         var tiers = componentManager.GetDirectPool<ProcessingTierComponent>();
         var transforms = componentManager.GetDirectPool<TransformComponent>();
@@ -186,6 +187,9 @@ public sealed class GameModuleContext
 
     /// <summary>Where every aura reaches, for the aura system to apply and the map to draw the glow from. Follows the map's terrain itself; AurasModule's system puts entity sources into it.</summary>
     public AuraField AuraField { get; }
+
+    /// <summary>The aura sources that pulse rather than sit in the AuraField: every source on an entity that can move (PLAN-aura-scaling.md, Decision 2).</summary>
+    public AuraPulseSources AuraPulses { get; }
 
     /// <summary>Filled during Configure -- same reasoning as StatusEffectAppliers above.</summary>
     public StatusEffectDisplayRegistry StatusEffectDisplays { get; } = new();

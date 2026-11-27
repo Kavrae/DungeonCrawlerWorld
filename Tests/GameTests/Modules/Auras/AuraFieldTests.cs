@@ -139,14 +139,90 @@ public sealed class AuraFieldTests
         var field = BuildField();
         var source = new AuraSourceComponent(OrangeAuraId, power: 8, size: 3);
         var beside = new Vector3Int(SourcePosition.X + 1, SourcePosition.Y, SourcePosition.Z);
-        field.AddSource(SourcePosition, source);
-        field.AddSource(beside, source);
+        field.AddEntitySource(1, SourcePosition, source, ActionSource.Admin);
+        field.AddEntitySource(2, beside, source, ActionSource.Admin);
 
-        field.RemoveSource(SourcePosition, source);
+        field.RemoveEntitySource(1, SourcePosition, source);
         Assert.IsTrue(field.AnyAuraReaches(SourcePosition));
+        Assert.AreEqual(6, field.GetTotalPowerAt(SourcePosition, OrangeAuraId), "The source left beside it holds the cell again, at its own value one tile away.");
 
-        field.RemoveSource(beside, source);
+        field.RemoveEntitySource(2, beside, source);
         Assert.IsFalse(field.AnyAuraReaches(SourcePosition));
+    }
+
+    /// <summary>Strongest wins: two overlapping sources of one aura leave each cell at the larger value; taking the stronger away restores the weaker exactly, and taking the weaker away changes nothing.</summary>
+    [TestMethod]
+    public void TwoSourcesOfOneAura_EachCellHoldsTheStronger_AndRemovingEitherLeavesWhatTheOtherAloneGives()
+    {
+        var strong = new AuraSourceComponent(OrangeAuraId, power: 8, size: 3);
+        var weak = new AuraSourceComponent(OrangeAuraId, power: 4, size: 4);
+        var weakPosition = new Vector3Int(SourcePosition.X + 2, SourcePosition.Y, SourcePosition.Z);
+
+        var field = BuildField();
+        field.AddEntitySource(1, SourcePosition, strong, ActionSource.Admin);
+        field.AddEntitySource(2, weakPosition, weak, ActionSource.Admin);
+        Assert.AreEqual(8, field.GetTotalPowerAt(SourcePosition, OrangeAuraId), "8 against the weak source's 3 here.");
+        Assert.AreEqual(4, field.GetTotalPowerAt(weakPosition, OrangeAuraId), "The weak source's 4 against the strong one's 4 two tiles out: equal.");
+
+        field.RemoveEntitySource(2, weakPosition, weak);
+        AssertCellsMatch(field, Fresh((SourcePosition, strong)), SourcePosition, radius: 8);
+
+        field.AddEntitySource(2, weakPosition, weak, ActionSource.Admin);
+        field.RemoveEntitySource(1, SourcePosition, strong);
+        AssertCellsMatch(field, Fresh((weakPosition, weak)), SourcePosition, radius: 8);
+    }
+
+    /// <summary>Lava changed to plain and back beside another lava cell leaves exactly what a fresh build of the final terrain holds.</summary>
+    [TestMethod]
+    public void TerrainChangedToAndFromGlowing_BesideMoreOfIt_MatchesAFreshBuild()
+    {
+        var eventBus = new EventBus();
+        var terrain = new TerrainRegistry();
+        var glowing = new TerrainCell(terrain.Register(GlowingTerrain));
+        var plain = new TerrainCell(terrain.Register(new TerrainDefinition("test:plain", "Plain", "", ".", default)));
+        var world = TestWorlds.Create(new Map(MapSize), eventBus: eventBus);
+        world.PopulateTerrain(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, glowing);
+        world.PopulateTerrain(SourcePosition.X + 1, SourcePosition.Y, TerrainLayer.UnderGround, glowing);
+        var field = BuildField(world, terrain, eventBus);
+        field.EnsureBuilt();
+
+        world.SetTerrain(SourcePosition.X + 1, SourcePosition.Y, TerrainLayer.UnderGround, plain);
+        var onlyOne = Fresh((SourcePosition, GlowingSource(terrain, glowing.TypeId)));
+        AssertCellsMatch(field, onlyOne, SourcePosition, radius: 6);
+
+        world.SetTerrain(SourcePosition.X + 1, SourcePosition.Y, TerrainLayer.UnderGround, glowing);
+        var both = Fresh((SourcePosition, GlowingSource(terrain, glowing.TypeId)), (SourcePosition with { X = SourcePosition.X + 1 }, GlowingSource(terrain, glowing.TypeId)));
+        AssertCellsMatch(field, both, SourcePosition, radius: 6);
+    }
+
+    private static AuraSourceComponent GlowingSource(TerrainRegistry terrain, ushort glowingTypeId)
+    {
+        Assert.IsTrue(TerrainAuraSources.TryGetAura(terrain, BuildAuras(), glowingTypeId, out var aura));
+        return aura;
+    }
+
+    private static AuraField Fresh(params (Vector3Int Position, AuraSourceComponent Source)[] sources)
+    {
+        var fresh = BuildField();
+        foreach (var (position, source) in sources)
+        {
+            fresh.AddSource(position, source);
+        }
+
+        return fresh;
+    }
+
+    private static void AssertCellsMatch(AuraField field, AuraField expected, Vector3Int center, int radius)
+    {
+        for (var y = center.Y - radius; y <= center.Y + radius; y++)
+        {
+            for (var x = center.X - radius; x <= center.X + radius; x++)
+            {
+                var cell = new Vector3Int(x, y, center.Z);
+                Assert.AreEqual(expected.GetTotalPowerAt(cell, OrangeAuraId), field.GetTotalPowerAt(cell, OrangeAuraId), $"Cell {cell}");
+                Assert.AreEqual(expected.AnyAuraReaches(cell), field.AnyAuraReaches(cell), $"Coverage at {cell}");
+            }
+        }
     }
 
     [TestMethod]
@@ -186,7 +262,7 @@ public sealed class AuraFieldTests
         var world = TestWorlds.Create(new Map(MapSize));
         world.PopulateTerrain(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(terrain.Register(GlowingTerrain)));
         var auras = BuildAuras();
-        var auraView = new AuraView(new AuraField(world, terrain, auras, new EventBus()), auras);
+        var auraView = TestAuraViews.Over(new AuraField(world, terrain, auras, new EventBus()), auras);
 
         Assert.IsTrue(auraView.AnyAuraReaches(SourcePosition.X, SourcePosition.Y, SourcePosition.Z));
         Assert.AreEqual(8, auraView.PowerAt(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, OrangeAuraId));
@@ -237,6 +313,7 @@ public sealed class AuraFieldTests
 
         eventBus.Publish(new TerrainUnloadingEvent(Neighborhoods.AreaOf(1, 0, 1)));
         world.Map.UnloadNeighborhood(1, 0);
+        eventBus.Publish(new Game.Floors.NeighborhoodUnloadedEvent(1, 0));
 
         Assert.IsFalse(field.AnyAuraReaches(acrossTheBorder));
 
@@ -271,6 +348,7 @@ public sealed class AuraFieldTests
 
         eventBus.Publish(new TerrainUnloadingEvent(Neighborhoods.AreaOf(0, 0, 1)));
         world.Map.UnloadNeighborhood(0, 0);
+        eventBus.Publish(new Game.Floors.NeighborhoodUnloadedEvent(0, 0));
 
         Assert.AreEqual(0, field.GetTotalPowerAt(acrossTheSeam, OrangeAuraId));
         Assert.IsFalse(field.AnyAuraReaches(acrossTheSeam));
@@ -345,7 +423,7 @@ public sealed class AuraFieldTests
         }
     }
 
-    /// <summary>A None aura is full power to its edge, and a move of one writes only the cells that changed sides -- leaving exactly what a fresh placement at the end would.</summary>
+    /// <summary>A None aura is full power to its edge, and a move of one, past another source of the aura, leaves exactly what a fresh placement at the end would.</summary>
     [TestMethod]
     public void NoneFalloff_MovedSeveralTimes_MatchesASourcePlacedFreshWhereItEnded()
     {
@@ -356,19 +434,19 @@ public sealed class AuraFieldTests
         var standing = new Vector3Int(30, 30, 0);
         var other = new AuraSourceComponent(steadyAuraId, power: 2, size: 3);
         var otherPosition = new Vector3Int(33, 30, 0);
-        field.AddSource(standing, source);
-        field.AddSource(otherPosition, other);
+        field.AddEntitySource(1, standing, source, ActionSource.Admin);
+        field.AddEntitySource(2, otherPosition, other, ActionSource.Admin);
 
-        Assert.AreEqual(7, field.GetTotalPowerAt(new Vector3Int(32, 30, 0), steadyAuraId), "Both reach it at full power.");
+        Assert.AreEqual(5, field.GetTotalPowerAt(new Vector3Int(32, 30, 0), steadyAuraId), "Both reach it at full power; the stronger holds it.");
         Assert.AreEqual(5, field.GetTotalPowerAt(new Vector3Int(30, 36, 0), steadyAuraId), "The edge of size 6 is still power 5.");
 
         foreach (var next in new[] { new Vector3Int(31, 30, 0), new Vector3Int(31, 31, 0), new Vector3Int(40, 35, 0), new Vector3Int(39, 35, 0) })
         {
-            field.MoveSource(standing, next, source);
+            field.MoveEntitySource(1, standing, next, source);
             standing = next;
         }
 
-        field.RemoveSource(otherPosition, other);
+        field.RemoveEntitySource(2, otherPosition, other);
         AssertMatchesFreshField(field, steadyAuraId, source, standing, radius: 20, standing);
     }
 
@@ -511,7 +589,7 @@ public sealed class AuraFieldTests
         var shrine = EntitySource(5);
         field.AddEntitySource(5, SourcePosition, new AuraSourceComponent(RedAuraId, power: 12, size: 3), shrine);
         field.AddSource(SourcePosition, new AuraSourceComponent(GreenAuraId, power: 4, size: 3));
-        var auraView = new AuraView(field, auras);
+        var auraView = TestAuraViews.Over(field, auras);
         var aurasAtCell = new List<AuraAtCell>();
 
         auraView.CopyAurasAt(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, aurasAtCell);
@@ -534,7 +612,7 @@ public sealed class AuraFieldTests
         field.AddSource(SourcePosition, new AuraSourceComponent(OrangeAuraId, power: 8, size: 3));
         var aurasAtCell = new List<AuraAtCell> { new(RedAuraId, 1, ActionSource.FromAura(RedAuraId)) };
 
-        new AuraView(field, auras).CopyAurasAt(SourcePosition.X + 50, SourcePosition.Y, SourcePosition.Z, aurasAtCell);
+        TestAuraViews.Over(field, auras).CopyAurasAt(SourcePosition.X + 50, SourcePosition.Y, SourcePosition.Z, aurasAtCell);
 
         Assert.IsEmpty(aurasAtCell);
     }

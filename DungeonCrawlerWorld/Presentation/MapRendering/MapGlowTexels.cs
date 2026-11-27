@@ -16,7 +16,7 @@ public sealed class MapGlowTexels(IMapViewQuery mapView, AuraGlowBlend glowBlend
 {
     public static readonly int MarginTiles = Math.Max(SpriteReach.MaximumColumnsBeside, SpriteReach.MaximumRowsAbove) + 1;
 
-    /// <summary>The summed aura power at a tile that glows at full strength; anything more glows no brighter.</summary>
+    /// <summary>The aura power at a tile that glows at full strength; anything more glows no brighter.</summary>
     public const int FullGlowPower = 8;
 
     private Color[] _texels = [];
@@ -29,7 +29,8 @@ public sealed class MapGlowTexels(IMapViewQuery mapView, AuraGlowBlend glowBlend
     public Color[] Texels => _texels;
 
     /// <summary>Fills the texels for the grid key describes.</summary>
-    public void Build(MapImageKey key)
+    /// <param name="pulseSources">The pulse sources reaching the image's area, margin included (AuraView.CopyPulseSourcesReaching).</param>
+    public void Build(MapImageKey key, IReadOnlyList<PulseSourceReach> pulseSources)
     {
         Width = key.TileColumns + MarginTiles * 2;
         Height = key.TileRows + MarginTiles * 2;
@@ -38,7 +39,7 @@ public sealed class MapGlowTexels(IMapViewQuery mapView, AuraGlowBlend glowBlend
             _texels = new Color[Width * Height];
         }
 
-        glowBlend.BeginPass();
+        glowBlend.BeginPass(key.Scroll.X - MarginTiles, key.Scroll.Y - MarginTiles, Width, Height, pulseSources);
         for (var row = 0; row < Height; row++)
         {
             for (var column = 0; column < Width; column++)

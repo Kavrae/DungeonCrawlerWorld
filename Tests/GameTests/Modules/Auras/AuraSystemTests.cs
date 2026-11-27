@@ -125,8 +125,6 @@ public sealed class AuraSystemTests
     private AuraField _auraField = null!;
     private AuraCatalog _auras = null!;
 
-    /// <summary>More frames than a queued non-Local source waits for its resync when it is the only one queued.</summary>
-    private static int GenerousCatchUpFrameCount(AuraSystem system) => 16;
 
     /// <summary>Advances the clock one frame and runs the system on it.</summary>
     private void Step(AuraSystem system)
@@ -159,6 +157,7 @@ public sealed class AuraSystemTests
 
         var system = new AuraSystem(
             componentManager.GetMultiPool<AuraExposureComponent>(),
+            componentManager.GetPackedPool<AuraExposureTickComponent>(),
             componentManager.GetMultiPool<AuraSourceComponent>(),
             componentManager.GetDirectPool<TransformComponent>(),
             mapQuery,
@@ -174,7 +173,10 @@ public sealed class AuraSystemTests
                 statModifiers: componentManager.GetMultiPool<StatModifierComponent>(),
                 deadEntities: componentManager.GetPackedPool<DeadComponent>(),
                 floatingTextFeed: floatingTextFeed),
-            simulationScope: simulationScope ?? new SimulationScope(static _ => true));
+            simulationScope: simulationScope ?? new SimulationScope(static _ => true),
+            pulses: new AuraPulseSources(componentManager, new EntityKeys(), new Game.Blueprints.BlueprintRegistry(), TestWorlds.Create(new Map(new Vector3Int(64, 64, 3))), auras),
+            occupiedCells: TestWorlds.Create(new Map(new Vector3Int(64, 64, 3))),
+            processingTierEvents: new Game.Modules.ProcessingTier.ProcessingTierEvents());
 
         return (system, componentManager, mapQuery, movedEntities, eventBus);
     }
@@ -238,19 +240,15 @@ public sealed class AuraSystemTests
         return false;
     }
 
-    private static uint NextTickFrameOf(ComponentManager componentManager, int entityId, byte auraId)
-    {
-        var exposures = componentManager.GetMultiPool<AuraExposureComponent>();
-        for (var denseIndex = exposures.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = exposures.GetNextDenseIndex(denseIndex))
-        {
-            var exposure = exposures.GetReadonlyByDenseIndex(denseIndex);
-            if (exposure.AuraId == auraId)
-            {
-                return exposure.NextTickFrame;
-            }
-        }
+    private static uint NextTickFrameOf(ComponentManager componentManager, int entityId) =>
+        componentManager.GetPackedPool<AuraExposureTickComponent>().TryGetReadonly(entityId, out var tick)
+            ? tick.NextTickFrame
+            : throw new InvalidOperationException($"Entity {entityId} has no aura tick.");
 
-        throw new InvalidOperationException($"No aura {auraId} exposure entry for entity {entityId}.");
+    private static void PlantExposure(ComponentManager componentManager, int entityId, byte auraId, uint nextTickFrame)
+    {
+        componentManager.GetMultiPool<AuraExposureComponent>().Add(entityId, new AuraExposureComponent(auraId));
+        componentManager.GetPackedPool<AuraExposureTickComponent>().Add(entityId, new AuraExposureTickComponent(nextTickFrame));
     }
 
     // Every scenario below moves purely along one axis, so Manhattan distance (the metric
@@ -276,7 +274,7 @@ public sealed class AuraSystemTests
     }
 
     [TestMethod]
-    public void TwoOverlappingSources_StacksAreAdditive()
+    public void TwoOverlappingSources_TheStrongestApplies()
     {
         var (system, componentManager, _, movedEntities, _) = Build();
         AddSource(componentManager, SourceEntityId, SourcePosition, TestAuras.BurningId, power: 8, size: 3);
@@ -285,10 +283,10 @@ public sealed class AuraSystemTests
         var secondSourcePosition = new Vector3Int(SourcePosition.X + 2, SourcePosition.Y, SourcePosition.Z); // distance 2 from SourcePosition
         AddSource(componentManager, secondSourceEntityId, secondSourcePosition, TestAuras.BurningId, power: 4, size: 2);
 
-        // Standing directly on the first source: 8 (distance 0 from source 1) + 2 (distance 2 from source 2, the edge of size 2: 4 * 1 / 3, rounded up).
+        // Standing directly on the first source: 8 (distance 0 from source 1) against 2 (distance 2 from source 2, the edge of size 2: 4 * 1 / 3, rounded up).
         EnterAndTick(system, componentManager, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
 
-        Assert.AreEqual(10, StackCountOf(componentManager, ObserverEntityId));
+        Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "The strongest source applies; sources of one aura never add.");
     }
 
     private static (TerrainRegistry Terrain, ushort GlowingTypeId) CreateGlowingTerrain()
@@ -364,6 +362,7 @@ public sealed class AuraSystemTests
 
         eventBus.Publish(new TerrainUnloadingEvent(Neighborhoods.AreaOf(0, 0, 3)));
         mapQuery.SetTerrain(SourcePosition, 0);
+        eventBus.Publish(new Game.Floors.NeighborhoodUnloadedEvent(0, 0));
         EnterAndTick(system, componentManager, movedEntities, new Vector3Int(30, 30, 0), new Vector3Int(SourcePosition.X + 1, SourcePosition.Y, SourcePosition.Z));
 
         Assert.AreEqual(0, StackCountOf(componentManager, ObserverEntityId));
@@ -480,7 +479,7 @@ public sealed class AuraSystemTests
 
         MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
         Assert.AreEqual(0, StackCountOf(componentManager, ObserverEntityId), "Entering range applies nothing.");
-        var firstTickFrame = NextTickFrameOf(componentManager, ObserverEntityId, TestAuras.BurningId);
+        var firstTickFrame = NextTickFrameOf(componentManager, ObserverEntityId);
         Assert.AreEqual(FrameDeadline.AfterStaggered(_clock.CurrentFrame, AuraEffects.TickIntervalFrames, ObserverEntityId), firstTickFrame, "The first tick is on the observer's staggered deadline after entry.");
         var firstTickDelay = (int)(firstTickFrame - _clock.CurrentFrame);
 
@@ -493,7 +492,7 @@ public sealed class AuraSystemTests
         TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
 
         Assert.AreEqual(0, StackCountOf(componentManager, ObserverEntityId), "Stepping out and back in before the timer ticks must apply nothing.");
-        Assert.AreEqual(firstTickFrame, NextTickFrameOf(componentManager, ObserverEntityId, TestAuras.BurningId), "...nor reset the timer.");
+        Assert.AreEqual(firstTickFrame, NextTickFrameOf(componentManager, ObserverEntityId), "...nor reset the timer.");
 
         RunFrames(system, movedEntities, firstTickDelay - firstTickDelay / 2);
 
@@ -654,6 +653,121 @@ public sealed class AuraSystemTests
         Assert.IsTrue(exposures.GetReadonlyByDenseIndex(exposures.GetFirstDenseIndex(ObserverEntityId)).Refused);
     }
 
+    [TestMethod]
+    public void EntityInThreeAuras_HoldsOneTickAndThreeExposures_AndEachAppliesOncePerSecond()
+    {
+        var (system, componentManager, _, movedEntities, _) = Build();
+        var scorchId = _auras.Register(new AuraDefinition(CustomAuraGuid, "Scorch", Color.Red, [new Effect([new DirectDamage(1, 1)])]));
+        var health = componentManager.GetPackedPool<SimpleHealthComponent>();
+        health.Add(ObserverEntityId, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
+        AddSource(componentManager, SourceEntityId, SourcePosition, TestAuras.BurningId, power: 8, size: 3);
+        AddSource(componentManager, SourceEntityId + 1, SourcePosition, TestAuras.PoisonId, power: 8, size: 3);
+        AddSource(componentManager, SourceEntityId + 2, SourcePosition, scorchId, power: 8, size: 3);
+
+        EnterAndTick(system, componentManager, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
+
+        Assert.AreEqual(3, componentManager.GetMultiPool<AuraExposureComponent>().CountForEntity(ObserverEntityId));
+        Assert.AreEqual(1, componentManager.GetPackedPool<AuraExposureTickComponent>().Count);
+        Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId));
+        Assert.AreEqual(8, PoisonStackCountOf(componentManager, ObserverEntityId));
+        Assert.AreEqual(92, health.GetReadonly(ObserverEntityId).CurrentHealth);
+
+        RunFrames(system, movedEntities, AuraEffects.TickIntervalFrames);
+
+        Assert.AreEqual(84, health.GetReadonly(ObserverEntityId).CurrentHealth, "Scorch applied once more, a second later.");
+    }
+
+    [TestMethod]
+    public void LeavingOneAura_DropsOnlyItsExposure_AndLeavingAll_RemovesTheTick()
+    {
+        var (system, componentManager, _, movedEntities, _) = Build();
+        AddSource(componentManager, SourceEntityId, SourcePosition, TestAuras.BurningId, power: 8, size: 3);
+        AddSource(componentManager, SourceEntityId + 1, SourcePosition, TestAuras.PoisonId, power: 8, size: 6);
+        EnterAndTick(system, componentManager, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
+        var ticks = componentManager.GetPackedPool<AuraExposureTickComponent>();
+
+        EnterAndTick(system, componentManager, movedEntities, SourcePosition, Offset(5, 0));
+
+        Assert.IsFalse(HasExposure(componentManager, ObserverEntityId, TestAuras.BurningId));
+        Assert.IsTrue(HasExposure(componentManager, ObserverEntityId, TestAuras.PoisonId));
+        Assert.IsTrue(ticks.Has(ObserverEntityId));
+
+        EnterAndTick(system, componentManager, movedEntities, Offset(5, 0), Offset(10, 0));
+
+        Assert.IsFalse(componentManager.GetMultiPool<AuraExposureComponent>().Has(ObserverEntityId));
+        Assert.IsFalse(ticks.Has(ObserverEntityId));
+    }
+
+    [TestMethod]
+    public void ImmuneToOneAura_IsReportedOnce_AndTheOtherStillApplies()
+    {
+        var floatingText = new TestFloatingText().Place(ObserverEntityId, ProcessingTierLevel.Local);
+        var (system, componentManager, _, movedEntities, _) = Build(floatingTextFeed: floatingText.Feed);
+        StatusEffectImmunityEffects.GrantPermanent(componentManager.GetMultiPool<StatusEffectImmunityComponent>(), ObserverEntityId, StatusEffectType.Poison);
+        AddSource(componentManager, SourceEntityId, SourcePosition, TestAuras.PoisonId, power: 8, size: 3);
+        AddSource(componentManager, SourceEntityId + 1, SourcePosition, TestAuras.BurningId, power: 8, size: 3);
+
+        EnterAndTick(system, componentManager, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
+        RunFrames(system, movedEntities, 4 * AuraEffects.TickIntervalFrames);
+
+        Assert.AreEqual(1, floatingText.Published.Count(text => text.Kind == FloatingTextKind.Immune));
+        Assert.AreEqual(0, PoisonStackCountOf(componentManager, ObserverEntityId));
+        Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId));
+    }
+
+    [TestMethod]
+    public void ACorpse_LosesItsExposuresAndItsTick()
+    {
+        var (system, componentManager, _, movedEntities, _) = Build();
+        AddSource(componentManager, SourceEntityId, SourcePosition, TestAuras.BurningId, power: 8, size: 3);
+        AddSource(componentManager, SourceEntityId + 1, SourcePosition, TestAuras.PoisonId, power: 8, size: 3);
+        EnterAndTick(system, componentManager, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
+
+        componentManager.GetPackedPool<DeadComponent>().Add(ObserverEntityId, new DeadComponent(default, DiedAtFrame: 0));
+        RunFrames(system, movedEntities, AuraEffects.TickIntervalFrames);
+
+        Assert.IsFalse(componentManager.GetMultiPool<AuraExposureComponent>().Has(ObserverEntityId));
+        Assert.IsFalse(componentManager.GetPackedPool<AuraExposureTickComponent>().Has(ObserverEntityId));
+    }
+
+    [TestMethod]
+    public void HugeEntity_WithOnlyItsFarCornerInReach_IsExposed_AtThatCornersPower()
+    {
+        var (system, componentManager, _, movedEntities, _) = Build();
+        var hugeSize = new Vector2Byte(3, 3);
+        var origin = Offset(-3, -2);
+        AddSource(componentManager, SourceEntityId, SourcePosition, TestAuras.BurningId, power: 8, size: 3);
+        TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(origin, hugeSize));
+
+        movedEntities.Record(new EntityMovedEvent(ObserverEntityId, new Vector3Int(0, 0, 0), origin, hugeSize));
+        Step(system);
+        movedEntities.ClearFrame();
+        RunFrames(system, movedEntities, AuraEffects.TickIntervalFrames);
+
+        Assert.AreEqual(6, StackCountOf(componentManager, ObserverEntityId), "The corner one tile from the source takes the aura at 6, though the origin is out of reach.");
+    }
+
+    [TestMethod]
+    public void HugeEntity_StaysExposed_WhileAnyTileIsInReach_AndLosesItWhenNoneIs()
+    {
+        var (system, componentManager, _, movedEntities, _) = Build();
+        var hugeSize = new Vector2Byte(3, 3);
+        AddSource(componentManager, SourceEntityId, SourcePosition, TestAuras.BurningId, power: 8, size: 3);
+        TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(Offset(-3, -2), hugeSize));
+        movedEntities.Record(new EntityMovedEvent(ObserverEntityId, new Vector3Int(0, 0, 0), Offset(-3, -2), hugeSize));
+        Step(system);
+        movedEntities.ClearFrame();
+        RunFrames(system, movedEntities, AuraEffects.TickIntervalFrames);
+
+        TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(Offset(-6, -2), hugeSize));
+        movedEntities.Record(new EntityMovedEvent(ObserverEntityId, Offset(-3, -2), Offset(-6, -2), hugeSize));
+        Step(system);
+        movedEntities.ClearFrame();
+        RunFrames(system, movedEntities, AuraEffects.TickIntervalFrames);
+
+        Assert.IsFalse(HasExposure(componentManager, ObserverEntityId, TestAuras.BurningId));
+    }
+
     /// <summary>The refusal is forgotten as soon as something lands, so a later immunity is reported again.</summary>
     [TestMethod]
     public void ImmunityLost_TheNextTickLandsAndClearsTheRefusal()
@@ -747,14 +861,14 @@ public sealed class AuraSystemTests
         AddSource(componentManager, SourceEntityId, SourcePosition, TestAuras.BurningId, power: 8, size: 3);
         TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
         componentManager.GetDirectPool<ProcessingTierComponent>().Add(ObserverEntityId, new ProcessingTierComponent(tier));
-        componentManager.GetMultiPool<AuraExposureComponent>().Add(ObserverEntityId, new AuraExposureComponent(TestAuras.BurningId, nextTickFrame: 7));
+        PlantExposure(componentManager, ObserverEntityId, TestAuras.BurningId, nextTickFrame: 7);
 
         RunFrames(system, movedEntities, 6);
         Assert.AreEqual(0, StackCountOf(componentManager, ObserverEntityId), "Not yet due.");
 
         RunFrames(system, movedEntities, 1);
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId));
-        Assert.AreEqual(7u + AuraEffects.TickIntervalFrames, NextTickFrameOf(componentManager, ObserverEntityId, TestAuras.BurningId), "Re-armed one interval after its tick.");
+        Assert.AreEqual(7u + AuraEffects.TickIntervalFrames, NextTickFrameOf(componentManager, ObserverEntityId), "Re-armed one interval after its tick.");
     }
 
     /// <summary>A source toggled on after the field is built, as every real toggle-on is, must reach the field, so an observer walking onto it is affected.</summary>
@@ -843,7 +957,7 @@ public sealed class AuraSystemTests
         RunFrames(system, movedEntities, AuraEffects.TickIntervalFrames);
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "Burning contribution from the moved dual-typed source must register in the grid.");
-        Assert.AreEqual(9, PoisonStackCountOf(componentManager, ObserverEntityId), "Poison from both sources (1 + 8) is additive -- the moved source's own Poison instance is correctly chain-walked too, not just its Burning one.");
+        Assert.AreEqual(8, PoisonStackCountOf(componentManager, ObserverEntityId), "Poison from the stronger of the two sources (8 against 1) -- the moved source's own Poison instance is correctly chain-walked too, not just its Burning one.");
         Assert.IsTrue(HasExposure(componentManager, ObserverEntityId, TestAuras.BurningId));
         Assert.IsTrue(HasExposure(componentManager, ObserverEntityId, TestAuras.PoisonId));
     }
@@ -969,17 +1083,9 @@ public sealed class AuraSystemTests
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId));
     }
 
-    /// <summary>
-    /// Part 2's own behavior change: a moving source that is NOT Local-tiered (Neighborhood
-    /// here) must not resync its grid contribution synchronously on the spot -- see
-    /// AuraSystem.ResyncSourceIfStale's own doc comment on why (an O(radius^2)
-    /// resync per move is fine for a rare Local case, not for a whole population of far-away
-    /// moving auras). Same setup as SourceCarryingActiveAura_MovesOntoStationaryOccupant_
-    /// GrantsImmediately, but Neighborhood-tiered instead of Local, and expects the OPPOSITE
-    /// outcome from a single move/Update call.
-    /// </summary>
+    /// <summary>A field source -- on an entity that can't move itself, here teleported -- re-places on the move at every tier: field sources move a few times a session, so nothing waits its turn.</summary>
     [TestMethod]
-    public void SourceAtNonLocalTier_MovingOntoStationaryOccupant_DoesNotExposeSynchronously()
+    public void FieldSourceAtNonLocalTier_MovingOntoStationaryOccupant_ExposesItOnTheMove()
     {
         var (system, componentManager, mapQuery, movedEntities, eventBus) = Build();
         componentManager.GetDirectPool<ProcessingTierComponent>().Add(SourceEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
@@ -996,32 +1102,8 @@ public sealed class AuraSystemTests
         TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
         MoveObserverTo(system, movedEntities, farAwayStart, SourcePosition, SourceEntityId);
 
-        Assert.IsFalse(HasExposure(componentManager, ObserverEntityId, TestAuras.BurningId), "A non-Local source's grid resync must not happen synchronously on the move itself.");
-    }
-
-    /// <summary>Complements the test above: the deferred resync isn't lost, just delayed -- Update's own periodic catch-up pass (driven by the source's own tiered cadence) must eventually reach it and grant the stationary occupant.</summary>
-    [TestMethod]
-    public void SourceAtNonLocalTier_EventuallyResyncsViaPeriodicCatchUp()
-    {
-        var (system, componentManager, mapQuery, movedEntities, eventBus) = Build();
-        componentManager.GetDirectPool<ProcessingTierComponent>().Add(SourceEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
-
-        var farAwayStart = new Vector3Int(SourcePosition.X - 50, SourcePosition.Y, SourcePosition.Z);
-        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(farAwayStart, UnitSize));
-        var sourcePool = componentManager.GetMultiPool<AuraSourceComponent>();
-        RunFrames(system, movedEntities, 1);
-        TestAuras.ToggleSource(sourcePool, eventBus, SourceEntityId, TestAuras.BurningId, power: 8, size: 3);
-
-        TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
-        mapQuery.SetOccupant(SourcePosition, ObserverEntityId);
-
-        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
-        MoveObserverTo(system, movedEntities, farAwayStart, SourcePosition, SourceEntityId);
-        Assert.IsFalse(HasExposure(componentManager, ObserverEntityId, TestAuras.BurningId), "Sanity check: still not resynced immediately after the move itself.");
-
-        RunFrames(system, movedEntities, GenerousCatchUpFrameCount(system) + AuraEffects.TickIntervalFrames);
-
-        Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "The periodic catch-up pass must eventually resync a non-Local source's stale grid contribution, exposing the stationary occupant.");
+        Assert.IsTrue(HasExposure(componentManager, ObserverEntityId, TestAuras.BurningId));
+        Assert.AreEqual(0, _auraField.GetTotalPowerAt(farAwayStart, TestAuras.BurningId), "Nothing is left where it was.");
     }
 
     /// <summary>
@@ -1080,12 +1162,12 @@ public sealed class AuraSystemTests
     {
         var scope = new SimulationScope(static _ => false);
         var (_, componentManager, _, _, _) = Build(simulationScope: scope);
-        componentManager.GetMultiPool<AuraExposureComponent>().Add(ObserverEntityId, new AuraExposureComponent(TestAuras.BurningId, nextTickFrame: 60));
+        PlantExposure(componentManager, ObserverEntityId, TestAuras.BurningId, nextTickFrame: 60);
         _clock.Advance(630);
 
         scope.RaiseResumed(ObserverEntityId);
 
-        Assert.AreEqual(660u, NextTickFrameOf(componentManager, ObserverEntityId, TestAuras.BurningId));
+        Assert.AreEqual(660u, NextTickFrameOf(componentManager, ObserverEntityId));
         Assert.AreEqual(0, StackCountOf(componentManager, ObserverEntityId));
     }
 
@@ -1150,24 +1232,6 @@ public sealed class AuraSystemTests
         componentManager.GetMultiPool<AuraSourceComponent>().Add(SourceEntityId, new AuraSourceComponent(TestAuras.BurningId, power: 8, size: 3));
 
         Assert.AreEqual(8, _auraField.GetTotalPowerAt(SourcePosition, TestAuras.BurningId));
-    }
-
-    /// <summary>A non-Local source that moved is still in the field where it was. Removing it must take it out from there, not from where the entity stands now -- which would leave the old reach behind for good and cut a hole in the new one.</summary>
-    [TestMethod]
-    public void SourceRemovedAfterAnUnsyncedMove_LeavesTheFieldFromWhereItWas()
-    {
-        var (system, componentManager, _, movedEntities, eventBus) = Build();
-        componentManager.GetDirectPool<ProcessingTierComponent>().Add(SourceEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
-        AddSource(componentManager, SourceEntityId, SourcePosition, TestAuras.BurningId, power: 8, size: 3);
-        var movedTo = new Vector3Int(SourcePosition.X + 20, SourcePosition.Y, SourcePosition.Z);
-        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(movedTo, UnitSize));
-        MoveObserverTo(system, movedEntities, SourcePosition, movedTo, SourceEntityId);
-        Assert.AreEqual(8, _auraField.GetTotalPowerAt(SourcePosition, TestAuras.BurningId), "Precondition: the move has not been resynced yet.");
-
-        AuraSourceEffects.Revoke(componentManager.GetMultiPool<AuraSourceComponent>(), eventBus, SourceEntityId, TestAuras.BurningId);
-
-        Assert.AreEqual(0, _auraField.GetTotalPowerAt(SourcePosition, TestAuras.BurningId));
-        Assert.AreEqual(0, _auraField.GetTotalPowerAt(movedTo, TestAuras.BurningId));
     }
 
     /// <summary>Toggle on, walk, toggle off: the reach follows the carrier and nothing is left at either end.</summary>
@@ -1256,44 +1320,13 @@ public sealed class AuraSystemTests
         AddSource(componentManager, SourceEntityId, SourcePosition, TestAuras.BurningId, power: 8, size: 3);
         Assert.IsTrue(HasExposure(componentManager, trailingEntityId, TestAuras.BurningId));
         Assert.IsFalse(HasExposure(componentManager, leadingEntityId, TestAuras.BurningId));
-        var overlapDeadline = NextTickFrameOf(componentManager, overlapEntityId, TestAuras.BurningId);
+        var overlapDeadline = NextTickFrameOf(componentManager, overlapEntityId);
 
         MoveSource(system, componentManager, movedEntities, SourcePosition, Offset(1, 0));
 
         Assert.IsFalse(HasExposure(componentManager, trailingEntityId, TestAuras.BurningId));
         Assert.IsTrue(HasExposure(componentManager, leadingEntityId, TestAuras.BurningId));
-        Assert.AreEqual(overlapDeadline, NextTickFrameOf(componentManager, overlapEntityId, TestAuras.BurningId));
-    }
-
-    [TestMethod]
-    [DataRow(3)]
-    [DataRow(20)]
-    public void QueuedSourceMovedSeveralTilesBeforeItsResync_ExposuresFollowBothEdges(int tilesMoved)
-    {
-        const int trailingEntityId = 1;
-        const int leadingEntityId = 2;
-        const int nearOldPositionEntityId = 3;
-        var reachesOverlap = tilesMoved == 3;
-        var (system, componentManager, mapQuery, movedEntities, _) = Build();
-        componentManager.GetDirectPool<ProcessingTierComponent>().Add(SourceEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
-        PlaceOccupant(componentManager, mapQuery, trailingEntityId, Offset(-2, 0));
-        PlaceOccupant(componentManager, mapQuery, leadingEntityId, Offset(tilesMoved + 2, 0));
-        PlaceOccupant(componentManager, mapQuery, nearOldPositionEntityId, Offset(2, 1));
-        AddSource(componentManager, SourceEntityId, SourcePosition, TestAuras.BurningId, power: 8, size: 3);
-        var deadlineBefore = NextTickFrameOf(componentManager, nearOldPositionEntityId, TestAuras.BurningId);
-
-        MoveSource(system, componentManager, movedEntities, SourcePosition, Offset(1, 0));
-        Assert.IsTrue(HasExposure(componentManager, trailingEntityId, TestAuras.BurningId), "Precondition: the move is queued, not resynced.");
-        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(Offset(tilesMoved, 0), UnitSize));
-        RunFrames(system, movedEntities, 1);
-
-        Assert.IsFalse(HasExposure(componentManager, trailingEntityId, TestAuras.BurningId));
-        Assert.IsTrue(HasExposure(componentManager, leadingEntityId, TestAuras.BurningId));
-        Assert.AreEqual(reachesOverlap, HasExposure(componentManager, nearOldPositionEntityId, TestAuras.BurningId));
-        if (reachesOverlap)
-        {
-            Assert.AreEqual(deadlineBefore, NextTickFrameOf(componentManager, nearOldPositionEntityId, TestAuras.BurningId));
-        }
+        Assert.AreEqual(overlapDeadline, NextTickFrameOf(componentManager, overlapEntityId));
     }
 
     [TestMethod]
@@ -1350,7 +1383,7 @@ public sealed class AuraSystemTests
         const int cornerEntityId = 1;
         var (_, componentManager, mapQuery, _, eventBus) = Build();
         PlaceOccupant(componentManager, mapQuery, cornerEntityId, Offset(3, 3));
-        componentManager.GetMultiPool<AuraExposureComponent>().Add(cornerEntityId, new AuraExposureComponent(TestAuras.BurningId, nextTickFrame: 600));
+        PlantExposure(componentManager, cornerEntityId, TestAuras.BurningId, nextTickFrame: 600);
         AddSource(componentManager, SourceEntityId, SourcePosition, TestAuras.BurningId, power: 8, size: 3);
 
         AuraSourceEffects.Revoke(componentManager.GetMultiPool<AuraSourceComponent>(), eventBus, SourceEntityId, TestAuras.BurningId);

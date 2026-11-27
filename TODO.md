@@ -78,6 +78,9 @@ Checks: change the Toxic Idol's aura power and
 see it in the game; save it as a draft and see the game keep the old one; disabling the aura asks first with the Idol as its dependent; Confirm With Replacement redirects
 it to another aura, and the Idol radiates that one in the game. Afterwards the data-driven plan's "indented copy for
 reading" can go.
+Also decide inline aura definitions (`PLAN-aura-scaling.md` "Not built by this plan"): an action or item defines its aura
+in place, with a Guid derived from its content, and the standalone editor keeps the shared ones (terrain, shrines,
+blueprints).
 
 #### Workshop: edit map areas
 
@@ -961,30 +964,11 @@ fingerprint `816159193C649584`, after the combat scan, aura lookup and movement 
 every row). Since Ghosts became immune to Burning and Poison the world differs (fingerprint `EA01C26D6323B7D0`):
 `BurningSystem` ~0.02, `AuraSystem` ~10% higher; save a fresh baseline before comparing. Run-to-run spread is ~1-5%, so a change must beat that to count. How to profile per method here (the
 sampler's bias, the probes): that section.
-- **AuraSystem, further -- on hold until more auras are defined and used.** Today's seed is almost all lava (terrain,
-  static, ~970 k of 1.06 M ticks, most of them on the ~20 k Ghost test fixtures standing in UnderGround lava), so it
-  can't tell static from moving sources, small from large reach, or a write-heavy aura from a read-heavy one -- and
-  those decide which of these pays. Re-profile once the content exists:
-  - Per tick (IMPLEMENTATION-NOTES has the breakdown): the wheel finding and validating the instance (~160 ns), the
-    dead/transform/catalog checks (~105 ns), the re-arm walking the exposure chain again and being replayed as a
-    deferred schedule (~90 ns). A timer-wheel contract that re-arms the instance it already holds would cut that last
-    one for every wheel (Burning, Poison) at once.
-  - `StartExposures` asks every aura in the field on each move into covered ground, so it grows with the aura count.
-    Preferred fix: a per-chunk list of the auras that have an `AuraTotals` chunk there (changed only when a chunk is
-    allocated or freed; bounded by the auras overlapping that 32x32, never combinatorial). Rejected for now: an
-    interned aura set per cell (sets multiply with overlap patterns and need refcounting).
-  - Per-cell strongest source and power (precomputed credit) would save up to ~865 ns an entity-sourced tick but turn
-    a moving source's move from ~1 µs into tens to hundreds of µs (re-ranking every cell of both diamonds). Worth it
-    only for static, read-heavy sources; a chunk-level cached credit invalidated by a version bump when an entity
-    source in reach changes gets most of the read saving without the write cost.
-  - If small moving carried auras come to dominate, consider a hybrid: large static auras stay in the field, small
-    moving ones push timed effects to the entities in their radius (a stacking and credit decision, not only
-    performance).
-  - Worker threads (see `PLAN-multithreading.md`): only the scans could split -- the power each cell of a source's
-    diamond gets is pure reads of the map and the source, then added into `AuraField`'s totals on the main thread in a
-    fixed order. Exposure ticks can't: an effect writes health through `HealthDamage`/`HealthHeal`, the ledger and the
-    event bus. At 0.26 ms/frame (2026-11-06) the scans are too small to pay for a fork-join (~5-20 µs); revisit only
-    if large or many moving sources make them heavy.
+- **AuraSystem, further:** `PLAN-aura-scaling.md` is done (IMPLEMENTATION-NOTES "Aura scaling", 2026-11-27): strongest
+  wins, pulses for moving sources, one tick per target; the stress benchmark is
+  `-ExtraArguments "--setting=AurasModule.StressAuraCreaturePercent=100"`. Left: pulse scans on workers (~3.9 ms a frame
+  at 100% stress, ~0 without) once `PLAN-multithreading.md`'s fork-join exists -- workers scan, the main thread writes
+  the records in order.
 - **NpcDecisionSystem, further:** 0.44 ms/frame in Release (2026-11-12; the stand-in it replaced read 0.31 on the same
   machine), ~560 decisions a frame through the arbiter, EngageMelee the dearest behavior (~1 µs a decision in Debug);
   `PLAN-npc-behavior-composition.md` has the A/B. Its occupant scans now read the map's per-column occupancy masks
@@ -1005,9 +989,9 @@ sampler's bias, the probes): that section.
   through the environment cut frame 727 to 3.0 ms but moved the run's worst frame elsewhere (9.4 ms) with the same
   average. Try compiling the gameplay assemblies ahead of time (ReadyToRun) or preparing the hot paths during loading,
   and A/B both the average and the worst frame.
-- **GC pauses:** 21 gen-0 collections in the 3000 frames, 7 of them also gen-1, 1.3-3.3 ms each; the slowest frames
-  after 727 are all GC. Reduce what each frame allocates (`Process/AllocatedBytes`: ~64 KB a frame on average,
-  0.4 MB at most, at frame 3023).
+- **GC pauses:** since the timer wheels reuse their slot lists (2026-11-27, IMPLEMENTATION-NOTES "Aura scaling"), a
+  frame allocates ~3 KB on average without stress (it was ~27 KB, and ~64 KB before that) and the range 600-3600 has no
+  gen-0 collection; what is left is the startup frames (970: ~0.5 MB) and, under stress, effects.
 - **Measure each fix** with a `phase-performance-testing` A/B, Release, against a baseline saved just before it.
 
 #### Intern an action source once per entity and cause
@@ -1533,6 +1517,21 @@ Built on the senses in "Field of view and perception" above.
   block them; anyone in range with hearing perceives the location, not the entity.
 
 ### Medium Priority
+
+#### Auras granted by spells: Intelligence scaling and spell tags
+
+Found reviewing auras against the action and item changes (2026-11-26, `PLAN-aura-scaling.md` "Not built by this plan"):
+- **Size:** Intelligence scales a spell's area (`SpellScalingEffects`), but an aura the spell grants
+  (`AuraSourceGrant`'s size) doesn't grow with it.
+- **Tags:** an aura placed by a spell applies its effects with only the aura's own tags, so Anti-Magic doesn't affect it
+  and a Magic-conditioned modifier doesn't apply to it. Decide whether a granted aura's effects carry the granting
+  activation's implied tags.
+
+#### Aura content: refuse effect entries an aura tick can't place
+
+An aura tick applies every entry to each entity in range (`EffectSequence.Apply`). Entries placed once per activation
+(`AuraSourceGrant`) or per tile (`TerrainChange`) mean nothing there, and nothing refuses them in an aura's `fx`. Add a
+per-record check beside the other aura checks.
 
 #### Crawling
 
