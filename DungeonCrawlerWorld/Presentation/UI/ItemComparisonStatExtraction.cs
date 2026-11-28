@@ -1,3 +1,4 @@
+using Engine.Tiles;
 using Game;
 using Game.Effects;
 using Game.Effects.Entries;
@@ -8,6 +9,8 @@ using Game.Modules.Auras;
 using Game.Modules.Inventory;
 using Game.Modules.StatModifiers;
 using Game.Views;
+using Presentation.UI.Details;
+using Presentation.UI.Targeting;
 
 namespace Presentation.UI;
 
@@ -32,6 +35,16 @@ public static class ItemComparisonStatExtraction
         if (definition.ActivatorOrNone is { } activator)
         {
             stats.AddRange(ExtractActivatorStats(activator, preview, DetailsMode.Simple, names));
+            if (definition.Toggle is null)
+            {
+                stats.AddRange(ExtractTargetingStats(activator, preview, DetailsMode.Simple, names));
+            }
+
+            if (ActivatableDetailsSections.AurasPlacedBy(definition, preview) is [var measuredAura, ..])
+            {
+                stats.Add(AuraRadiusStat(measuredAura));
+            }
+
             stats.AddRange(ExtractResourceStats(activator));
         }
 
@@ -199,32 +212,16 @@ public static class ItemComparisonStatExtraction
     /// <summary>Just the Activation-section half -- ItemDetailsWindow.BuildActivationSection's own line source (targeting/timing/per-activator-type fields), excluding the shape-preview grid itself, which is a separate visual, not a text line.</summary>
     /// <param name="preview">The activation as the player would use it: a scroll's range and area with their Intelligence applied, and the lock its timing tooltip names. Null shows them as declared.</param>
     /// <param name="mode">
-    /// Simple leaves out Shape, Range and Area Size, which the shape preview beside the lines shows, and shows the timing as a
-    /// word on its own only when it isn't Immediate. Advanced shows every line, "Timing: X" with its tooltip, and the
-    /// change and breakdown of a scaled range or area.
+    /// Simple shows the timing as a word on its own only when it isn't Immediate; Advanced shows "Timing: X" with its
+    /// tooltip. Targeting is never a line: it is the schematic's labels (ExtractTargetingStats).
     /// </param>
-    /// <param name="showsTargeting">False for a toggle: what it reaches is its aura's (BuildAuraSection), not its activator's self-targeting, so no Shape, Range or Area Size line.</param>
-    public static IReadOnlyList<ItemComparisonStat> ExtractActivatorStats(IActionActivator activator, ActivatablePreview? preview = null, DetailsMode mode = DetailsMode.Advanced, EffectTextNames? names = null, bool showsTargeting = true)
+    public static IReadOnlyList<ItemComparisonStat> ExtractActivatorStats(IActionActivator activator, ActivatablePreview? preview = null, DetailsMode mode = DetailsMode.Advanced, EffectTextNames? names = null)
     {
         var stats = new List<ItemComparisonStat>();
         var category = activator.Timing.Category;
 
         if (mode == DetailsMode.Advanced)
         {
-            if (showsTargeting)
-            {
-                // Shape never gets a ComparableValue -- an enum has no "better/worse" direction (see
-                // ItemDetailsWindow's own shape-preview grid for the separate, shape-match-gated tile
-                // diff highlight that stands in for comparing shapes visually instead).
-                stats.Add(new ItemComparisonStat("activator:shape", $"Shape: {activator.Targeting.Shape}", null, HigherIsBetter: true));
-                stats.Add(TargetingStat("activator:range", "Range", activator.Targeting.AimRanges.MaximumRange, preview?.Range, names ?? EffectTextNames.None));
-
-                if ((preview?.AreaSize?.Value ?? activator.Targeting.AreaSize) > 0)
-                {
-                    stats.Add(TargetingStat("activator:areaSize", "Area Size", activator.Targeting.AreaSize, preview?.AreaSize, names ?? EffectTextNames.None));
-                }
-            }
-
             stats.Add(new ItemComparisonStat("activator:timingCategory", $"Timing: {TimingText.Word(category)}", null, HigherIsBetter: true, TimingText.Tooltip(category, preview?.ActionLockFrames ?? activator.Timing.ActionLockFrames)));
         }
         else if (category != ActionTimingCategory.Immediate)
@@ -274,19 +271,113 @@ public static class ItemComparisonStatExtraction
         _ => [],
     };
 
-    /// <summary>"Range: 13", as used when previewed, with its change and breakdown when it differs from declared.</summary>
-    private static ItemComparisonStat TargetingStat(string key, string label, int declared, PreviewedValue? asUsed, EffectTextNames names)
+    /// <summary>The target schematic's labels, as used when previewed: its range ("10") when it has a path, and its shape's size ("r 3") when the shape has one.</summary>
+    /// <param name="mode">Advanced adds a scaled value's change and its breakdown to the tooltip, which otherwise names the value ("Range: 10", "Circle radius: 3").</param>
+    public static IReadOnlyList<ItemComparisonStat> ExtractTargetingStats(IActionActivator activator, ActivatablePreview? preview = null, DetailsMode mode = DetailsMode.Advanced, EffectTextNames? names = null)
+    {
+        var declared = activator.Targeting;
+        var targeting = preview?.Targeting ?? declared;
+        var stats = new List<ItemComparisonStat>(2);
+        if (TargetSchematicPlanner.ShowsRange(targeting))
+        {
+            stats.Add(TargetingStat(TargetingRangeKey, "Range", string.Empty, declared.MaximumRange, preview?.Range, mode, names ?? EffectTextNames.None));
+        }
+
+        if (TargetSchematicPlanner.AreaMeasureOf(targeting) is { } measure)
+        {
+            var splashes = measure == TargetSchematicAreaMeasure.Radius && targeting.TargetModeAffects == TargetModeAffects.MarkedOnly;
+            var (label, prefix) = measure switch
+            {
+                TargetSchematicAreaMeasure.Radius when splashes => ("Splash radius", "Splash "),
+                TargetSchematicAreaMeasure.Radius => ($"{targeting.Shape} radius", "r "),
+                TargetSchematicAreaMeasure.Length => ($"{targeting.Shape} length", string.Empty),
+                _ => ($"{targeting.Shape} width", string.Empty),
+            };
+            stats.Add(TargetingStat(TargetingAreaSizeKey, label, prefix, declared.AreaSize, preview?.AreaSize, mode, names ?? EffectTextNames.None));
+        }
+
+        if (targeting.Shape.HasFlag(TargetShape.Cone))
+        {
+            stats.Add(TargetingStat(TargetingKeyOf(TargetSchematicLabel.ConeWidth), "Cone width", string.Empty, declared.AreaSize, preview?.AreaSize, mode, names ?? EffectTextNames.None));
+        }
+
+        if (targeting.Shape.HasFlag(TargetShape.Ring))
+        {
+            var innerRadius = System.Math.Max(0, (int)(preview?.AreaSize?.Value ?? declared.AreaSize) - 1);
+            stats.Add(new ItemComparisonStat(TargetingKeyOf(TargetSchematicLabel.InnerRadius), $"r {innerRadius}", null, HigherIsBetter: true, $"Ring inner radius: {innerRadius}"));
+        }
+
+        if (mode == DetailsMode.Advanced)
+        {
+            foreach (var callout in TargetSchematicPlanner.CalloutsOf(targeting))
+            {
+                stats.Add(CalloutStat(callout, targeting));
+            }
+        }
+
+        return stats;
+    }
+
+    public const string TargetingRangeKey = "targeting:Range";
+
+    public const string TargetingAreaSizeKey = "targeting:AreaSize";
+
+    /// <summary>The label an aura's radius dimension shows: "r 4", its tooltip naming the aura.</summary>
+    public static ItemComparisonStat AuraRadiusStat(TargetSchematicAura aura) =>
+        new(TargetingKeyOf(TargetSchematicLabel.AuraRadius), $"r {aura.Size}", aura.Size, HigherIsBetter: true, $"{aura.Aura.Name} aura radius: {aura.Size}");
+
+    /// <summary>The key of the targeting stat a schematic's label slot shows.</summary>
+    public static string TargetingKeyOf(TargetSchematicLabel label) => $"targeting:{label}";
+
+    /// <summary>An Advanced callout's text and its tooltip; a callout is never compared.</summary>
+    private static ItemComparisonStat CalloutStat(TargetSchematicLabel callout, TargetingSpec targeting)
+    {
+        var (text, tooltip) = callout switch
+        {
+            TargetSchematicLabel.MinimumRange => ($"min {targeting.MinimumRange}", $"Minimum range: {targeting.MinimumRange}. It can't be aimed nearer than that."),
+            TargetSchematicLabel.HitCount => HitCountText(targeting.ProjectileHitCount),
+            TargetSchematicLabel.PathEnd => ("Set distance", "Unless something stops it, it flies on past the aimed tile to its full range."),
+            TargetSchematicLabel.Walls when targeting.PathWalls == PathWallRule.BouncesOffWalls => ($"bounces ×{targeting.WallBounceCount}", $"It bounces off walls, up to {targeting.WallBounceCount} {(targeting.WallBounceCount == 1 ? "time" : "times")}."),
+            TargetSchematicLabel.Walls => ("through walls", "It goes on through walls."),
+            TargetSchematicLabel.AimSight => ("Required LoS", "Line of Sight to the targeted tile is required."),
+            TargetSchematicLabel.ShapeSight => ("Blocked by walls", "Walls block it from reaching what they hide from where it lands."),
+            _ => ("one target", "In Target mode it affects only the creature you mark."),
+        };
+        return new ItemComparisonStat(TargetingKeyOf(callout), text, null, HigherIsBetter: true, tooltip);
+    }
+
+    private static (string Text, string Tooltip) HitCountText(ushort hitCount) => hitCount switch
+    {
+        0 => ("hits none", "It passes over every creature on the way."),
+        TargetingSpec.AllEntitiesOnPath => ("hits all", "Hits every target in its path"),
+        _ => ($"hits {hitCount}", $"It hits the creatures on the way, stopping on the {Ordinal(hitCount)}."),
+    };
+
+    private static string Ordinal(int number) => (number % 100) switch
+    {
+        11 or 12 or 13 => $"{number}th",
+        _ => (number % 10) switch
+        {
+            1 => $"{number}st",
+            2 => $"{number}nd",
+            3 => $"{number}rd",
+            _ => $"{number}th",
+        },
+    };
+
+    /// <summary>prefix and the value as used, named by label in its tooltip; in Advanced mode, its change and breakdown when it differs from declared.</summary>
+    private static ItemComparisonStat TargetingStat(string key, string label, string prefix, int declared, PreviewedValue? asUsed, DetailsMode mode, EffectTextNames names)
     {
         var value = asUsed?.Value ?? declared;
-        var stat = new ItemComparisonStat(key, $"{label}: {value}", value, HigherIsBetter: true);
-        if (asUsed is null)
+        var stat = new ItemComparisonStat(key, $"{prefix}{value}", value, HigherIsBetter: true, $"{label}: {value}");
+        if (asUsed is null || mode != DetailsMode.Advanced)
         {
             return stat;
         }
 
         ShownValue[] shown = [new ShownValue(label, asUsed, static amount => $"{amount:0.#}")];
         return PreviewedValueText.Change(shown) is var (changeText, isBuff)
-            ? stat with { ChangeText = changeText, ChangeIsBuff = isBuff, TooltipText = PreviewedValueText.Tooltip(shown, names) }
+            ? stat with { ChangeText = changeText, ChangeIsBuff = isBuff, TooltipText = $"{stat.TooltipText}\n{PreviewedValueText.Tooltip(shown, names)}" }
             : stat;
     }
 

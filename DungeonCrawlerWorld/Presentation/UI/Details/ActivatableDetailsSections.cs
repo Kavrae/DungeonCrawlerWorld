@@ -9,6 +9,7 @@ using Microsoft.Xna.Framework;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 using Presentation.UI.Content;
+using Presentation.UI.Targeting;
 using UIEngine.Fonts;
 using UIEngine.UI;
 using UIEngine.UI.Chrome;
@@ -33,23 +34,17 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
     /// <summary>A wrapping text line's height cap: taller than any screen, so a long line grows with its column, which scrolls, rather than stopping at the screen's height (an element's default cap).</summary>
     public const float MaximumTextRowHeight = 10000f;
 
-    /// <summary>Soft per-widget height cap for the target shape preview grid -- independent of the window's own overall MaximumSize/scroll safety net, so a long range or a large-AreaSize Circle can't single-handedly blow out the window's height (the one-screen rule); TargetShapePreviewGeometry.ComputeCellSize shrinks cells to fit within this instead. The aura reach's cap, so the two grids read at one size.</summary>
-    private const float TargetShapePreviewMaxHeight = AuraReachPreviewMaxHeight;
+    /// <summary>Height cap for a target schematic -- the Activation row's, and an aura's reach -- so it adds little height (the one-screen rule): TargetSchematicPlanner.PlanToFit shrinks its unit to fit.</summary>
+    private const float TargetSchematicMaximumHeight = 96f;
 
-    /// <summary>Height cap for an aura's reach diamond, kept small so an aura section adds little height (the one-screen rule).</summary>
-    private const float AuraReachPreviewMaxHeight = 96f;
+    /// <summary>Height cap for the target schematic in Advanced mode, which stacks its callouts beside it.</summary>
+    private const float AdvancedTargetSchematicMaximumHeight = 200f;
 
-    /// <summary>How far toward the aura's glow a reach cell is shaded at the edge (weakest) and at the source (strongest).</summary>
-    private const float ReachMinimumShade = 0.15f;
-
-    private const float ReachMaximumShade = 0.75f;
-
-    /// <summary>An activation preview's cell it can be aimed at but doesn't land on: the cell colour, halfway to the panel behind it.</summary>
-    private static readonly Color ReachOnlyCellFill = Color.Lerp(WindowPalette.PanelContentColor, WindowPalette.PanelBackgroundColor, 0.5f);
+    private static readonly TargetSchematicLabel[] SchematicLabels = Enum.GetValues<TargetSchematicLabel>();
 
     private const string AuraSwatchGlyph = "●";
 
-    /// <summary>BuildActivationSection divides its own width into this many equal zones -- text (left), the target shape grid (centered in the middle one), and an empty zone (right, reserved for now).</summary>
+    /// <summary>A row with a picture beside its lines divides its width into this many equal zones: the lines in the first, the picture in the rest (the target schematic) or the last (an aura's reach).</summary>
     private const float TargetingRowZoneCount = 3f;
 
     public static readonly Color BodyTextColor = Color.White;
@@ -171,12 +166,46 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
     /// <summary>"Effects" (or "While on" for a toggle), one line per effect entry, each aura grant followed by its aura's section (BuildAuraSection), or "None".</summary>
     /// <param name="preview">The definition as the player would use it; null shows its own amounts.</param>
     /// <param name="auraPreviews">An aura's effects at a strength (Game.Views.ActivationPreviews.PreviewAura); null shows them per point of strength, as content gives them.</param>
+    /// <remarks>An activation that places its auras draws their reach in its Activation schematic (AurasPlacedBy), so their sections show no reach of their own; a toggle's, or one with no activator, does.</remarks>
     public void BuildEffectsSection(Window host, ActivatableDefinition definition, DetailsMode mode, float width, Func<ItemComparisonStat, LineStyle> lineStyle, ActivatablePreview? preview = null, AuraEffectPreviews? auraPreviews = null) =>
-        BuildEffectsSection(host, definition.Effects, definition.Toggle is null ? "Effects" : "While on", mode, width, lineStyle, preview?.Entries, auraPreviews, showsAuraSections: true);
+        BuildEffectsSection(host, definition.Effects, definition.Toggle is null ? "Effects" : "While on", mode, width, lineStyle, preview?.Entries, auraPreviews, showsAuraSections: true, showsAuraReach: !PlacesAurasInActivation(definition));
+
+    /// <summary>Whether definition's Activation schematic draws the auras it grants where they land: it is used, not held, and has an activator to draw.</summary>
+    private static bool PlacesAurasInActivation(ActivatableDefinition definition) => definition.Toggle is null && definition.ActivatorOrNone is not null;
+
+    /// <summary>The auras definition places where its activation lands, as used: what its Activation schematic draws there. None for one that holds them instead (a toggle).</summary>
+    public static IReadOnlyList<TargetSchematicAura> AurasPlacedBy(ActivatableDefinition definition, ActivatablePreview? preview)
+    {
+        if (!PlacesAurasInActivation(definition))
+        {
+            return [];
+        }
+
+        var auras = new List<TargetSchematicAura>();
+        foreach (var effect in definition.Effects)
+        {
+            foreach (var entry in effect.Entries)
+            {
+                if (entry is AuraSourceGrant grant)
+                {
+                    auras.Add(AuraAsUsed(grant, preview?.Entries?.GetValueOrDefault(grant)));
+                }
+            }
+        }
+
+        return auras;
+    }
+
+    /// <summary>grant's aura at the power and size it is used with (grantAmounts), else its own.</summary>
+    private static TargetSchematicAura AuraAsUsed(AuraSourceGrant grant, EffectAmountPreview? grantAmounts) =>
+        new(grant.Aura,
+            (int)MathF.Round(grantAmounts?.ValueOr(EffectAmount.AuraPower, grant.Power) ?? grant.Power),
+            (int)MathF.Round(grantAmounts?.ValueOr(EffectAmount.AuraSize, grant.Size) ?? grant.Size));
 
     /// <summary>heading, then one line per entry of effects -- with showsAuraSections, each aura grant followed by its aura's section -- or "None".</summary>
     /// <param name="previews">Each entry's amounts as used; null shows the entries' own.</param>
-    public void BuildEffectsSection(Window host, IReadOnlyList<Effect> effects, string heading, DetailsMode mode, float width, Func<ItemComparisonStat, LineStyle> lineStyle, IReadOnlyDictionary<IEffectEntry, EffectAmountPreview>? previews = null, AuraEffectPreviews? auraPreviews = null, bool showsAuraSections = false)
+    /// <param name="showsAuraReach">Whether each aura section draws its own reach; false when the Activation schematic draws it where it lands.</param>
+    public void BuildEffectsSection(Window host, IReadOnlyList<Effect> effects, string heading, DetailsMode mode, float width, Func<ItemComparisonStat, LineStyle> lineStyle, IReadOnlyDictionary<IEffectEntry, EffectAmountPreview>? previews = null, AuraEffectPreviews? auraPreviews = null, bool showsAuraSections = false, bool showsAuraReach = true)
     {
         BuildDivider(host, width, heading, 0.125f);
 
@@ -193,7 +222,7 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
 
                 if (showsAuraSections && entry is AuraSourceGrant grant)
                 {
-                    BuildAuraSection(host, grant, previews?.GetValueOrDefault(grant), mode, width, auraPreviews);
+                    BuildAuraSection(host, grant, previews?.GetValueOrDefault(grant), mode, width, auraPreviews, showsAuraReach);
                 }
             }
         }
@@ -206,20 +235,22 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
 
     /// <summary>
     /// What an aura grant's aura does, under the line that grants it: a heading with its glow, its effects each second at
-    /// the grant's strength, and its reach as a diamond of the grant's size, shaded by its strength. Advanced adds the
-    /// strength at the source and the edge, the Strength lines (AuraDetailsWindow.StrengthLines), the effects at the edge
-    /// too where they differ, and the aura's description.
+    /// the grant's strength, and -- with showsReach -- its reach: its source's station in a diamond of the grant's size,
+    /// shaded by its strength, and its radius. Advanced adds the strength at the source and the edge, the Strength lines
+    /// (AuraDetailsWindow.StrengthLines), the effects at the edge too where they differ, and the aura's description.
     /// </summary>
     /// <remarks>
     /// Strength and size are the grant's as used (grantAmounts). The effects' lines carry no change in parentheses: an
     /// aura's amounts are given per point of strength, so the "change" would only restate it; their tooltips still show
     /// the breakdown. A glow-only aura (no effects) shows its heading and reach alone.
     /// </remarks>
-    public void BuildAuraSection(Window host, AuraSourceGrant grant, EffectAmountPreview? grantAmounts, DetailsMode mode, float width, AuraEffectPreviews? auraPreviews)
+    /// <param name="showsReach">False when the Activation schematic draws the reach where the activation places it.</param>
+    public void BuildAuraSection(Window host, AuraSourceGrant grant, EffectAmountPreview? grantAmounts, DetailsMode mode, float width, AuraEffectPreviews? auraPreviews, bool showsReach = true)
     {
-        var aura = grant.Aura;
-        var power = (int)MathF.Round(grantAmounts?.ValueOr(EffectAmount.AuraPower, grant.Power) ?? grant.Power);
-        var size = (int)MathF.Round(grantAmounts?.ValueOr(EffectAmount.AuraSize, grant.Size) ?? grant.Size);
+        var used = AuraAsUsed(grant, grantAmounts);
+        var aura = used.Aura;
+        var power = used.Power;
+        var size = used.Size;
         var edgePower = aura.Falloff.ValueAt(power, size, size);
         var effectsDifferAtEdge = mode == DetailsMode.Advanced && aura.Magnitude == AuraMagnitude.Power && edgePower != power && auraPreviews is not null;
 
@@ -247,7 +278,17 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
             }
         }
 
-        BuildLinesBesideReach(host, width, lines, aura, power, size);
+        if (showsReach)
+        {
+            BuildLinesBesideReach(host, width, lines, used);
+        }
+        else
+        {
+            foreach (var (stat, style) in lines)
+            {
+                BuildStatRow(host, width, stat, style);
+            }
+        }
 
         if (mode == DetailsMode.Advanced && !string.IsNullOrWhiteSpace(aura.Description))
         {
@@ -274,41 +315,53 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
         AddText(row, new Vector2(RowHeight, 0), width - RowHeight, $"{aura.Name} aura", GameWindowPalette.HeaderTextColor, tooltip: null, showsTooltipIndicator: false);
     }
 
-    /// <summary>lines in a column on the left, and the aura's reach to their right: a diamond of size, each cell shaded by the aura's strength there.</summary>
-    private void BuildLinesBesideReach(Window host, float width, IReadOnlyList<(ItemComparisonStat Stat, LineStyle Style)> lines, AuraDefinition aura, int power, int size)
+    /// <summary>lines in a column on the left, and the aura's reach to their right: its source's station in a diamond of its size, shaded by its strength, with its radius.</summary>
+    private void BuildLinesBesideReach(Window host, float width, IReadOnlyList<(ItemComparisonStat Stat, LineStyle Style)> lines, TargetSchematicAura aura)
     {
-        var availableWidth = width;
-        var offsets = TargetShapePreviewGeometry.ComputeDiamondOffsets(size);
-        var (minX, minY, columns, rows) = TargetShapePreviewGeometry.ComputeBounds(offsets);
-        var cellSize = TargetShapePreviewGeometry.ComputeCellSize(columns, rows, availableWidth / TargetingRowZoneCount, AuraReachPreviewMaxHeight);
-        var gridWidth = columns * cellSize;
-        var gridHeight = rows * cellSize;
-        var rowHeight = System.Math.Max(lines.Count * RowHeight, gridHeight);
-        var textWidth = System.Math.Max(0f, availableWidth - gridWidth - RowTextGap);
+        var radius = ItemComparisonStatExtraction.AuraRadiusStat(aura);
+        var radiusStyle = LineStyle.Of(radius);
+        var radiusWidth = StatLineWidth(radius, radiusStyle);
+        var schematic = TargetSchematicPlanner.PlanAuraReachToFit(aura, new Vector2(radiusWidth, RowHeight), new Vector2(width / TargetingRowZoneCount, TargetSchematicMaximumHeight));
+        var rowHeight = System.Math.Max(lines.Count * RowHeight, schematic.Size.Y);
+        var textWidth = System.Math.Max(0f, width - schematic.Size.X - RowTextGap);
 
         var row = CreateRowWindow(host, width, rowHeight + host.ContentPadding.Y * 2);
+        var textTop = MathF.Floor((rowHeight - lines.Count * RowHeight) / 2f);
         for (var index = 0; index < lines.Count; index++)
         {
-            AddStatLine(row, new Vector2(0, index * RowHeight), textWidth, lines[index].Stat, lines[index].Style);
+            AddStatLine(row, new Vector2(0, textTop + index * RowHeight), textWidth, lines[index].Stat, lines[index].Style);
         }
 
-        var reach = elementPoolService.CreateElement<TargetShapePreviewElement>(row, new ElementOptions
+        var origin = new Vector2(MathF.Floor(width - schematic.Size.X), MathF.Floor((rowHeight - schematic.Size.Y) / 2f));
+        AddSchematic(row, schematic, origin, [(radius, radiusStyle, radiusWidth)]);
+    }
+
+    /// <summary>schematic drawn in row at origin, each of its label slots filled by the label whose key it names, as a stat line.</summary>
+    private void AddSchematic(Window row, TargetSchematic schematic, Vector2 origin, IReadOnlyList<(ItemComparisonStat Stat, LineStyle Style, float Width)> labels)
+    {
+        var schematicElement = elementPoolService.CreateElement<TargetSchematicElement>(row, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(MathF.Floor(availableWidth - gridWidth), MathF.Floor((rowHeight - gridHeight) / 2f)), Size = new Vector2(gridWidth, gridHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = origin, Size = schematic.Size, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
-        reach.Configure(offsets, minX, minY, cellSize, cellFill: offset => ReachCellFill(aura, power, size, offset));
-        row.AddChild(reach);
-    }
+        schematicElement.Configure(schematic);
+        row.AddChild(schematicElement);
 
-    /// <summary>A reach cell's fill: the panel's cell colour toward the aura's glow, the more the stronger the aura is there.</summary>
-    private static Color ReachCellFill(AuraDefinition aura, int power, int size, Point offset)
-    {
-        var distance = System.Math.Abs(offset.X) + System.Math.Abs(offset.Y);
-        var strength = power <= 0 ? 0f : aura.Falloff.ValueAt(power, size, distance) / (float)power;
-        return Color.Lerp(WindowPalette.PanelContentColor, aura.GlowColor, ReachMinimumShade + (ReachMaximumShade - ReachMinimumShade) * strength);
+        foreach (var slot in schematic.Labels)
+        {
+            var key = ItemComparisonStatExtraction.TargetingKeyOf(slot.Label);
+            foreach (var (stat, style, labelWidth) in labels)
+            {
+                if (stat.Key == key)
+                {
+                    var topLeft = origin + slot.TopLeftFor(new Vector2(labelWidth, RowHeight));
+                    AddStatLine(row, new Vector2(MathF.Floor(topLeft.X), MathF.Floor(topLeft.Y)), labelWidth, stat, style);
+                    break;
+                }
+            }
+        }
     }
 
     private void BuildStatRow(Window host, float width, ItemComparisonStat stat, LineStyle style)
@@ -335,21 +388,18 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
     }
 
     /// <summary>
-    /// "Activation", then three equal-width zones: the targeting shape/range caption plus every Timing/per-activator-type
-    /// line, stacked in the left zone; the target shape preview grid (see TargetShapePreviewGeometry/
-    /// TargetShapePreviewElement) centered within the middle zone -- every tile it can be aimed at dimmed
-    /// (ComputeReach), and the tiles it lands on aimed at the edge of that range in full (ComputeOffsets); the right zone
-    /// left empty for now. Vertically centered
-    /// against the taller of the text column/grid. Both are sized entirely up front, before the row is created, so none
-    /// of it risks the Fixed-vs-WrapContent shrink-feedback pitfall the window itself hit earlier.
+    /// "Activation", then the activator's lines stacked in the left third and its target schematic (TargetSchematicPlanner)
+    /// centred in the other two thirds, the two vertically centred against the taller. Each schematic label is a targeting
+    /// stat (ItemComparisonStatExtraction.ExtractTargetingStats) placed at its slot as a stat line, styled by lineStyle like
+    /// any other line. Everything is sized up front, before the row is created.
     /// </summary>
-    /// <param name="shapeHighlight">The grid tiles Item Details Comparison highlights, given the spec and its tiles; null highlights none.</param>
-    /// <param name="preview">The activation as the player would use it: the grid and the range lines show its targeting (a scroll's scaled by Intelligence). Null shows the activator's own.</param>
-    /// <param name="mode">Which lines show (ItemComparisonStatExtraction.ExtractActivatorStats); the grid shows in both.</param>
-    /// <param name="isToggle">A toggle's reach is its aura's (BuildAuraSection), so it gets no grid and no Shape, Range or Area Size line; with nothing else to show, no section at all.</param>
-    public void BuildActivationSection(Window host, IActionActivator activator, DetailsMode mode, float width, Func<ItemComparisonStat, LineStyle> lineStyle, Func<TargetingSpec, IReadOnlyList<Point>, IReadOnlySet<Point>?>? shapeHighlight = null, ActivatablePreview? preview = null, bool isToggle = false)
+    /// <param name="preview">The activation as the player would use it: the schematic and its labels show its targeting (a scroll's scaled by Intelligence). Null shows the activator's own.</param>
+    /// <param name="mode">Which lines show, and whether a label carries its change; the schematic shows in both.</param>
+    /// <param name="isToggle">A toggle's reach is its aura's (BuildAuraSection), so it gets no schematic; with no lines to show either, no section at all.</param>
+    /// <param name="auras">The auras the activation places where it lands (AurasPlacedBy), drawn there in the schematic with the first one's radius.</param>
+    public void BuildActivationSection(Window host, IActionActivator activator, DetailsMode mode, float width, Func<ItemComparisonStat, LineStyle> lineStyle, ActivatablePreview? preview = null, bool isToggle = false, IReadOnlyList<TargetSchematicAura>? auras = null)
     {
-        var stats = ItemComparisonStatExtraction.ExtractActivatorStats(activator, preview, mode, names, showsTargeting: !isToggle);
+        var stats = ItemComparisonStatExtraction.ExtractActivatorStats(activator, preview, mode, names);
         if (isToggle)
         {
             if (stats.Count > 0)
@@ -367,48 +417,60 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
         BuildDivider(host, width, "Activation", 0.125f);
         var targeting = preview?.Targeting ?? activator.Targeting;
 
-        // A row has no side padding (CreateRowWindow), so the three zones divide its whole width.
-        var zoneWidth = width / TargetingRowZoneCount;
+        // A row has no side padding (CreateRowWindow), so the text column and the schematic divide its whole width.
+        var textColumnWidth = width / TargetingRowZoneCount;
+        var schematicZoneWidth = width - textColumnWidth;
 
-        var offsets = TargetShapePreviewGeometry.ComputeOffsets(targeting);
-        var shapeCells = new HashSet<Point>(offsets);
-        var cells = new List<Point>(offsets);
-        foreach (var reachable in TargetShapePreviewGeometry.ComputeReach(targeting))
+        var labelStats = new List<ItemComparisonStat>(ItemComparisonStatExtraction.ExtractTargetingStats(activator, preview, mode, names));
+        if (auras is { Count: > 0 })
         {
-            if (shapeCells.Add(reachable))
+            labelStats.Add(ItemComparisonStatExtraction.AuraRadiusStat(auras[0]));
+        }
+
+        var labels = new List<(ItemComparisonStat Stat, LineStyle Style, float Width)>(labelStats.Count);
+        var labelSizes = new Dictionary<TargetSchematicLabel, Vector2>(labelStats.Count);
+        foreach (var labelStat in labelStats)
+        {
+            var style = lineStyle(labelStat);
+            var labelWidth = StatLineWidth(labelStat, style);
+            labels.Add((labelStat, style, labelWidth));
+            foreach (var label in SchematicLabels)
             {
-                cells.Add(reachable);
+                if (ItemComparisonStatExtraction.TargetingKeyOf(label) == labelStat.Key)
+                {
+                    labelSizes[label] = new Vector2(labelWidth, RowHeight);
+                }
             }
         }
 
-        var (minX, minY, columns, rows) = TargetShapePreviewGeometry.ComputeBounds(cells);
-        var cellSize = TargetShapePreviewGeometry.ComputeCellSize(columns, rows, zoneWidth, TargetShapePreviewMaxHeight);
-        var gridWidth = columns * cellSize;
-        var gridHeight = rows * cellSize;
-
-        var textColumnHeight = stats.Count * RowHeight;
-        var rowHeight = System.Math.Max(textColumnHeight, gridHeight);
+        var maximumHeight = mode == DetailsMode.Advanced ? AdvancedTargetSchematicMaximumHeight : TargetSchematicMaximumHeight;
+        var schematic = TargetSchematicPlanner.PlanToFit(targeting, mode, new Vector2(RowHeight, RowHeight), labelSizes, new Vector2(schematicZoneWidth, maximumHeight), auras);
+        var rowHeight = System.Math.Max(stats.Count * RowHeight, schematic.Size.Y);
 
         // The row's outer height is not externally constrained (unlike its width), so it grows by ContentPadding on top
         // and bottom instead -- rowHeight itself still means the row's own content height below.
         var row = CreateRowWindow(host, width, rowHeight + host.ContentPadding.Y * 2);
 
+        var textTop = MathF.Floor((rowHeight - stats.Count * RowHeight) / 2f);
         for (var i = 0; i < stats.Count; i++)
         {
-            AddStatLine(row, new Vector2(0, i * RowHeight), zoneWidth, stats[i], lineStyle(stats[i]));
+            AddStatLine(row, new Vector2(0, textTop + i * RowHeight), textColumnWidth, stats[i], lineStyle(stats[i]));
         }
 
-        var gridX = MathF.Floor(zoneWidth + (zoneWidth - gridWidth) / 2f);
-        var shapePreview = elementPoolService.CreateElement<TargetShapePreviewElement>(row, new ElementOptions
+        var schematicOrigin = new Vector2(MathF.Floor(textColumnWidth + (schematicZoneWidth - schematic.Size.X) / 2f), MathF.Floor((rowHeight - schematic.Size.Y) / 2f));
+        AddSchematic(row, schematic, schematicOrigin, labels);
+    }
+
+    /// <summary>How wide AddStatLine draws stat in style when given all the room it needs: its text, then style's suffix, then its tooltip indicator when it has a tooltip.</summary>
+    private float StatLineWidth(ItemComparisonStat stat, LineStyle style)
+    {
+        var width = BodyFont.MeasureString(stat.DisplayText).X + LinePadding;
+        if (style.Suffix is { } suffix)
         {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(gridX, MathF.Floor((rowHeight - gridHeight) / 2f)), Size = new Vector2(gridWidth, gridHeight), DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-        });
-        var landsOn = new HashSet<Point>(offsets);
-        shapePreview.Configure(cells, minX, minY, cellSize, shapeHighlight?.Invoke(targeting, offsets), cellFill: cell => landsOn.Contains(cell) ? WindowPalette.PanelContentColor : ReachOnlyCellFill);
-        row.AddChild(shapePreview);
+            width += SuffixGap + BodyFont.MeasureString(suffix).X + LinePadding;
+        }
+
+        return stat.TooltipText is null ? width : width + WindowChrome.TooltipIndicatorGap + WindowChrome.TooltipIndicatorSize;
     }
 
     /// <summary>"Resources", then what using it spends that it holds itself -- a wand's charges, later ammunition -- or nothing at all when it holds none.</summary>

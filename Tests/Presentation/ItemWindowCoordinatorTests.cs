@@ -108,7 +108,7 @@ public sealed class ItemWindowCoordinatorTests
         elementPool.RegisterFactory<TradeItemStackCell>(() => new TradeItemStackCell(TestElementServices.For(elementPool, fontService), spriteSheetService));
         elementPool.RegisterFactory<EmptyTradeSlotCell>(() => new EmptyTradeSlotCell(TestElementServices.For(elementPool, fontService)));
         elementPool.RegisterFactory<CurrencyElement>(() => new CurrencyElement(TestElementServices.For(elementPool, fontService), spriteSheetService));
-        elementPool.RegisterFactory<TargetShapePreviewElement>(() => new TargetShapePreviewElement(TestElementServices.For(elementPool, fontService)));
+        elementPool.RegisterFactory<global::Presentation.UI.Targeting.TargetSchematicElement>(() => new global::Presentation.UI.Targeting.TargetSchematicElement(TestElementServices.For(elementPool, fontService)));
         elementPool.RegisterFactory<EntityIconElement>(() => new EntityIconElement(TestElementServices.For(elementPool, fontService), spriteSheetService, mapView));
         elementPool.RegisterFactory<ItemDetailsWindow>(() => new ItemDetailsWindow(TestElementServices.For(elementPool, fontService), new EffectTextNames(TestGameplayTags.BuiltIn), inventoryServices.ActionStateView, TestActionStateViews.Previews(componentManager), world));
         elementPool.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(TestElementServices.For(elementPool, fontService), inventoryServices, world, contextMenuController, mapViewState));

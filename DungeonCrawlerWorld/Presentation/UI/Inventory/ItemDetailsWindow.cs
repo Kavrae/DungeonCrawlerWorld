@@ -257,7 +257,7 @@ public sealed class ItemDetailsWindow(
 
         if (_definition.Activator is { } activator)
         {
-            _sections.BuildActivationSection(this, activator, mode, width, _comparisonStyles.Resolve, _comparisonStyles.ShapeHighlight, preview, isToggle: _definition.Toggle is not null);
+            _sections.BuildActivationSection(this, activator, mode, width, _comparisonStyles.Resolve, preview, isToggle: _definition.Toggle is not null, auras: ActivatableDetailsSections.AurasPlacedBy(_definition, preview));
             _sections.BuildResourcesSection(this, activator, width, _comparisonStyles.Resolve);
         }
 

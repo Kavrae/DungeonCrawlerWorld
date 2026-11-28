@@ -1,14 +1,13 @@
 using Game.Modules.Actions;
 using Game.Views;
 using Microsoft.Xna.Framework;
-using Presentation.UI.Content;
 
 namespace Presentation.UI.Details;
 
-/// <summary>How a details window colours its lines and shape tiles against the items or actions it is compared with: Item Details' and Action Details' one rule.</summary>
+/// <summary>How a details window colours its lines, the target schematic's labels among them, against the items or actions it is compared with: Item Details' and Action Details' one rule.</summary>
 /// <remarks>
-/// Fill it with every compared definition (Add, each as the player would use it), then ask Resolve per line and
-/// ShapeHighlight per shape preview. Empty, every line keeps its own style and no tile is highlighted.
+/// Fill it with every compared definition (Add, each as the player would use it), then ask Resolve per line. Empty, every
+/// line keeps its own style.
 /// </remarks>
 public sealed class ComparisonLineStyles(EffectTextNames names)
 {
@@ -21,24 +20,14 @@ public sealed class ComparisonLineStyles(EffectTextNames names)
 
     private readonly List<IReadOnlyList<ItemComparisonStat>> _comparedStats = [];
 
-    /// <summary>Each compared definition's targeting as the player would use it, at the same index as _comparedStats; null for one with no activator.</summary>
-    private readonly List<TargetingSpec?> _comparedTargeting = [];
-
     /// <summary>Whether anything is compared against.</summary>
     public bool IsComparing => _comparedStats.Count > 0;
 
-    public void Clear()
-    {
-        _comparedStats.Clear();
-        _comparedTargeting.Clear();
-    }
+    public void Clear() => _comparedStats.Clear();
 
     /// <summary>Compares against definition, as preview says the player would use it (null: its own values).</summary>
-    public void Add(ActivatableDefinition definition, ActivatablePreview? preview)
-    {
+    public void Add(ActivatableDefinition definition, ActivatablePreview? preview) =>
         _comparedStats.Add(ItemComparisonStatExtraction.Extract(definition, names, preview));
-        _comparedTargeting.Add(preview?.Targeting ?? definition.ActivatorOrNone?.Targeting);
-    }
 
     /// <summary>
     /// A line's style: its own (its advanced-mode change, if any) with nothing compared. Better/Green when at least one
@@ -103,45 +92,6 @@ public sealed class ComparisonLineStyles(EffectTextNames names)
             ComparisonHighlight.Worse => new LineStyle(WorseColor),
             _ => new LineStyle(BodyTextColor),
         };
-    }
-
-    /// <summary>
-    /// Null (plain grid) unless every compared definition shares this exact Targeting.Shape. When they do, a tile is
-    /// highlighted if it is in this shape's offsets but missing from at least one compared shape's -- Resolve's "not every
-    /// other has it" rule at tile granularity. There is no worse case: a tile this shape lacks is never drawn.
-    /// </summary>
-    public HashSet<Point>? ShapeHighlight(TargetingSpec targeting, IReadOnlyList<Point> offsets)
-    {
-        if (!IsComparing)
-        {
-            return null;
-        }
-
-        var otherOffsetSets = new List<HashSet<Point>>(_comparedTargeting.Count);
-        foreach (var otherTargeting in _comparedTargeting)
-        {
-            if (otherTargeting is null || otherTargeting.Shape != targeting.Shape)
-            {
-                return null;
-            }
-
-            otherOffsetSets.Add(new HashSet<Point>(TargetShapePreviewGeometry.ComputeOffsets(otherTargeting)));
-        }
-
-        var highlighted = new HashSet<Point>();
-        foreach (var offset in offsets)
-        {
-            foreach (var otherOffsets in otherOffsetSets)
-            {
-                if (!otherOffsets.Contains(offset))
-                {
-                    highlighted.Add(offset);
-                    break;
-                }
-            }
-        }
-
-        return highlighted;
     }
 
     /// <summary>A difference between two compared values, in their unit, in parentheses: "(+53)", "(+25%)", "(-3s)".</summary>

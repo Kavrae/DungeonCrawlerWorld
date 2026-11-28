@@ -103,7 +103,7 @@ public sealed class ItemDetailsModeTests
         Assert.IsGreaterThan(grantLine, texts.IndexOf("Poison aura"), "The aura's heading follows its grant.");
         CollectionAssert.Contains(texts, "Each second:");
         Assert.IsFalse(texts.Any(static text => text.StartsWith("Shape:") || text.StartsWith("Range:")), string.Join(" | ", texts));
-        Assert.AreEqual(1, Descendants(window).OfType<TargetShapePreviewElement>().Count(), "Only the aura's reach is drawn; a toggle has no shape grid.");
+        Assert.AreEqual(1, Descendants(window).OfType<global::Presentation.UI.Targeting.TargetSchematicElement>().Count(), "Only the aura's reach is drawn; a toggle has no activation schematic.");
 
         if (mode == DetailsMode.Simple)
         {
@@ -216,7 +216,7 @@ public sealed class ItemDetailsModeTests
         var elementPool = TestElementPoolServiceFactory.Create(fontService);
         var actionStateView = TestActionStateViews.Over(Build.Value.EcsContext.ComponentManager, context.Actions, context.Items);
         elementPool.RegisterFactory(() => new TextDivider(TestElementServices.For(elementPool, fontService)));
-        elementPool.RegisterFactory(() => new TargetShapePreviewElement(TestElementServices.For(elementPool, fontService)));
+        elementPool.RegisterFactory(() => new global::Presentation.UI.Targeting.TargetSchematicElement(TestElementServices.For(elementPool, fontService)));
         elementPool.RegisterFactory(() => new ItemDetailsWindow(TestElementServices.For(elementPool, fontService), new EffectTextNames(context.GameplayTags, context.Terrain, context.StatusEffectDisplays), actionStateView, new ActivationPreviews(context.EffectServices, context.SimulationClock), TestPlayerQuery.NoPlayer));
         return elementPool;
     }

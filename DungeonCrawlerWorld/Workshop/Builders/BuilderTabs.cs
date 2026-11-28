@@ -12,6 +12,7 @@ using Presentation.UI;
 using Presentation.UI.Content;
 using Presentation.UI.Details;
 using Presentation.UI.Inventory;
+using Presentation.UI.Targeting;
 using UIEngine.Bootstrap;
 using UIEngine.UI;
 using Workshop;
@@ -85,7 +86,7 @@ public static class BuilderTabs
             return;
         }
 
-        elementPool.RegisterFactory(() => new TargetShapePreviewElement(services));
+        elementPool.RegisterFactory(() => new TargetSchematicElement(services));
         elementPool.RegisterFactory(() => new AreaMapView(services, uiEngine.SpriteSheetService));
         elementPool.RegisterFactory(() => new CellDetailsWindow(services));
     }

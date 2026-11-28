@@ -44,7 +44,4 @@ public static class GameFontChrome
     public static float AbilityScoreModifierRowFontFraction = 0.6f;
     public static float AbilityScoreColumnNameFontFraction = 0.35f;
     public static float AbilityScoreColumnTotalFontFraction = 0.3f;
-
-    public static float TargetShapePreviewNumberFontFraction = 0.6f;
-    public static int TargetShapePreviewMinNumberFontSize = 6;
 }

@@ -12,6 +12,7 @@ using Presentation.UI.Inventory;
 using Presentation.UI.Looting;
 using Presentation.UI.Menus;
 using Presentation.UI.Shops;
+using Presentation.UI.Targeting;
 using Presentation.UI.Trade;
 using UIEngine.Bootstrap;
 
@@ -106,6 +107,6 @@ public static class ElementFactoryRegistry
         elementPool.RegisterFactory(() => new InspectionWindow(services));
         elementPool.RegisterFactory(() => new ItemDetailsWindow(services, EffectTextNames.Of(catalogs, views.ActionSourceNaming), views.ActionStateView, views.ActivationPreviews, world));
         elementPool.RegisterFactory(() => new CurrencyElement(services, sprites));
-        elementPool.RegisterFactory(() => new TargetShapePreviewElement(services));
+        elementPool.RegisterFactory(() => new TargetSchematicElement(services));
     }
 }

@@ -4,7 +4,11 @@ Replace the tile grid that previews a targeting shape in Item Details, Action De
 (`TargetShapePreviewElement`, `TargetShapePreviewGeometry`) with a **schematic**: a small drawing that says how an
 activation gets where it lands and what it covers, with every distance written on it as a number.
 
-Status: **proposed** (2026-11-27). Nothing built.
+Status: **complete** (2026-11-27). All five phases were tested in game; Phase 2 was checked from the planner's output
+drawn as SVG. Phase 3's in-game check added the path stretch (rule 3), and Phase 4's revised its callouts (rule 6).
+Callouts with no place of their own (sight, path end, walls, one target) stack in a column right of the drawing, each on
+a leader. Advanced mode's schematic may be up to 200 px tall. The results are in IMPLEMENTATION-NOTES "Target
+schematic". What wasn't built is in TODO.md "Target schematic: what's left".
 
 ## Why the grid falls short
 
@@ -65,12 +69,19 @@ approximate, because the dimensions carry the truth. In the schematic:
    | 5–9 | 3 u | 2 u |
    | 10 and more | 4 u with a break mark | 2.5 u |
 
+   Where the row has room, a path is stretched to up to three times its band's length (`PathStretch`, the same for
+   every band in one schematic, so order is kept). Stretch eases first, in quarters, and only then does the unit
+   shrink. Shapes are never stretched.
+
    The order of distances is kept within each column. Between path and shape it isn't (a range of 10 next to a radius
    of 3 isn't drawn 10:3), and the dimensions carry that.
-4. **One glyph per shape**, drawn at its band size at its anchor: Circle as a circle outline with centre lines, Ring as a
-   circle with its band thickened, Square, Cross, Cone as a wedge opening away from the caster, Line as a bar along the
-   path, Wall as a bar across it, Sweep as the three facing tiles, Adjacent as a ring of eight small squares, Self as the
-   caster's station filled, SingleTarget as the aim's centre mark alone. Flag combinations draw each part (Adjacent |
+4. **One glyph per shape**, drawn at its band size at its anchor: Circle as a circle outline with centre lines, Ring as an
+   outer and an inner circle (an "r" leader to each: the outer up and to the right, the inner up and to the left), Square,
+   Cross, Cone as a wedge opening away from the caster (measured along it and across its far end, so a cone whose width
+   ever differs from its length shows it), Line as a bar along the
+   path, Wall as a bar across it, Sweep as the three facing tiles, Adjacent as a ring of eight small squares, Self as a
+   ring around the caster's station (the station is always filled), and SingleTarget as one small tile square around the
+   aim's centre mark. Flag combinations draw each part (Adjacent |
    Self, the ring plus the filled station). A shape at `TargetAnchor.Caster` has no path: its glyph starts at the
    caster's station, and its dimension measures the shape.
 5. **The caster is always the same gold station** (today's marker colour), so the eye starts in the same place every
@@ -78,17 +89,20 @@ approximate, because the dimensions carry the truth. In the schematic:
 6. **Simple mode draws where it lands. Advanced mode adds how it gets there.** Simple: stations, path, shape, range
    and area dimensions. Advanced also draws, each only when the spec departs from the default:
    - **Minimum range:** a hatched dead zone from the caster to a tick, with dimension "min 2".
-   - **Projectile hit count:** a ⊗ on the path with a leader, "stops at 1st hit", "stops at 3rd hit" or "passes through
-     all".
-   - **Path end at maximum range:** the path runs on past the aim's centre mark to its own end tick, with a second range
-     dimension.
-   - **Walls:** a short hatched wall block across the path. It stops the arrow (StopsAtWall), the path crosses it
-     (PassesThroughWalls), or the path folds back off it with "↯ ×2" (BouncesOffWalls).
-   - **Line of sight:** an eye glyph and "sight to aim" on the aim station (`AimLineOfSight`), and the shape's outline
-     dashed with "walls shield" (`ShapeLineOfSight`).
-   - **Overall reach:** a chained dimension above, from the caster to the far edge of the shape ("13"). It's written
-     only as a dimension, never computed by the planner: it's the previewed range plus the previewed area size.
-   - **Marked only:** `TargetModeAffects.MarkedOnly` draws the shape glyph faint with "one target" (potions).
+   - **Projectile hit count:** a ⊗ on the path with a leader, "hits 1", "hits 3", "hits all" or "hits none". The full
+     sentence is in the tooltip. The leader runs up and to the right where the label clears the shape and any wall,
+     else up and to the left.
+   - **Path end at maximum range:** the aim's centre mark moves partway along the path, which runs on to its own end
+     tick, with "Set distance".
+   - **Walls:** a hatched wall block across the path, about two units tall. The path crosses it, with "through walls"
+     (PassesThroughWalls), or folds back off it, with "bounces ×2" (BouncesOffWalls). StopsAtWall is the default and
+     isn't drawn.
+   - **Line of sight:** "Required LoS" on a leader to the aim (`AimLineOfSight`). Its tooltip is "Line of Sight to the
+     targeted tile is required." The shape's outline is dashed, with "Blocked by walls" (`ShapeLineOfSight`).
+   - **Marked only:** `TargetModeAffects.MarkedOnly` draws the shape glyph faint, with "one target" (potions). In both
+     modes its radius reads "Splash 1" rather than "r 1": it hits the marked target alone, or splashes that far.
+   - **No overall reach:** range plus radius already says it, so there's no reach dimension.
+   - **On a broken path:** the hit mark comes after the break mark, and so do a path-end aim and a wall.
 7. **Timing isn't drawn.** Windup, cooldown and channelling stay as text lines. The schematic is about space only.
 8. **Comparison colours the labels, not the geometry.** Each dimension label takes the `LineStyle` its stat already
    gets from `ComparisonLineStyles.ForStat` (green, red or plain, with the difference in Advanced). This works whatever
@@ -101,7 +115,7 @@ approximate, because the dimensions carry the truth. In the schematic:
 
 - **UIEngine: stroke drawing** (`Rendering/StrokeRenderer`, static, holds nothing, any `ISpriteDrawTarget`). A line of
   any angle and thickness (one rotated `FillRectangle`), a dashed line, an arc or circle outline (segments, count from
-  the radius), an open arrowhead, a centre mark, a break mark, and a hatch fill of a rectangle. A drawing tool with no
+  the radius), a filled or outlined diamond (a rotated square), an open arrowhead, a centre mark, a break mark, and a hatch fill of a rectangle. A drawing tool with no
   game would use these unchanged, so they go in UIEngine. `TargetShapePreviewElement.DrawCircle` becomes
   `StrokeRenderer.FillCircle`.
 - **Presentation: the planner** (`Presentation.UI.Targeting.TargetSchematicPlanner`, pure). It takes a `TargetingSpec`, the
@@ -119,7 +133,7 @@ approximate, because the dimensions carry the truth. In the schematic:
 - **Deleted:** `TargetShapePreviewGeometry.ComputeOffsets`, `ComputeReach`, `FitToPreview` and `ComputeCellSize`'s
   targeting use, `ComparisonLineStyles.ShapeHighlight`, and the `GameFontChrome.TargetShapePreview*` number font
   entries. The aura reach grid keeps `ComputeDiamondOffsets`, `ComputeBounds` and the element's cell drawing until
-  Phase 5 decides.
+  Phase 5 replaces it, and then both grid types are deleted.
 
 ## Phases
 
@@ -160,15 +174,53 @@ reach.
 - Open a potion and expect "one target".
 - In the Workshop, set an action's walls to Bounces with 2 and expect the fold and "↯ ×2".
 
-### Phase 5 (decide before starting): the aura reach
-Either draw the aura reach (`BuildLinesBesideReach`) the same way, as a source station, a diamond glyph and a
-dimension "r 4", with the falloff as a gradient along the radius leader and "linear" or "flat" on it, or keep the
-shaded grid, which already shows falloff per tile and fits within the radius anyway. Recommendation: keep the grid. Its
-falloff shading is information the schematic would reduce to a word.
+### Phase 5: the aura reach
+The aura reach (`BuildLinesBesideReach`) is drawn in the same style, so the Details window doesn't switch from the
+dimension-drawing look to a grid of filled squares partway down:
+- **The source** is a station at the centre, the same glyph and colour as the caster.
+- **The reach** is a diamond glyph (Manhattan reach, `AuraField.ReachOf`'s rule) at its band size from the shape column.
+  It's a square rotated 45°, drawn as a stroke outline over its shading.
+- **The shading is the falloff.** Inside the outline, nested diamonds step from the aura's glow colour at full strength
+  at the centre to its strength at the edge (`AuraFalloff.ValueAt`, the shades `ReachCellFill` uses today). There's one
+  band per distance up to a cap, after which bands sample the distance range evenly. `None` falloff is one flat fill.
+  The bands are drawn outermost first, each a filled rotated square (`StrokeRenderer.FillDiamond`).
+- **The radius** is a dimension from the station to the diamond's right vertex, labelled "r 4", on its own row under
+  any range and length dimensions. The label is a stat line whose tooltip names the aura ("Light aura radius: 3").
+- **Planner:** `TargetSchematicPlanner.PlanAuraReach(size, falloff, power, glow, metrics)`, which returns the same
+  `TargetSchematic`.
+- **One diagram for a placed aura.** When an activation places an aura (an `AuraSourceGrant` among its effects), the
+  aura's diamond is drawn at the station where the aura lands, in the Activation row's schematic. There is no second
+  reach row. For a Blizzard (range 20, places an r 4 aura) that's the caster, a dotted Placed connector with a break
+  mark, and the shaded diamond at the aim's centre mark, with dimensions "20" and "r 4". The aura's heading and lines
+  (its effects, "Lasts 10 s") take the text column beside it, and timing stays text (rule 7).
+  - When the spec's own shape covers more than its end tile (a Circle that also deals damage on landing), both are
+    drawn. The shape's outline goes over the diamond's shading, and each gets its own dimension.
+  - A toggle's aura lands on its holder, so its diamond is drawn around the caster's station.
+  - Only an aura nothing places (a blueprint's, terrain's) keeps a schematic of its own: the source station and the
+    diamond.
+- **Deleted:** with this, `TargetShapePreviewElement`, `TargetShapePreviewGeometry` and `AuraReachPreviewMaxHeight` go
+  entirely. So do the `GameFontChrome.TargetShapePreview*` number font entries and `BorderedBoxRenderer`, if nothing
+  else uses it, because the aura grid is the last thing that does.
 
-## Open questions
+Planner tests:
+- A Linear reach's band colours never get stronger outward.
+- A `None` reach has one band.
+- A size over the cap samples evenly and keeps the edge's exact strength.
 
-1. Should the moved stats keep a text line as well (a screen reader, copy text)? Recommendation: no. The labels are
-   real `Label` elements, so they're already text.
-2. Does a card in the Actions window's Card view get a mini schematic (stations and shape, no labels)? Recommendation:
-   not in this plan. Cards have no targeting preview today.
+A further planner test: an activation that places an aura gives one schematic, with the diamond at the aim station.
+
+*Test:*
+- Open a Torch's Item Details, or the Toxic Aura action. Expect one schematic, with the diamond around the caster
+  station, fading outward.
+- Open the Anti-Magic shrine's inspection. Expect a flat diamond with the source station and "r 4".
+- In the Workshop, give a Range 20 SingleTarget spell an `AuraSourceGrant`. Expect the Blizzard drawing: one row, no
+  second reach grid.
+
+## Decisions
+
+1. The moved stats get no text line of their own. The labels are real `Label` elements, so they're already text.
+2. Cards in the Actions window's Card view get no schematic.
+3. The aura reach becomes a schematic (Phase 5): a diamond glyph station, a radius dimension, and shading for the
+   falloff.
+4. An activation that places an aura is one diagram: the diamond at the station where the aura lands, not a second
+   row.

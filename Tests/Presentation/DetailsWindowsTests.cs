@@ -35,7 +35,7 @@ public sealed class DetailsWindowsTests
         var actionStateView = TestActionStateViews.Over(Build.Value.EcsContext.ComponentManager, context.Actions, context.Items);
 
         elementPool.RegisterFactory(() => new TextDivider(TestElementServices.For(elementPool, fontService)));
-        elementPool.RegisterFactory(() => new TargetShapePreviewElement(TestElementServices.For(elementPool, fontService)));
+        elementPool.RegisterFactory(() => new global::Presentation.UI.Targeting.TargetSchematicElement(TestElementServices.For(elementPool, fontService)));
         elementPool.RegisterFactory(() => new ItemDetailsWindow(TestElementServices.For(elementPool, fontService), NamesOf(context), actionStateView, new ActivationPreviews(context.EffectServices, context.SimulationClock), TestPlayerQuery.NoPlayer));
         elementPool.RegisterFactory(() => new ActionDetailsWindow(TestElementServices.For(elementPool, fontService), NamesOf(context)));
         elementPool.RegisterFactory(() => new AuraDetailsWindow(TestElementServices.For(elementPool, fontService), NamesOf(context)));
@@ -88,7 +88,7 @@ public sealed class DetailsWindowsTests
 
         if (activator is not null)
         {
-            expected.AddRange(ItemComparisonStatExtraction.ExtractActivatorStats(activator, preview: null, detailsMode, showsTargeting: definition.Toggle is null).Select(stat => stat.DisplayText));
+            expected.AddRange(ItemComparisonStatExtraction.ExtractActivatorStats(activator, preview: null, detailsMode).Select(stat => stat.DisplayText));
         }
 
         if (!string.IsNullOrWhiteSpace(definition.Description))
@@ -153,7 +153,7 @@ public sealed class DetailsWindowsTests
     }
 
     [TestMethod]
-    public void ItemDetails_AdvancedMode_HasTimingWithItsTooltip()
+    public void ItemDetails_AdvancedMode_HasTimingWithItsTooltip_AndTheRangeOnTheSchematic_NotAsALine()
     {
         var elementPool = CreateElementPool();
         var wand = Build.Value.Context.Items.Get(BuiltInItemIds.WandOfFireball);
@@ -165,7 +165,24 @@ public sealed class DetailsWindowsTests
         var timing = DescendantTextWindows(window).Single(static line => line.OriginalText.StartsWith("Timing:"));
         Assert.AreEqual($"Timing: {TimingText.Word(wand.Activator!.Timing.Category)}", timing.OriginalText);
         Assert.AreEqual(TimingText.Tooltip(wand.Activator.Timing.Category, wand.Activator.Timing.ActionLockFrames), timing.TooltipText);
-        Assert.IsTrue(TextsInOrder(window).Any(static text => text.StartsWith("Shape:")));
+        Assert.IsFalse(TextsInOrder(window).Any(static text => text.StartsWith("Shape:") || text.StartsWith("Range:") || text.StartsWith("Area Size:")));
+
+        var schematic = Descendants(window).OfType<global::Presentation.UI.Targeting.TargetSchematicElement>().Single();
+        var range = DescendantTextWindows(window).Single(static line => line.TooltipText?.StartsWith("Range:") == true);
+        Assert.AreEqual(wand.Activator.Targeting.MaximumRange.ToString(), range.OriginalText);
+        Assert.AreSame(schematic.ParentElement, range.ParentElement, "The range label sits in the schematic's row.");
+    }
+
+    private static IEnumerable<Element> Descendants(Element element)
+    {
+        foreach (var child in element.ChildElements)
+        {
+            yield return child;
+            foreach (var descendant in Descendants(child))
+            {
+                yield return descendant;
+            }
+        }
     }
 
     private static IEnumerable<TextWindow> DescendantTextWindows(Element element)

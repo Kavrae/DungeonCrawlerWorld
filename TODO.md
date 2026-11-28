@@ -3186,22 +3186,12 @@ home -- the engine IDE (epic child 5) will add its own.
 
 #### Item Details for the targeting model
 
-Item Details (`ItemDetailsWindow`, `ActivatableDetailsSections`), action tooltips and the item comparison still describe
-targeting as a shape, a range and an area size. `TargetingSpec` now has many more independent settings
-(PLAN-targeting-model.md), and none of the new ones reach the player. Show what each activation does:
-- **Path:** Placed, Projectile or Lobbed; for a Projectile, its hit count ("first target", "pierces 2", "every target")
-  and where it ends (at the aimed tile or at maximum range).
-- **Walls:** whether the path stops at, passes through or bounces off walls (and how many times), and whether aiming and
-  the shape need line of sight.
-- **Ranges and anchor:** minimum and maximum range as a band, the area size named for its shape (radius, length, arm,
-  half-side), and whether the shape is laid out around the caster or where the path ends.
-- **Shape preview** (`TargetShapePreviewGeometry`): draws nothing for a shape of `None` (Magic Missile, Lightning Bolt)
-  and knows nothing of paths. Show the path as well -- a line to where it stops, the minimum range left out -- and every
-  new shape (Ring, Wall, Square, Cross, Sweep).
-- **Comparison** (`ItemComparisonStatExtraction`): key the new settings so two items differing in path, hit count, walls
-  or minimum range compare.
-- Decide what belongs in a hover tooltip versus Item Details, and word the settings in the player's terms, not the
-  spec's.
+Item Details and Action Details show every targeting setting on the target schematic (PLAN-target-schematic.md: path,
+hit count, path end, walls, line of sight, minimum range). What remains:
+- **Action tooltips** still say nothing of them.
+- **Comparison** (`ItemComparisonStatExtraction`): range, area size, cone width and a ring's inner radius compare.
+  Advanced mode's callouts (path, hit count, walls, minimum range) don't, so two items differing only in those read
+  the same.
 
 #### Targeting indicator improvements
 
@@ -3608,53 +3598,16 @@ as if a key were pressed, a ready shape for "Replay by recording input" and "In-
 
 ### Medium Priority
 
-#### Details: Range and Area read the same in words and in the grid
+#### Target schematic: what's left
 
-Item Details' and Action Details' Activation section says Range and Area Size in words, and its grid draws them
-(`ActivatableDetailsSections.BuildActivationSection` over `TargetShapePreviewGeometry`), but the two don't agree and the
-result is confusing. Since 2026-11-26 the grid shows every tile the spec can be aimed at dimmed (`ComputeReach`) and
-the tiles it lands on aimed at the far edge (`ComputeOffsets`), with distance numbers along the caster's row counting
-the caster's own tile as 1 -- so the number at the edge is Range + 1, while "Range: 6" counts tiles out from the
-caster. Area Size is a radius in words but shows only as the landed shape's extent. Range is a rounded circle measured
-from the footprint, and Minimum Range a hole. Make the words and the picture say one thing: one way of counting
-distance in both (the numbers start at 1 on the first tile out, or the words change), the edge of the range and the
-area's radius visibly marked on the grid, a minimum range shown as the hole it is, and a scaled spell's change
-(Intelligence) visible on the grid as well as in "(+17)". Check every shape (Single target, Circle, Ring, Line, Cone,
-Wall, Sweep, Adjacent, Self) with and without a minimum range and an Intelligence bonus.
-
-#### Improved targeting preview
-
-Item Details shows reach in two ways. Activations get a grid (`TargetShapePreviewElement`, through
-`TargetShapePreviewGeometry`): plain cells with distance numbers along one row. Auras get a diamond shaded toward their
-glow colour (`ActivatableDetailsSections.BuildAuraSection`). Neither shows a path, a minimum range, or the aim against
-the area.
-
-Design one visualization that is better and consistent across range, area and auras:
-- **Strength in colour.** Use one colour scale for how strong an effect is at each cell: an aura's falloff, a damage
-  area, or anything else that varies with distance.
-- **Range and area apart.** Show where the user can aim, with the minimum range left out, separately from what the
-  effect covers once aimed.
-- **Indicators, possibly:**
-  - a caster marker (today a gold dot on the caster's cell);
-  - a target marker on the aimed cell;
-  - a footprint for a larger caster.
-- **A hover popup, possibly:** a small preview in Item Details that opens a larger one on hover, so the window keeps
-  to one screen (the one-screen rule in PLAN-item-details-complete.md).
-- **An animation, possibly:**
-  - the activation travelling along its path (Projectile or Lobbed, `PathTracer`), then its area appearing where it
-    lands;
-  - it never plays by itself: the player starts it, and it can be replayed.
-- **Consistency.** Use the same look wherever reach is drawn, and decide whether the map's targeting highlight and
-  telegraph share it ("Targeting indicator improvements").
-- **Overlap.** Coordinate with "Item Details for the targeting model", which covers the path, wall and range settings
-  the preview should show.
-
-#### Targeting preview: show the distance outside the area
-
-The shape preview (Item Details' Activation section, the Workshop's targeting preview) draws the area and the caster, but
-a shape aimed at a distance (a Line or Circle at the path's end, range 5) shows nothing between the caster and the
-area, so the range is hard to read. Draw a small white dot on each tile between the caster and the area along the aim,
-so the distance reads at a glance. Same drawing in both places, from the one preview.
+The target schematic (PLAN-target-schematic.md, complete 2026-11-27) replaced the shape grid. These pieces of the
+earlier idea weren't part of it:
+- **A hover popup, possibly:** a small schematic in Item Details that opens a larger one on hover.
+- **An animation, possibly:** the activation travelling along its path, then landing. The player starts it, and it can
+  be replayed.
+- **The map:** decide whether the map's targeting highlight and telegraph share the schematic's look ("Targeting
+  indicator improvements").
+- **A larger caster:** the caster's station is one size whatever its footprint.
 
 #### Shop cells greyed by the shop deal rule
 

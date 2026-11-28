@@ -201,7 +201,7 @@ public sealed class ActionDetailsWindow(
 
         _sections.BuildEffectsSection(this, definition, _displayedMode, width, _comparisonStyles.Resolve, preview, activationPreviews is null ? null : activationPreviews.PreviewAura);
         _sections.BuildCostSection(this, definition, width, _comparisonStyles.Resolve, preview);
-        _sections.BuildActivationSection(this, definition.Activator, _displayedMode, width, _comparisonStyles.Resolve, _comparisonStyles.ShapeHighlight, preview, isToggle: definition.Toggle is not null);
+        _sections.BuildActivationSection(this, definition.Activator, _displayedMode, width, _comparisonStyles.Resolve, preview, isToggle: definition.Toggle is not null, auras: ActivatableDetailsSections.AurasPlacedBy(definition, preview));
         _sections.BuildResourcesSection(this, definition.Activator, width, _comparisonStyles.Resolve);
         _sections.BuildDescriptionSection(this, definition, width);
         _sections.BuildTagsSection(this, definition, width);

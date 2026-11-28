@@ -2157,7 +2157,7 @@ Level Up and Skill Up join later as new `FloatingTextKind` values.
 ### Action/item ToString formatting
 
 `EffectFormatting.FormatEntry`, `ActionActivatorFormatting.BuildLines`,
-`TargetShapePreviewGeometry`/`Element` (`Presentation/UI/`) -- all take plain `Game.Modules.Actions`
+`TargetSchematicPlanner`/`Element` (`Presentation/UI/Targeting`) -- all take plain `Game.Modules.Actions`
 types, so a future Magic Menu gets them free. Frame counts always shown as seconds.
 
 ### Item Details: simple and advanced modes, values as used
@@ -2835,6 +2835,40 @@ The rules:
   block, no icon, saying something is in the sky above the tile ("something large" or "something huge" by the biggest
   flyer's `EntitySizeCategories.Of`), never what it is. `FlyingShadows` (Presentation) is the one rule the map's planner
   (`CastingLayerMaskOnto`) and the inspector (`TryGetLargestCasterSize`, `DescriptionFor`) both read.
+
+### Target schematic (2026-11-27)
+
+**Item Details', Action Details' and the Workshop's targeting preview is a schematic, not a tile grid**
+(`PLAN-target-schematic.md`). It draws distances at a few fixed lengths and writes the real values on dimension lines,
+like a tube map with a dimension drawing's numbers.
+
+- **Pieces.** `StrokeRenderer` (UIEngine) draws everything: lines, dashed and centre lines, arcs, circles, diamonds,
+  arrowheads, centre marks, break marks and hatching, as turned strips on any `ISpriteDrawTarget`.
+  `TargetSchematicPlanner` (Presentation, `UI/Targeting`, pure) turns a `TargetingSpec`, the details mode and any placed
+  auras into a `TargetSchematic`: strokes (each with a role that picks its colour) and label slots.
+  `TargetSchematicElement` draws the strokes.
+- **Labels are stats.** Each slot is filled with a stat line keyed `targeting:<label>`
+  (`ItemComparisonStatExtraction.ExtractTargetingStats`, `TargetingKeyOf`), so it has a tooltip, a comparison colour
+  and Advanced mode's change. Range, area size, cone width and a ring's inner radius are compared; Advanced callouts
+  aren't. None of them is a text line any more.
+- **Bands, not scale.** `TargetSchematicBands` sets the lengths: path 1, 2, 3 or 4 units, a break mark from range 10,
+  shape 1 to 2.5 units. `PlanToFit` stretches the path up to 3x where the row has room, easing it in quarters before
+  the unit shrinks (16 px down to 7). The cap is 96 px tall, 200 in Advanced mode.
+- **Advanced callouts** appear only when a spec departs from the default (`CalloutsOf`):
+  - minimum range, as a hatched zone plus a dimension;
+  - hit count, as a ⊗ after any break mark;
+  - path end ("Set distance");
+  - walls ("through walls" or "bounces ×N");
+  - "Required LoS";
+  - "Blocked by walls", with a dashed outline;
+  - "one target", with a faint shape. Its radius reads "Splash N" in both modes.
+  Callouts with no place of their own stack in a column right of the drawing. There is no overall-reach dimension:
+  range plus radius says it.
+- **Auras.** A used activation's `AuraSourceGrant`s (`ActivatableDetailsSections.AurasPlacedBy`) are drawn where it
+  lands, as shaded diamonds under its shape, with the first one's "r N" on its own dimension row. Their sections show
+  no reach of their own. A toggle's aura, or one granted with no activator, gets a schematic of its own: the station
+  inside the diamond (`PlanAuraReachToFit`). Bands step outermost first, in the aura's glow at its strength there, up to
+  6 (`AuraBandColor`); `None` falloff is one flat band.
 
 ## Pause modality
 
@@ -3629,7 +3663,7 @@ FontStashSharp; Presentation, the exe and Tests reference it.
   controls, layers, `UiLayerHost`, `UiInputController`, tooltips, context menus, fonts, sprite drawing by name
   (`SpriteManifestResolver`, `SpriteSheetService`, `TerrainSpriteSet`, `SpriteOrGlyphRenderer`), and the bootstrapper
   (`UiEngineBootstrapper`/`UiEngineContext`). A type that names a game concept stays in Presentation even when it touches
-  no Game type: `InventoryItemStackCell`, `HotkeySlotLayout`, `ToggleActiveMarker`, `TargetShapePreviewElement`,
+  no Game type: `InventoryItemStackCell`, `HotkeySlotLayout`, `ToggleActiveMarker`, `TargetSchematicElement`,
   `InspectionWindow`, the map renderer. Before the move a scan followed every type reference between Presentation files to
   Game; the framework reached it through only four seams, cut first.
 - **The four seams.** The manifest resolver's two `Resolve(...)` overloads over Game view records became extension methods

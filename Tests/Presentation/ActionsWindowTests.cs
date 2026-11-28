@@ -109,7 +109,7 @@ public sealed class ActionsWindowTests
         var gridView = new GridViewSetting(GridView.Icon);
         var services = new ActionsWindowServices(actionStateView, new HotkeyBindingView(componentManager), TestActionStateViews.EntityActions(componentManager, actionCatalog), menuCommands, TestGameplayTags.BuiltIn, new SimulationClock(), actionTargeting, mapViewState, contextMenus, actionDetails.HoverDetails, gridView);
         pool.RegisterFactory(() => new TextDivider(TestElementServices.For(pool, fontService)));
-        pool.RegisterFactory(() => new TargetShapePreviewElement(TestElementServices.For(pool, fontService)));
+        pool.RegisterFactory(() => new global::Presentation.UI.Targeting.TargetSchematicElement(TestElementServices.For(pool, fontService)));
         pool.RegisterFactory(() => new ActionDetailsWindow(TestElementServices.For(pool, fontService), new EffectTextNames(TestGameplayTags.BuiltIn), user: new ActionDetailsUser(actionStateView, world)));
         pool.RegisterFactory<ActionCell>(() => new ActionCell(TestElementServices.For(pool, fontService), sprites));
         pool.RegisterFactory<GridControl>(() => new GridControl(TestElementServices.For(pool, fontService)));
